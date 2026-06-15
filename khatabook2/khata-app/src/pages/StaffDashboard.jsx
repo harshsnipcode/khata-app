@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
+import FloatingButton from "../components/FloatingButton";
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate();
@@ -353,6 +354,12 @@ function StaffDashboard() {
             </div>
           )}
         </div>
+
+        <FloatingButton
+          onClick={() => navigate("/admin/staff/new")}
+          isVisible={true}
+          label="+ Add Employee"
+        />
 
         {/* Filter Modal */}
         {showFilterModal && (

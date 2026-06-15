@@ -9,6 +9,7 @@ import EmployeeSetup from "./pages/EmployeeSetup";
 import EmployeeDetails from "./pages/EmployeeDetails";
 import EmployeeEdit from "./pages/EmployeeEdit";
 import StaffDashboard from "./pages/StaffDashboard";
+import CreateEmployee from "./pages/CreateEmployee";
 import Reports from "./pages/Reports";
 import CustomerTransactionsReport from "./pages/CustomerTransactionsReport";
 import TransactionDetails from "./pages/TransactionDetails";
@@ -39,6 +40,7 @@ function App() {
         <Route path="/admin/employees/:id" element={<EmployeeDetails />} />
         <Route path="/admin/employees/:id/edit" element={<EmployeeEdit />} />
         <Route path="/admin/staff" element={<StaffDashboard />} />
+        <Route path="/admin/staff/new" element={<CreateEmployee />} />
         <Route path="/admin/reports" element={<Reports />} />
         <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
         <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetails />} />
