@@ -1,0 +1,7 @@
+ALTER TABLE employees
+  ADD COLUMN IF NOT EXISTS attendance_enabled BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS permissions_enabled BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS salary_type TEXT,
+  ADD COLUMN IF NOT EXISTS salary_amount NUMERIC,
+  ADD COLUMN IF NOT EXISTS salary_start_date DATE,
+  ADD COLUMN IF NOT EXISTS permission_level INTEGER DEFAULT 1;
