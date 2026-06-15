@@ -32,8 +32,12 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
   };
 
   const handleTabClick = (tab) => {
-    const route = ROUTES[tab];
-    navigate(route, { state: { activeTab: tab } });
+    if (isAdmin) {
+      const route = ROUTES[tab];
+      navigate(route, { state: { activeTab: tab } });
+    } else {
+      navigate("/employee/home", { state: { activeTab: tab } });
+    }
     if (setActiveTab) setActiveTab(tab);
   };
 

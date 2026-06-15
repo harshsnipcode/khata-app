@@ -149,13 +149,6 @@ function EmployeeHome() {
             <>
               <SummaryCard youGive={summaryTotals.youGive} youGet={summaryTotals.youGet} />
 
-              <button
-                onClick={() => navigate("/admin/reports")}
-                className="w-full py-3 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs uppercase tracking-widest transition cursor-pointer outline-none active:scale-95 shadow-sm"
-              >
-                View Reports
-              </button>
-
               {/* Search + Filter */}
               <SearchBar
                 searchTerm={searchTerm}

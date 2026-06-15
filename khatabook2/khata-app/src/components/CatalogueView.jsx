@@ -80,7 +80,9 @@ function CatalogueView({ isAdmin }) {
         <div className="card rounded-3xl p-6 shadow-md">
           <p className="text-[var(--text-secondary)] text-xs uppercase tracking-widest mb-2 font-bold">Total Stock Value</p>
           <h2 className="text-[var(--text-primary)] text-3xl font-black">₹{new Intl.NumberFormat("en-IN").format(totals.totalValue)}</h2>
-          <button onClick={() => navigate('/catalogue/reports')} className="mt-3 text-[var(--primary)] text-xs font-bold uppercase tracking-[0.2em] hover:text-[var(--primary-hover)] transition cursor-pointer">View Reports ›</button>
+          {isAdmin && (
+            <button onClick={() => navigate('/catalogue/reports')} className="mt-3 text-[var(--primary)] text-xs font-bold uppercase tracking-[0.2em] hover:text-[var(--primary-hover)] transition cursor-pointer">View Reports ›</button>
+          )}
         </div>
         <div className="card rounded-3xl p-6 shadow-md">
           <p className="text-[var(--text-secondary)] text-xs uppercase tracking-widest mb-2 font-bold">Low Stock Items</p>

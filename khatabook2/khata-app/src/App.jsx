@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import AdminRoute from "./components/AdminRoute";
+import EmployeeRoute from "./components/EmployeeRoute";
 
 import AdminLogin from "./pages/Signup";
 import Login from "./pages/Login";
@@ -34,16 +36,16 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/home" element={<Home />} />
         <Route path="/admin" element={<AdminLogin />} />
-        <Route path="/employee/home" element={<EmployeeHome />} />
-        <Route path="/admin/home" element={<AdminHome />} />
-        <Route path="/admin/employees/setup" element={<EmployeeSetup />} />
-        <Route path="/admin/employees/:id" element={<EmployeeDetails />} />
-        <Route path="/admin/employees/:id/edit" element={<EmployeeEdit />} />
-        <Route path="/admin/staff" element={<StaffDashboard />} />
-        <Route path="/admin/staff/new" element={<CreateEmployee />} />
-        <Route path="/admin/reports" element={<Reports />} />
-        <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
-        <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetails />} />
+        <Route path="/employee/home" element={<EmployeeRoute><EmployeeHome /></EmployeeRoute>} />
+        <Route path="/admin/home" element={<AdminRoute><AdminHome /></AdminRoute>} />
+        <Route path="/admin/employees/setup" element={<AdminRoute><EmployeeSetup /></AdminRoute>} />
+        <Route path="/admin/employees/:id" element={<AdminRoute><EmployeeDetails /></AdminRoute>} />
+        <Route path="/admin/employees/:id/edit" element={<AdminRoute><EmployeeEdit /></AdminRoute>} />
+        <Route path="/admin/staff" element={<AdminRoute><StaffDashboard /></AdminRoute>} />
+        <Route path="/admin/staff/new" element={<AdminRoute><CreateEmployee /></AdminRoute>} />
+        <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+        <Route path="/admin/reports/customer-transactions" element={<AdminRoute><CustomerTransactionsReport /></AdminRoute>} />
+        <Route path="/admin/reports/customer-transactions/:id" element={<AdminRoute><TransactionDetails /></AdminRoute>} />
         <Route path="/customers/add" element={<CustomerListPage />} />
         <Route path="/party/new" element={<CustomerForm />} />
         <Route path="/customer/:id" element={<CustomerDetails />} />
@@ -52,12 +54,12 @@ function App() {
         <Route path="/customer/:id/transaction/success" element={<TransactionSuccess />} />
         
         {/* Catalogue & Inventory */}
-        <Route path="/catalogue/add" element={<AddProductPage />} />
+        <Route path="/catalogue/add" element={<AdminRoute><AddProductPage /></AdminRoute>} />
         <Route path="/product/:id" element={<ProductDetails />} />
-        <Route path="/product/:id/stock-in" element={<StockEntry />} />
-        <Route path="/product/:id/stock-out" element={<StockEntry />} />
-        <Route path="/product/:id/stock-success" element={<StockSuccess />} />
-        <Route path="/catalogue/reports" element={<InventoryReport />} />
+        <Route path="/product/:id/stock-in" element={<AdminRoute><StockEntry /></AdminRoute>} />
+        <Route path="/product/:id/stock-out" element={<AdminRoute><StockEntry /></AdminRoute>} />
+        <Route path="/product/:id/stock-success" element={<AdminRoute><StockSuccess /></AdminRoute>} />
+        <Route path="/catalogue/reports" element={<AdminRoute><InventoryReport /></AdminRoute>} />
         <Route path="/share/customer/:id" element={<SharedLedgerView />} />
       </Routes>
 
