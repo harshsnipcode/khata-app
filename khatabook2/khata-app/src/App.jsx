@@ -22,6 +22,7 @@ import CustomerProfile from "./pages/CustomerProfile";
 import TransactionEntry from "./pages/TransactionEntry";
 import TransactionSuccess from "./pages/TransactionSuccess";
 import AddProductPage from "./pages/AddProductPage";
+import EditProductPage from "./pages/EditProductPage";
 import ProductDetails from "./pages/ProductDetails";
 import StockEntry from "./pages/StockEntry";
 import StockSuccess from "./pages/StockSuccess";
@@ -56,6 +57,7 @@ function App() {
         {/* Catalogue & Inventory */}
         <Route path="/catalogue/add" element={<AdminRoute><AddProductPage /></AdminRoute>} />
         <Route path="/product/:id" element={<ProductDetails />} />
+        <Route path="/product/:id/edit" element={<AdminRoute><EditProductPage /></AdminRoute>} />
         <Route path="/product/:id/stock-in" element={<AdminRoute><StockEntry /></AdminRoute>} />
         <Route path="/product/:id/stock-out" element={<AdminRoute><StockEntry /></AdminRoute>} />
         <Route path="/product/:id/stock-success" element={<AdminRoute><StockSuccess /></AdminRoute>} />

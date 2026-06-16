@@ -60,7 +60,7 @@ function ProductDetails() {
           >
             ← Back
           </button>
-          <button onClick={() => alert('Edit soon')} className="bg-[var(--surface)] border border-[var(--border)] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest hover:border-[var(--border-hover)] text-[var(--text-primary)] transition">Edit Product</button>
+          <button onClick={() => navigate(`/product/${product.id}/edit`)} className="bg-[var(--surface)] border border-[var(--border)] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest hover:border-[var(--border-hover)] text-[var(--text-primary)] transition">Edit Product</button>
         </div>
 
         {/* Product Header Card */}
