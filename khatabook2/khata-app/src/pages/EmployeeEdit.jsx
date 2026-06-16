@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 const PERMISSION_LEVELS = [
   { value: 0, label: "NONE", description: "No access" },
@@ -53,7 +53,7 @@ function EmployeeEdit() {
 
     const effectiveLevel = fullPermission ? 3 : permissionLevel;
 
-    const { error: dbError } = await supabase.from("employees").update({
+    const { error: dbError } = await offlineSupabase.from("employees").update({
       attendance_enabled: attendanceEnabled,
       permissions_enabled: permissionsEnabled,
       salary_type: attendanceEnabled ? salaryType : null,
@@ -77,8 +77,8 @@ function EmployeeEdit() {
       if (employee.auth_id) {
         await supabase.auth.admin.deleteUser(employee.auth_id);
       }
-      await supabase.from("employee_attendance").delete().eq("employee_id", id);
-      await supabase.from("employees").delete().eq("id", id);
+      await offlineSupabase.from("employee_attendance").delete({ id }).eq("employee_id", id);
+      await offlineSupabase.from("employees").delete({ id }).eq("id", id);
       navigate("/admin/staff", { replace: true });
     } catch (err) {
       console.error("Delete failed", err);

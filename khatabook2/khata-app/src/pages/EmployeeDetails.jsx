@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 const PERMISSION_LABELS = {
   1: "View Entries & Send Reminders",
@@ -174,19 +175,19 @@ function EmployeeDetails() {
 
     const existing = attendance.find((a) => a.date === dateStr);
 
-    if (status === "present") {
-      if (existing) {
-        await supabase.from("employee_attendance").delete().eq("id", existing.id);
-      }
-    } else {
-      if (existing) {
-        await supabase.from("employee_attendance").update({ status }).eq("id", existing.id);
-      } else {
-        await supabase.from("employee_attendance").insert([
-          { employee_id: id, date: dateStr, status },
-        ]);
-      }
-    }
+     if (status === "present") {
+       if (existing) {
+         await offlineSupabase.from("employee_attendance").delete({ id: existing.id }).eq("id", existing.id);
+       }
+     } else {
+       if (existing) {
+         await offlineSupabase.from("employee_attendance").update({ status }).eq("id", existing.id);
+       } else {
+         await offlineSupabase.from("employee_attendance").insert([
+           { employee_id: id, date: dateStr, status },
+         ]);
+       }
+     }
 
     setShowAttendanceModal(false);
     setSelectedDate(null);
@@ -199,8 +200,8 @@ function EmployeeDetails() {
       if (employee.auth_id) {
         await supabase.auth.admin.deleteUser(employee.auth_id);
       }
-      await supabase.from("employee_attendance").delete().eq("employee_id", id);
-      await supabase.from("employees").delete().eq("id", id);
+      await offlineSupabase.from("employee_attendance").delete({ id }).eq("employee_id", id);
+      await offlineSupabase.from("employees").delete({ id }).eq("id", id);
       navigate("/admin/staff", { replace: true });
     } catch (err) {
       console.error("Delete failed", err);

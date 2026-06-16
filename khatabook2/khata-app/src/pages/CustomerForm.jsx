@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function CustomerForm() {
   const { state } = useLocation();
@@ -47,7 +47,7 @@ function CustomerForm() {
       const user = await supabase.auth.getUser();
       const created_by = user?.data?.user?.id || 'admin';
 
-      const { data, error } = await supabase.from("customers").insert([
+      const { data, error } = await offlineSupabase.from("customers").insert([
         { name, phone, type, created_by },
       ]).select();
 
@@ -64,7 +64,7 @@ function CustomerForm() {
             product_id: Number(productId),
             custom_price: customPrice,
           }));
-          const { error: priceError } = await supabase.from("customer_product_prices").insert(rows);
+          const { error: priceError } = await offlineSupabase.from("customer_product_prices").insert(rows);
           if (priceError) throw priceError;
         }
         navigate(`/customer/${newId}`);

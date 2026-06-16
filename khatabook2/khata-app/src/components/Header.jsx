@@ -1,7 +1,31 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import heroLogo from "../assets/hero.png";
 
 function Header({ businessName = "My Business", onEdit, isAdmin }) {
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [syncStatus, setSyncStatus] = useState('synced');
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    const handleSync = (e) => {
+      if (e.detail?.status === 'synced') {
+        setSyncStatus('synced');
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('sync-status', handleSync);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('sync-status', handleSync);
+    };
+  }, []);
+
   return (
     <div
       className="px-6 py-4 flex items-center justify-between relative z-10"
@@ -36,25 +60,42 @@ function Header({ businessName = "My Business", onEdit, isAdmin }) {
           </button>
         )}
       </div>
-      <button
-        onClick={() => {
-          try {
-            localStorage.removeItem("khata_role");
-            localStorage.removeItem("khata_user");
-          } catch (e) {}
-          window.location.href = "/";
-        }}
-        className="px-4 py-1.5 rounded-xl text-xs font-semibold tracking-wide uppercase transition-all duration-200 active:scale-95"
-        style={{
-          background: "rgba(255,255,255,0.18)",
-          color: "#fff",
-          border: "1px solid rgba(255,255,255,0.25)",
-        }}
-        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
-        onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}
-      >
-        Logout
-      </button>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
+          {isOnline ? (
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#52b788]" />
+              Online
+            </span>
+          ) : (
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#e76f51]" />
+              Offline
+            </span>
+          )}
+          {syncStatus === 'pending' && <span className="text-white/80">⟳ Syncing...</span>}
+          {syncStatus === 'synced' && isOnline && <span className="text-white/60">✓ Synced</span>}
+        </div>
+        <button
+          onClick={() => {
+            try {
+              localStorage.removeItem("khata_role");
+              localStorage.removeItem("khata_user");
+            } catch (e) {}
+            window.location.href = "/";
+          }}
+          className="px-4 py-1.5 rounded-xl text-xs font-semibold tracking-wide uppercase transition-all duration-200 active:scale-95"
+          style={{
+            background: "rgba(255,255,255,0.18)",
+            color: "#fff",
+            border: "1px solid rgba(255,255,255,0.25)",
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
+          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}
+        >
+          Logout
+        </button>
+      </div>
     </div>
   );
 }

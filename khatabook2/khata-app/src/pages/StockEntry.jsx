@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function StockEntry() {
   const { id } = useParams();
@@ -41,7 +41,7 @@ function StockEntry() {
       const priceNum = Number(price);
 
       // 1. Record Transaction
-      const { error: tError } = await supabase.from("product_transactions").insert([
+      const { error: tError } = await offlineSupabase.from("product_transactions").insert([
         {
           product_id: Number(id),
           type,
@@ -58,7 +58,7 @@ function StockEntry() {
         ? Number(product.stock_quantity) + qtyNum 
         : Number(product.stock_quantity) - qtyNum;
 
-      const { error: pError } = await supabase.from("products").update({
+      const { error: pError } = await offlineSupabase.from("products").update({
         stock_quantity: newStock,
         updated_at: new Date().toISOString()
       }).eq("id", id);

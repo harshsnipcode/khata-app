@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import DeleteCustomerModal from "../components/DeleteCustomerModal";
 
 /* Derive initials from a full name */
@@ -87,7 +87,7 @@ function CustomerProfile() {
   const handleSave = async () => {
     setSaving(true);
     setSaveMsg("");
-    const { error } = await supabase
+    const { error } = await offlineSupabase
       .from("customers")
       .update({ name, phone, address, gstin, type, updated_at: new Date().toISOString() })
       .eq("id", id);
@@ -101,19 +101,19 @@ function CustomerProfile() {
     // Upsert custom pricing
     const priceEntries = Object.entries(customPrices);
     try {
-      // Delete any existing prices for this customer
-      await supabase.from("customer_product_prices").delete().eq("customer_id", id);
+        // Delete any existing prices for this customer
+        await offlineSupabase.from("customer_product_prices").delete({ id }).eq("customer_id", id);
 
-      // Insert current prices
-      if (priceEntries.length > 0) {
-        const rows = priceEntries.map(([productId, customPrice]) => ({
-          customer_id: Number(id),
-          product_id: Number(productId),
-          custom_price: customPrice,
-        }));
-        const { error: priceError } = await supabase.from("customer_product_prices").insert(rows);
-        if (priceError) throw priceError;
-      }
+        // Insert current prices
+        if (priceEntries.length > 0) {
+          const rows = priceEntries.map(([productId, customPrice]) => ({
+            customer_id: Number(id),
+            product_id: Number(productId),
+            custom_price: customPrice,
+          }));
+          const { error: priceError } = await offlineSupabase.from("customer_product_prices").insert(rows);
+          if (priceError) throw priceError;
+        }
 
       setSaveMsg("Saved successfully!");
       setCustomer((prev) => ({ ...prev, name, phone, address, gstin, type }));
@@ -127,10 +127,10 @@ function CustomerProfile() {
 
   /* ── Delete customer (called from modal) ── */
   const handleDelete = async () => {
-    // 1. Delete all transactions
-    await supabase.from("transactions").delete().eq("customer_id", id);
-    // 2. Delete customer record
-    await supabase.from("customers").delete().eq("id", id);
+      // 1. Delete all transactions
+      await offlineSupabase.from("transactions").delete({ id }).eq("customer_id", id);
+      // 2. Delete customer record
+      await offlineSupabase.from("customers").delete({ id }).eq("id", id);
 
     // 3. Redirect to home based on role stored in localStorage
     const role = localStorage.getItem("khata_role");

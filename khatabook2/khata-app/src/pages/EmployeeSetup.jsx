@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 const PERMISSION_LEVELS = [
   { value: 1, label: "Level 1", description: "View Entries & Send Reminders" },
@@ -37,7 +37,7 @@ function EmployeeSetup() {
 
     const effectiveLevel = fullPermissions ? 3 : permissionLevel;
 
-    const { error: dbError } = await supabase.from("employees").insert([
+    const { error: dbError } = await offlineSupabase.from("employees").insert([
       {
         username: tempData.username,
         auth_id: tempData.auth_id,

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function AddProductPage() {
   const navigate = useNavigate();
@@ -27,7 +27,7 @@ function AddProductPage() {
       const created_by = user?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
 
       // 1. Create Product
-      const { data: product, error: pError } = await supabase.from("products").insert([
+      const { data: product, error: pError } = await offlineSupabase.from("products").insert([
         {
           name,
           sale_price: Number(salePrice),
@@ -43,7 +43,7 @@ function AddProductPage() {
 
       // 2. Create Opening Stock Transaction
       if (Number(openingStock) > 0) {
-        const { error: tError } = await supabase.from("product_transactions").insert([
+        const { error: tError } = await offlineSupabase.from("product_transactions").insert([
           {
             product_id: product.id,
             type: "stock_in",

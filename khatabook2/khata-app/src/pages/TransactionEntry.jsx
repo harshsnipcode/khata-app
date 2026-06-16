@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function TransactionEntry() {
   const { id } = useParams();
@@ -109,7 +109,7 @@ function TransactionEntry() {
       const created_by = user?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
 
       // 1. Create main transaction
-      const { data: txn, error: txnError } = await supabase
+      const { data: txn, error: txnError } = await offlineSupabase
         .from("transactions")
         .insert([
           {
@@ -134,13 +134,13 @@ function TransactionEntry() {
           price: getEffectivePrice(item.product),
         }));
 
-        const { error: itemsError } = await supabase.from("transaction_items").insert(items);
+        const { error: itemsError } = await offlineSupabase.from("transaction_items").insert(items);
         if (itemsError) throw itemsError;
 
         // Reduce stock for each product
         for (const item of Object.values(selectedProducts)) {
           const newStock = item.product.stock_quantity - item.quantity;
-          const { error: updateError } = await supabase
+          const { error: updateError } = await offlineSupabase
             .from("products")
             .update({ stock_quantity: newStock })
             .eq("id", item.product.id);

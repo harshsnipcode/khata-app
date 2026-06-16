@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import FloatingButton from "../components/FloatingButton";
@@ -177,26 +178,26 @@ function StaffDashboard() {
 
   const handleQuickAttendance = async (employeeId, status) => {
     if (status === "present") {
-      const existing = await supabase
+      const existing = await offlineSupabase
         .from("employee_attendance")
         .select("id")
         .eq("employee_id", employeeId)
         .eq("date", todayStr)
         .maybeSingle();
       if (existing.data) {
-        await supabase.from("employee_attendance").delete().eq("id", existing.data.id);
+        await offlineSupabase.from("employee_attendance").delete({ id: existing.data.id }).eq("id", existing.data.id);
       }
     } else {
-      const existing = await supabase
+      const existing = await offlineSupabase
         .from("employee_attendance")
         .select("id")
         .eq("employee_id", employeeId)
         .eq("date", todayStr)
         .maybeSingle();
       if (existing.data) {
-        await supabase.from("employee_attendance").update({ status }).eq("id", existing.data.id);
+        await offlineSupabase.from("employee_attendance").update({ status }).eq("id", existing.data.id);
       } else {
-        await supabase.from("employee_attendance").insert([{ employee_id: employeeId, date: todayStr, status }]);
+        await offlineSupabase.from("employee_attendance").insert([{ employee_id: employeeId, date: todayStr, status }]);
       }
     }
     await loadData();

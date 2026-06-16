@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 
@@ -65,7 +65,7 @@ function CreateEmployee() {
     const auth_id = authData?.user?.id || null;
     const effectiveLevel = fullPermissions ? 3 : permissionLevel;
 
-    const { error: dbError } = await supabase.from("employees").insert([
+    const { error: dbError } = await offlineSupabase.from("employees").insert([
       {
         username: username.trim(),
         auth_id,

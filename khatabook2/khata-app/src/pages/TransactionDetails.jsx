@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function TransactionDetails() {
   const { id } = useParams();
@@ -27,7 +27,7 @@ function TransactionDetails() {
 
   const handleDelete = async () => {
     setDeleting(true);
-    const { error } = await supabase.from("transactions").delete().eq("id", id);
+    const { error } = await offlineSupabase.from("transactions").delete({ id }).eq("id", id);
     if (!error) {
       navigate("/admin/reports/customer-transactions", { replace: true });
     }
