@@ -89,7 +89,7 @@ function StaffDashboard() {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [sortBy, setSortBy] = useState("recent");
 
-  const [businessName, setBusinessName] = useState(() => localStorage.getItem("khata_business_name") || "My Business");
+  const [businessName, setBusinessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
   const [editName, setEditName] = useState("");
   const [showNameModal, setShowNameModal] = useState(false);
 
@@ -209,7 +209,7 @@ function StaffDashboard() {
   };
 
   const saveBusinessName = () => {
-    const name = editName.trim() || "My Business";
+    const name = editName.trim() || "Shiv Shankar Dairy";
     localStorage.setItem("khata_business_name", name);
     setBusinessName(name);
     setShowNameModal(false);

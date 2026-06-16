@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import heroLogo from "../assets/hero.png";
 
-function Header({ businessName = "My Business", onEdit, isAdmin }) {
+function Header({ businessName = "Shiv Shankar Dairy", onEdit, isAdmin }) {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [syncStatus, setSyncStatus] = useState('synced');
 

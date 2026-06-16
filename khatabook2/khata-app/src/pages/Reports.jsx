@@ -14,7 +14,7 @@ const reportTabs = [
 function Reports() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("customer");
-  const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "My Business");
+  const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
 
   return (
     <div className="min-h-screen bg-[var(--background)]">

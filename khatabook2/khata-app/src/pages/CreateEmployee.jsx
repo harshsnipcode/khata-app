@@ -26,7 +26,7 @@ function CreateEmployee() {
   const [fullPermissions, setFullPermissions] = useState(false);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
 
-  const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "My Business");
+  const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");

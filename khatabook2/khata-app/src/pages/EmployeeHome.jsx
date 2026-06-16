@@ -141,7 +141,7 @@ function EmployeeHome() {
   return (
     <div className="min-h-screen bg-[var(--background)] relative overflow-hidden">
       <div className="relative z-10 animate-fade-in">
-        <Header businessName={localStorage.getItem("khata_business_name") || "My Business"} isAdmin={false} />
+         <Header businessName={localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy"} isAdmin={false} />
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isAdmin={false} />
 
         <div className="max-w-6xl mx-auto p-6 space-y-6">

@@ -27,7 +27,7 @@ function CustomerTransactionsReport() {
   const [durationFilter, setDurationFilter] = useState("all");
   const [singleDay, setSingleDay] = useState("");
 
-  const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "My Business");
+  const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
 
   const loadData = useCallback(async () => {
     const [txnRes, custRes] = await Promise.all([

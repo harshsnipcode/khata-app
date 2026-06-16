@@ -69,7 +69,7 @@ function AdminHome() {
   const [password,  setPassword]        = useState("");
   const [message,   setMessage]         = useState("");
 
-  const [businessName, setBusinessName] = useState(() => localStorage.getItem("khata_business_name") || "My Business");
+  const [businessName, setBusinessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
   const [editName, setEditName] = useState("");
   const [showNameModal, setShowNameModal] = useState(false);
 
@@ -188,7 +188,7 @@ function AdminHome() {
   };
 
   const saveBusinessName = () => {
-    const name = editName.trim() || "My Business";
+    const name = editName.trim() || "Shiv Shankar Dairy";
     localStorage.setItem("khata_business_name", name);
     setBusinessName(name);
     setShowNameModal(false);
