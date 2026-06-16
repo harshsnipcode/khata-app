@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function TransactionEntry() {

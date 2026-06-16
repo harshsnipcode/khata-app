@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function TransactionDetails() {

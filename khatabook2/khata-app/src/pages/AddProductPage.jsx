@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function AddProductPage() {
@@ -23,11 +24,16 @@ function AddProductPage() {
     setError("");
 
     try {
+      if (!supabase) {
+        setError("Supabase client not initialized. Please refresh the page.");
+        setSaving(false);
+        return;
+      }
       const user = await supabase.auth.getUser();
       const created_by = user?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
 
       // 1. Create Product
-      const { data: product, error: pError } = await offlineSupabase.from("products").insert([
+      const { data: productData, error: pError } = await offlineSupabase.from("products").insert([
         {
           name,
           sale_price: Number(salePrice),
@@ -40,6 +46,8 @@ function AddProductPage() {
       ]).select().single();
 
       if (pError) throw pError;
+
+      const product = productData;
 
       // 2. Create Opening Stock Transaction
       if (Number(openingStock) > 0) {

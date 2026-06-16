@@ -6,9 +6,17 @@ function isOnline() {
 }
 
 function createQueryBuilder(table, method, payload) {
-  const ops = { table, method, payload, filters: [] };
+  const ops = { table, method, payload, filters: [], selectColumns: null };
 
   return {
+    select(columns) {
+      ops.selectColumns = columns || '*';
+      return this;
+    },
+    single() {
+      ops.single = true;
+      return this;
+    },
     eq(column, value) {
       ops.filters.push({ column, operator: 'eq', value });
       return this;
@@ -55,14 +63,36 @@ function createQueryBuilder(table, method, payload) {
       return onFulfilled ? onFulfilled(result) : result;
     },
 
+    order(column, { ascending = true } = {}) {
+      ops.order = { column, ascending };
+      return this;
+    },
+
+    limit(count) {
+      ops.limit = count;
+      return this;
+    },
+
     async execute() {
       if (!isOnline()) {
         return await this.executeOffline();
       }
 
       let query = supabase.from(table)[method](payload);
+      if (ops.selectColumns) {
+        query = query.select(ops.selectColumns);
+      }
+      if (ops.single) {
+        query = query.single();
+      }
       for (const f of ops.filters) {
         query = query[f.operator](f.column, f.value);
+      }
+      if (ops.order) {
+        query = query.order(ops.order.column, { ascending: ops.order.ascending });
+      }
+      if (ops.limit !== undefined) {
+        query = query.limit(ops.limit);
       }
       const { data, error } = await query;
       return { data, error };
