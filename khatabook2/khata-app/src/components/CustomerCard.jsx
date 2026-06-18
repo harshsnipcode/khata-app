@@ -52,11 +52,11 @@ function CustomerCard({ id, initial, name, time, balance }) {
     <div
       onClick={() => id && navigate(`/customer/${id}`)}
       role="button"
-      className="rounded-2xl p-4 flex items-center gap-4 cursor-pointer relative group transition-all duration-200"
+      className="rounded-xl px-3.5 py-2.5 flex items-center gap-3 cursor-pointer relative group transition-all duration-200"
       style={{
         background: "#fff",
         border: "1px solid #e9ecef",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
       }}
       onMouseEnter={e => {
         e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)";
@@ -64,18 +64,18 @@ function CustomerCard({ id, initial, name, time, balance }) {
         e.currentTarget.style.transform = "translateY(-1px)";
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.05)";
+        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)";
         e.currentTarget.style.borderColor = "#e9ecef";
         e.currentTarget.style.transform = "translateY(0)";
       }}
     >
       {/* Avatar */}
       <div
-        className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-base shrink-0 select-none transition-all duration-200"
+        className="w-9 h-9 rounded-full flex items-center justify-center font-bold shrink-0 select-none transition-all duration-200"
         style={{
           background: "#ebf6f5",
           color: "#5cbdb9",
-          fontSize: "16px",
+          fontSize: "13px",
         }}
       >
         {initial || "?"}
@@ -84,12 +84,12 @@ function CustomerCard({ id, initial, name, time, balance }) {
       {/* Name + time */}
       <div className="flex-1 min-w-0">
         <h3
-          className="font-semibold text-base truncate"
+          className="font-semibold text-sm truncate"
           style={{ color: "#2d3436" }}
         >
           {name}
         </h3>
-        <p className="text-xs mt-0.5 font-medium" style={{ color: "#b2bec3" }}>
+        <p className="text-[10px] font-medium" style={{ color: "#b2bec3" }}>
           {timeAgo(time)}
         </p>
       </div>
@@ -97,20 +97,20 @@ function CustomerCard({ id, initial, name, time, balance }) {
       {/* Balance Badge */}
       {hasBalance && (
         <div
-          className="px-4 py-2 rounded-xl text-right shrink-0 transition-all duration-200"
+          className="px-2.5 py-1.5 rounded-lg text-right shrink-0 transition-all duration-200"
           style={{
             background: badgeBg,
             border: `1px solid ${badgeBorder}`,
           }}
         >
           <p
-            className="font-bold text-sm tracking-wide"
+            className="font-bold text-xs tracking-wide"
             style={{ color: amountColor }}
           >
             ₹{formatted}
           </p>
           <p
-            className="text-[10px] uppercase font-semibold tracking-widest mt-0.5"
+            className="text-[8px] uppercase font-semibold tracking-widest"
             style={{ color: labelColor }}
           >
             {label}

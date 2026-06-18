@@ -1,53 +1,31 @@
 function SummaryCard({ youGive = 0, youGet = 0 }) {
-  const formattedGive = new Intl.NumberFormat("en-IN").format(youGive);
-  const formattedGet = new Intl.NumberFormat("en-IN").format(youGet);
+  const net = youGet - youGive;
+  const isPositive = net > 0;
+  const isNegative = net < 0;
+  const absNet = Math.abs(net);
+  const formatted = new Intl.NumberFormat("en-IN").format(absNet);
 
   return (
     <div
-      className="rounded-2xl p-5 relative overflow-hidden"
+      className="rounded-2xl px-4 py-3 relative overflow-hidden flex items-center justify-between"
       style={{
         background: "#ebf6f5",
         border: "1px solid #c8e9e7",
       }}
     >
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6">
-        {/* You Will Give */}
-        <div className="text-center">
-          <p
-            className="text-xs font-semibold uppercase tracking-wider mb-2"
-            style={{ color: "#636e72" }}
-          >
-            You Will Give
-          </p>
-          <p
-            className="text-3xl font-black"
-            style={{ color: "#52b788" }}
-          >
-            ₹{formattedGive}
-          </p>
-        </div>
-
-        {/* Divider */}
-        <div
-          className="h-12 w-px"
-          style={{ background: "#c8e9e7" }}
-        />
-
-        {/* You Will Get */}
-        <div className="text-center">
-          <p
-            className="text-xs font-semibold uppercase tracking-wider mb-2"
-            style={{ color: "#636e72" }}
-          >
-            You Will Get
-          </p>
-          <p
-            className="text-3xl font-black"
-            style={{ color: "#e76f51" }}
-          >
-            ₹{formattedGet}
-          </p>
-        </div>
+      <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#636e72" }}>
+        NET BALANCE
+      </p>
+      <div className="text-right">
+        <p
+          className="text-lg font-black"
+          style={{ color: isPositive ? "#52b788" : isNegative ? "#e76f51" : "#636e72" }}
+        >
+          ₹{formatted}
+        </p>
+        <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "#636e72" }}>
+          {isPositive ? 'YOU WILL GET' : isNegative ? 'YOU WILL GIVE' : 'SETTLED'}
+        </p>
       </div>
     </div>
   );

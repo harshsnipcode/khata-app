@@ -53,7 +53,7 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
 
   return (
     <div
-      className="px-5 py-2 flex gap-1 overflow-x-auto select-none border-b"
+      className="px-3 py-1.5 flex gap-0.5 overflow-x-auto select-none border-b"
       style={{ background: "#fff", borderColor: "#e9ecef" }}
     >
       {tabs.map((tab) => {
@@ -62,7 +62,7 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
           <button
             key={tab}
             onClick={() => handleTabClick(tab)}
-            className={`text-xs font-semibold px-5 py-2.5 rounded-xl transition-all duration-200 relative cursor-pointer outline-none`}
+            className="text-[10px] font-semibold px-3.5 py-2 rounded-xl transition-all duration-200 relative cursor-pointer outline-none"
             style={
               isActive
                 ? {
@@ -85,7 +85,7 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
             {tabLabels[tab]}
             {isActive && (
               <span
-                className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full"
+                className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
                 style={{ background: "#5cbdb9" }}
               />
             )}

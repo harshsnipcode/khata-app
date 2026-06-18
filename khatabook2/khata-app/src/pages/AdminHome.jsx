@@ -200,7 +200,7 @@ function AdminHome() {
         <Header businessName={businessName} onEdit={handleEditBusinessName} isAdmin={true} />
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isAdmin={true} />
 
-        <div className="max-w-6xl mx-auto p-6 space-y-6">
+        <div className="max-w-6xl mx-auto px-4 py-3 space-y-3">
 
           {activeTab === "customers" && (
             <>
@@ -241,11 +241,11 @@ function AdminHome() {
               )}
 
               {/* Customer list */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {loading && (
                   <div className="space-y-3 animate-pulse">
                     {[1, 2, 3].map((n) => (
-                      <div key={n} className="h-20 bg-[var(--surface)] border border-[var(--border)] rounded-2xl w-full" />
+                      <div key={n} className="h-14 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-full" />
                     ))}
                   </div>
                 )}
