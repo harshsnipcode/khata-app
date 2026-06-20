@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { moveToRecycleBin } from "../lib/offline/db";
 import DeleteCustomerModal from "../components/DeleteCustomerModal";
 
 /* Derive initials from a full name */
@@ -128,12 +129,38 @@ function CustomerProfile() {
 
   /* ── Delete customer (called from modal) ── */
   const handleDelete = async () => {
-      // 1. Delete all transactions
-      await offlineSupabase.from("transactions").delete({ id }).eq("customer_id", id);
-      // 2. Delete customer record
-      await offlineSupabase.from("customers").delete({ id }).eq("id", id);
+    const deletedBy = localStorage.getItem("khata_user") || "unknown";
 
-    // 3. Redirect to home based on role stored in localStorage
+    // 1. Fetch COMPLETE customer record before deletion
+    const { data: fullCustomer } = await supabase.from("customers").select("*").eq("id", id).single();
+    const customerToStore = fullCustomer || customer;
+    console.log("[RecycleBin] Full customer being stored:", customerToStore);
+
+    // 2. Fetch all transactions to move them to recycle bin
+    const { data: allTxns } = await supabase.from("transactions").select("*").eq("customer_id", id);
+    if (allTxns) {
+      for (const txn of allTxns) {
+        // Fetch COMPLETE individual transaction record and its items
+        const { data: fullTxn } = await supabase.from("transactions").select("*").eq("id", txn.id).single();
+        const { data: txnItems } = await supabase.from("transaction_items").select("*").eq("transaction_id", txn.id);
+        const txnToStore = {
+          transaction: fullTxn || txn,
+          transaction_items: txnItems || [],
+        };
+        console.log("[RecycleBin] Full transaction being stored:", txnToStore);
+        const txnName = `Transaction #${(fullTxn || txn).id} - ${name} (₹${Math.round((fullTxn || txn).amount)})`;
+        await moveToRecycleBin("transactions", String((fullTxn || txn).id), txnName, txnToStore, deletedBy);
+      }
+    }
+
+    // 3. Move customer to recycle bin
+    await moveToRecycleBin("customers", String(id), name, customerToStore, deletedBy);
+
+    // 4. Delete customer and transactions from server/offline
+    await offlineSupabase.from("transactions").delete({ id }).eq("customer_id", id);
+    await offlineSupabase.from("customers").delete({ id }).eq("id", id);
+
+    // 5. Redirect to home based on role stored in localStorage
     const role = localStorage.getItem("khata_role");
     if (role === "admin") {
       navigate("/admin/home");

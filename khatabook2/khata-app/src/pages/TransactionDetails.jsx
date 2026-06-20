@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { moveToRecycleBin } from "../lib/offline/db";
 
 function TransactionDetails() {
   const { id } = useParams();
@@ -28,9 +29,34 @@ function TransactionDetails() {
 
   const handleDelete = async () => {
     setDeleting(true);
-    const { error } = await offlineSupabase.from("transactions").delete({ id }).eq("id", id);
-    if (!error) {
-      navigate("/admin/reports/customer-transactions", { replace: true });
+    try {
+      const deletedBy = localStorage.getItem("khata_user") || "unknown";
+
+      // Fetch COMPLETE transaction record and items before deletion
+      const { data: fullTransaction } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("id", id)
+        .single();
+      const { data: transactionItems } = await supabase
+        .from("transaction_items")
+        .select("*")
+        .eq("transaction_id", id);
+      const transactionToStore = {
+        transaction: fullTransaction || transaction,
+        transaction_items: transactionItems || [],
+      };
+      console.log("[RecycleBin] Full transaction being stored:", transactionToStore);
+
+      const entityName = `Transaction #${id} - ${customer?.name || "Unknown"} (₹${Math.round((fullTransaction || transaction)?.amount || 0)})`;
+      await moveToRecycleBin("transactions", String(id), entityName, transactionToStore, deletedBy);
+
+      const { error } = await offlineSupabase.from("transactions").delete({ id }).eq("id", id);
+      if (!error) {
+        navigate("/admin/reports/customer-transactions", { replace: true });
+      }
+    } catch (e) {
+      console.error("Delete error:", e);
     }
     setDeleting(false);
     setShowDeleteModal(false);
@@ -137,7 +163,7 @@ function TransactionDetails() {
         >
           <div className="w-full max-w-sm card rounded-3xl p-6 shadow-2xl animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-[var(--text-primary)] mb-2">Delete Entry</h2>
-            <p className="text-sm text-[var(--text-secondary)] mb-6">This action cannot be undone. The transaction will be permanently removed.</p>
+            <p className="text-sm text-[var(--text-secondary)] mb-6">The transaction will be moved to the recycle bin. You can restore it within 90 days.</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteModal(false)}

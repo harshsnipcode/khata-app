@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -14,6 +14,7 @@ function getDateStr(d) {
 
 function CustomerTransactionsReport() {
   const navigate = useNavigate();
+  const location = useLocation();
   const reportRef = useRef(null);
 
   const [transactions, setTransactions] = useState([]);
@@ -28,6 +29,10 @@ function CustomerTransactionsReport() {
   const [singleDay, setSingleDay] = useState("");
 
   const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
+
+  const params = new URLSearchParams(location.search);
+  const customerFilterId = Number(params.get("customerId")) || "";
+  const customerFilterName = params.get("customerName") || "";
 
   const loadData = useCallback(async () => {
     const [txnRes, custRes] = await Promise.all([
@@ -87,6 +92,10 @@ function CustomerTransactionsReport() {
   const filteredTransactions = useMemo(() => {
     let list = [...transactions];
 
+    if (customerFilterId) {
+      list = list.filter((t) => t.customer_id === customerFilterId);
+    }
+
     if (effectiveDates.start) {
       list = list.filter((t) => {
         const txnDate = t.created_at?.split("T")[0] || t.date;
@@ -140,7 +149,8 @@ function CustomerTransactionsReport() {
 
   const handleDurationSelect = (key) => {
     setDurationFilter(key);
-    if (key !== "single_day") setSingleDay("");
+    if (key === "single_day") setSingleDay(getDateStr(new Date()));
+    else setSingleDay("");
     if (key !== "date_range") { setStartDate(""); setEndDate(""); }
     setShowDurationModal(false);
   };
@@ -217,13 +227,15 @@ function CustomerTransactionsReport() {
           Reports
         </button>
 
-        <h1 className="text-xl font-bold text-[var(--text-primary)]">Customer Transactions Report</h1>
+        <h1 className="text-xl font-bold text-[var(--text-primary)]">
+          {customerFilterName ? `Report of ${customerFilterName}` : "Customer Transactions Report"}
+        </h1>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="card rounded-2xl p-4 shadow-sm">
             <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">Net Balance</p>
-            <p className={`text-lg font-bold mt-1 ${summary.netBalance >= 0 ? "text-[#e76f51]" : "text-[#52b788]"}`}>
+            <p className={`text-lg font-bold mt-1 ${summary.netBalance > 0 ? "text-[#e76f51]" : summary.netBalance < 0 ? "text-[#52b788]" : "text-[var(--text-primary)]"}`}>
               ₹{formatINR(Math.abs(summary.netBalance))}
             </p>
           </div>
@@ -233,11 +245,11 @@ function CustomerTransactionsReport() {
           </div>
           <div className="card rounded-2xl p-4 shadow-sm">
             <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">You Gave</p>
-            <p className="text-lg font-bold mt-1 text-[#52b788]">₹{formatINR(summary.totalGave)}</p>
+            <p className="text-lg font-bold mt-1 text-[#e76f51]">₹{formatINR(summary.totalGave)}</p>
           </div>
           <div className="card rounded-2xl p-4 shadow-sm">
             <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">You Got</p>
-            <p className="text-lg font-bold mt-1 text-[#e76f51]">₹{formatINR(summary.totalGot)}</p>
+            <p className="text-lg font-bold mt-1 text-[#52b788]">₹{formatINR(summary.totalGot)}</p>
           </div>
         </div>
 
@@ -287,48 +299,93 @@ function CustomerTransactionsReport() {
         </div>
 
         {/* Transactions List */}
-        <div ref={reportRef} className="space-y-2">
+        <div ref={reportRef} className="space-y-1">
           {loading ? (
-            <div className="space-y-2 animate-pulse">
+            <div className="space-y-1 animate-pulse">
+              <div className="h-8 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-full" />
               {[1, 2, 3, 4, 5].map((n) => (
-                <div key={n} className="h-16 bg-[var(--surface)] border border-[var(--border)] rounded-2xl w-full" />
+                <div key={n} className="h-14 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-full" />
               ))}
             </div>
           ) : runningBalance.length === 0 ? (
-            <div className="rounded-3xl card py-16 text-center text-[var(--text-secondary)]">
+            <div className="rounded-2xl card py-12 text-center text-[var(--text-secondary)]">
               <p className="font-bold text-sm">No transactions found.</p>
             </div>
           ) : (
-            runningBalance.map((t) => {
-              const cust = customerMap[t.customer_id];
-              const date = new Date(t.created_at || t.date);
-              return (
-                <div
-                  key={t.id}
-                  onClick={() => navigate(`/admin/reports/customer-transactions/${t.id}`)}
-                  className="card rounded-2xl px-5 py-4 shadow-sm hover:card-hover transition-all duration-200 cursor-pointer"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[var(--text-primary)] font-semibold text-sm truncate">
-                        {cust?.name || `Customer #${t.customer_id}`}
-                      </p>
-                      <p className="text-[var(--text-muted)] text-[10px] font-medium mt-0.5">
-                        {date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                      </p>
+            <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+              {/* Table Header */}
+              <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--background)]">
+                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Description</p>
+                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--danger)] text-center">Gave</p>
+                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--success)] text-center">Got</p>
+                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)] text-right pr-2">Balance</p>
+              </div>
+
+              {/* Transaction Rows */}
+              <div className="divide-y divide-[var(--border)]">
+                {runningBalance.map((t) => {
+                  const cust = customerMap[t.customer_id];
+                  const date = new Date(t.created_at || t.date);
+                  const isGave = t.type === "gave";
+                  const paymentBadge = !isGave && t.payment_mode
+                    ? t.payment_mode === "online" ? "Online" : "Cash"
+                    : null;
+                  const description = cust?.name || `Customer #${t.customer_id}`;
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => navigate(`/admin/reports/customer-transactions/${t.id}`)}
+                      className="px-3 py-2 hover:bg-[var(--surface)] cursor-pointer transition-colors"
+                    >
+                      <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 items-center">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-[var(--text-primary)] truncate flex items-center gap-1.5">
+                            <span>{description}</span>
+                            {paymentBadge && (
+                              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${
+                                paymentBadge === "Online"
+                                  ? "bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                                  : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              }`}>
+                                {paymentBadge}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[9px] text-[var(--text-muted)] font-medium mt-0.5">
+                            {date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          {isGave && (
+                            <p className="text-sm font-bold text-[var(--danger)]">
+                              ₹{formatINR(t.amount)}
+                            </p>
+                          )}
+                          {!isGave && (
+                            <p className="text-sm font-bold text-[var(--text-muted)]">—</p>
+                          )}
+                        </div>
+                        <div className="text-center">
+                          {!isGave && (
+                            <p className="text-sm font-bold text-[var(--success)]">
+                              ₹{formatINR(t.amount)}
+                            </p>
+                          )}
+                          {isGave && (
+                            <p className="text-sm font-bold text-[var(--text-muted)]">—</p>
+                          )}
+                        </div>
+                        <div className="text-right pr-2">
+                          <p className="text-[9px] text-[var(--text-muted)] font-medium">
+                            ₹{formatINR(Math.abs(t.runningBal))}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0 ml-3">
-                      <p className={`text-sm font-bold ${t.type === "gave" ? "text-[#52b788]" : "text-[#e76f51]"}`}>
-                        {t.type === "gave" ? "-" : "+"}₹{formatINR(t.amount)}
-                      </p>
-                      <p className="text-[10px] text-[var(--text-muted)] font-medium">
-                        Bal: ₹{formatINR(Math.abs(t.runningBal))}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
 

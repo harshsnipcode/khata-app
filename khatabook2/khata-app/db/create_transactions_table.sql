@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   type text NOT NULL CHECK (type IN ('gave', 'got')),
   amount numeric NOT NULL,
   description text,
+  payment_mode text DEFAULT 'cash' CHECK (payment_mode IN ('cash', 'online')),
   date date NOT NULL DEFAULT now(),
   created_by text,
   created_at timestamptz DEFAULT now()
@@ -12,3 +13,6 @@ CREATE TABLE IF NOT EXISTS public.transactions (
 
 CREATE INDEX IF NOT EXISTS transactions_customer_id_idx ON public.transactions(customer_id);
 CREATE INDEX IF NOT EXISTS transactions_created_at_idx ON public.transactions(created_at DESC);
+
+-- Run this ALTER TABLE for existing databases that already have the table
+-- ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS payment_mode text DEFAULT 'cash' CHECK (payment_mode IN ('cash', 'online'));

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { moveToRecycleBin } from "../lib/offline/db";
 
 function EditProductPage() {
   const { id } = useParams();
@@ -86,6 +87,19 @@ function EditProductPage() {
   const handleDelete = async () => {
     setDeleting(true);
     try {
+      const deletedBy = localStorage.getItem("khata_user") || "unknown";
+
+      // Fetch COMPLETE product record before deletion (ensures all columns preserved)
+      const { data: fullProduct } = await supabase.from("products").select("*").eq("id", id).single();
+      const productToStore = fullProduct || {
+        id: Number(id), name,
+        sale_price: Number(salePrice), purchase_price: Number(purchasePrice),
+        stock_quantity: Number(openingStock || 0), unit,
+      };
+      console.log("[RecycleBin] Full product being stored:", productToStore);
+
+      await moveToRecycleBin("products", String(id), name, productToStore, deletedBy);
+
       const { error: dError } = await offlineSupabase.from("products").delete({ id }).eq("id", id);
       if (dError) throw dError;
       setShowDeleteModal(false);

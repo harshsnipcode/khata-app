@@ -18,20 +18,30 @@ function isReportsRoute(pathname) {
   return pathname.startsWith("/admin/reports");
 }
 
+function isSettingsRoute(pathname) {
+  return pathname.startsWith("/settings");
+}
+
 function Navbar({ activeTab, setActiveTab, isAdmin }) {
   const navigate = useNavigate();
   const location = useLocation();
   const tabs = ["customers", "catalogue"];
   if (isAdmin) tabs.push("employees", "reports");
+  tabs.push("settings");
 
   const tabLabels = {
     customers: "Customers",
     catalogue: "Catalogue",
     employees: "Employees",
     reports: "Reports",
+    settings: "Settings",
   };
 
   const handleTabClick = (tab) => {
+    if (tab === "settings") {
+      navigate("/settings");
+      return;
+    }
     if (isAdmin) {
       const route = ROUTES[tab];
       navigate(route, { state: { activeTab: tab } });
@@ -42,10 +52,11 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
   };
 
   const isActiveTab = (tab) => {
+    if (tab === "settings") return isSettingsRoute(location.pathname);
     if (tab === "employees") return isEmployeesRoute(location.pathname);
     if (tab === "reports") return isReportsRoute(location.pathname);
     if (tab === "customers" || tab === "catalogue") {
-      if (isEmployeesRoute(location.pathname) || isReportsRoute(location.pathname)) return false;
+      if (isEmployeesRoute(location.pathname) || isReportsRoute(location.pathname) || isSettingsRoute(location.pathname)) return false;
       return activeTab === tab;
     }
     return activeTab === tab;

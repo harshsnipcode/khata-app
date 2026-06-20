@@ -15,6 +15,7 @@ import CreateEmployee from "./pages/CreateEmployee";
 import Reports from "./pages/Reports";
 import CustomerTransactionsReport from "./pages/CustomerTransactionsReport";
 import TransactionDetails from "./pages/TransactionDetails";
+import TransactionDetailPage from "./pages/TransactionDetailPage";
 import CustomerListPage from "./pages/CustomerListPage";
 import CustomerForm from "./pages/CustomerForm";
 import CustomerDetails from "./pages/CustomerDetails";
@@ -28,7 +29,8 @@ import StockEntry from "./pages/StockEntry";
 import StockSuccess from "./pages/StockSuccess";
 import InventoryReport from "./pages/InventoryReport";
 import SharedLedgerView from "./pages/SharedLedgerView";
-
+import SettingsPage from "./pages/SettingsPage";
+import RecycleBinPage from "./pages/RecycleBinPage";
 
 function App() {
   return (
@@ -53,6 +55,7 @@ function App() {
         <Route path="/customer/:id/profile" element={<CustomerProfile />} />
         <Route path="/customer/:id/transaction" element={<TransactionEntry />} />
         <Route path="/customer/:id/transaction/success" element={<TransactionSuccess />} />
+        <Route path="/transaction/:id" element={<TransactionDetailPage />} />
         
         {/* Catalogue & Inventory */}
         <Route path="/catalogue/add" element={<AdminRoute><AddProductPage /></AdminRoute>} />
@@ -63,6 +66,8 @@ function App() {
         <Route path="/product/:id/stock-success" element={<AdminRoute><StockSuccess /></AdminRoute>} />
         <Route path="/catalogue/reports" element={<AdminRoute><InventoryReport /></AdminRoute>} />
         <Route path="/share/customer/:id" element={<SharedLedgerView />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/recycle-bin" element={<RecycleBinPage />} />
       </Routes>
 
     </BrowserRouter>

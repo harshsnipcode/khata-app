@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import heroLogo from "../assets/hero.png";
 
 function Header({ businessName = "Shiv Shankar Dairy", onEdit, isAdmin }) {
@@ -69,25 +68,6 @@ function Header({ businessName = "Shiv Shankar Dairy", onEdit, isAdmin }) {
           {isOnline && syncStatus === 'synced' && <span className="text-white/60">· ✓ Synced</span>}
           {syncStatus === 'pending' && <span className="text-white/80">· ⟳ Syncing...</span>}
         </div>
-        <button
-          onClick={() => {
-            try {
-              localStorage.removeItem("khata_role");
-              localStorage.removeItem("khata_user");
-            } catch (e) {}
-            window.location.href = "/";
-          }}
-          className="px-3 py-1 rounded-xl text-[10px] font-semibold tracking-wide uppercase transition-all duration-200 active:scale-95"
-          style={{
-            background: "rgba(255,255,255,0.18)",
-            color: "#fff",
-            border: "1px solid rgba(255,255,255,0.25)",
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.28)"}
-          onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}
-        >
-          Logout
-        </button>
       </div>
     </div>
   );

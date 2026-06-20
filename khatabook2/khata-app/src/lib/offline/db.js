@@ -76,9 +76,14 @@ db.version(2).stores({
   }
 });
 
-db.version(3).stores({
-  customers_temp: null,
-  transactions_temp: null,
+db.version(4).stores({
+  recycle_bin: 'local_uuid, entity_type, entity_id, entity_name, deleted_at, deleted_by, original_data, restore_deadline',
+}).upgrade(async tx => {
+  // No data migration needed for new table
+});
+
+db.version(5).stores({
+  customers_temp: null, transactions_temp: null,
   products_temp: null,
   product_transactions_temp: null,
   transaction_items_temp: null,
@@ -94,7 +99,8 @@ db.version(3).stores({
   customer_product_prices: 'local_uuid, id, customer_id, product_id, created_at',
   employees: 'local_uuid, id, auth_id, created_at',
   employee_attendance: 'local_uuid, id, employee_id, date, created_at',
-  sync_queue: 'local_uuid,table,created_offline,synced'
+  sync_queue: 'local_uuid,table,created_offline,synced',
+  recycle_bin: 'local_uuid, entity_type, entity_id, entity_name, deleted_at, deleted_by, original_data, restore_deadline'
 }).upgrade(async tx => {
   const tables = [
     'customers',
@@ -252,5 +258,199 @@ export async function markRecordSynced(table, local_uuid, serverRecord) {
     await db.table('sync_queue').where('local_uuid').equals(local_uuid).delete();
   } catch (e) {
     console.error('markRecordSynced error', e);
+  }
+}
+
+// Recycle Bin functions
+export async function moveToRecycleBin(entityType, entityId, entityName, originalData, deletedBy) {
+  const local_uuid = generateUUID();
+  const deleted_at = new Date().toISOString();
+  const restore_deadline = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(); // 90 days
+
+  console.log(`[RecycleBin:moveToRecycleBin] called with:`, {
+    entityType,
+    entityId,
+    entityName,
+    originalDataHasCustomerId: 'customer_id' in (originalData || {}),
+    originalDataCustomerId: originalData?.customer_id,
+    originalDataType: typeof originalData?.customer_id,
+    originalDataKeys: Object.keys(originalData || {}),
+  });
+
+  // ALWAYS use the passed originalData as source of truth (has all fields)
+  // Only extract local_uuid from Dexie to preserve primary key, NEVER replace data
+  let dataToStore = { ...originalData };
+  try {
+    const localRecord = await db.table(entityType).where('id').equals(Number(entityId)).first();
+    if (localRecord && localRecord.local_uuid) {
+      dataToStore.local_uuid = localRecord.local_uuid;
+      console.log(`[RecycleBin:moveToRecycleBin] Preserved local_uuid from Dexie:`, localRecord.local_uuid);
+    } else {
+      console.log(`[RecycleBin:moveToRecycleBin] No local Dexie record found, using originalData's local_uuid`);
+    }
+  } catch (e) {
+    console.error(`[RecycleBin:moveToRecycleBin] Error reading local record:`, e);
+  }
+
+  // Ensure local_uuid exists
+  if (!dataToStore.local_uuid) {
+    dataToStore.local_uuid = local_uuid;
+  }
+
+  console.log(`[RecycleBin:moveToRecycleBin] dataToStore before JSON.stringify:`, {
+    hasCustomerId: 'customer_id' in dataToStore,
+    customerId: dataToStore.customer_id,
+    customerIdType: typeof dataToStore.customer_id,
+    keys: Object.keys(dataToStore),
+  });
+
+  const record = {
+    local_uuid,
+    entity_type: entityType,
+    entity_id: entityId,
+    entity_name: entityName,
+    deleted_at,
+    deleted_by: deletedBy || localStorage.getItem('khata_user') || 'unknown',
+    original_data: JSON.stringify(dataToStore),
+    restore_deadline,
+  };
+
+  console.log(`[RecycleBin:moveToRecycleBin] Stored in recycle bin, original_data length:`, record.original_data.length);
+
+  await db.table('recycle_bin').put(record);
+  return local_uuid;
+}
+
+export async function getRecycleBin() {
+  try {
+    const items = await db.table('recycle_bin').toArray();
+    return items.map(item => ({
+      ...item,
+      original_data: JSON.parse(item.original_data),
+    }));
+  } catch (e) {
+    console.error('getRecycleBin error', e);
+    return [];
+  }
+}
+
+export async function restoreFromRecycleBin(local_uuid) {
+  try {
+    const item = await db.table('recycle_bin').get(local_uuid);
+    if (!item) return { success: false, error: 'Item not found' };
+
+    const originalData = JSON.parse(item.original_data);
+    const entityType = item.entity_type;
+
+    // Handle new wrapper format: { transaction: {...}, transaction_items: [...] }
+    if (entityType === "transactions" && originalData.transaction) {
+      const transactionData = originalData.transaction;
+      const itemsData = originalData.transaction_items || [];
+
+      console.log(`[RecycleBin] Restoring transaction with ${itemsData.length} item(s):`, {
+        entityType,
+        entityId: item.entity_id,
+        originalDataId: transactionData.id,
+        originalDataCustomerId: transactionData.customer_id,
+        itemCount: itemsData.length,
+      });
+
+      // Ensure local_uuid exists for Dexie primary key
+      if (!transactionData.local_uuid) {
+        transactionData.local_uuid = generateUUID();
+      }
+
+      // Clear any deleted/recycle-bin flags
+      delete transactionData.deleted;
+      delete transactionData.deleted_at;
+      delete transactionData.in_recycle_bin;
+
+      // Restore transaction to transactions table
+      await db.table("transactions").put(transactionData);
+
+      // Restore each item to transaction_items table
+      for (const itemData of itemsData) {
+        if (!itemData.local_uuid) {
+          itemData.local_uuid = generateUUID();
+        }
+        delete itemData.deleted;
+        delete itemData.deleted_at;
+        delete itemData.in_recycle_bin;
+        // Strip any joined data (e.g. from Supabase .select("..., products(name)"))
+        delete itemData.products;
+        await db.table("transaction_items").put(itemData);
+      }
+
+      // Remove from recycle bin
+      await db.table('recycle_bin').delete(local_uuid);
+
+      console.log(`[RecycleBin] Restore to Dexie complete (${itemsData.length} items):`, {
+        entityType,
+        restoredId: transactionData.id,
+        local_uuid: transactionData.local_uuid,
+      });
+
+      return { success: true, data: transactionData, entityType, transaction_items: itemsData };
+    }
+
+    // Original format: direct entity object
+    console.log(`[RecycleBin] Restoring from recycle bin:`, {
+      entityType,
+      entityId: item.entity_id,
+      entityName: item.entity_name,
+      originalDataId: originalData.id,
+      originalDataCustomerId: originalData.customer_id,
+    });
+
+    // Ensure local_uuid exists for Dexie primary key
+    if (!originalData.local_uuid) {
+      originalData.local_uuid = generateUUID();
+    }
+
+    // Clear any deleted/recycle-bin flags before restore
+    delete originalData.deleted;
+    delete originalData.deleted_at;
+    delete originalData.in_recycle_bin;
+
+    // Restore to original table
+    await db.table(entityType).put(originalData);
+
+    // Remove from recycle bin
+    await db.table('recycle_bin').delete(local_uuid);
+
+    console.log(`[RecycleBin] Restore to Dexie complete:`, {
+      entityType,
+      restoredId: originalData.id,
+      local_uuid: originalData.local_uuid,
+    });
+
+    return { success: true, data: originalData, entityType };
+  } catch (e) {
+    console.error('[RecycleBin] restoreFromRecycleBin error:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+export async function permanentlyDeleteFromRecycleBin(local_uuid) {
+  try {
+    await db.table('recycle_bin').delete(local_uuid);
+    return { success: true };
+  } catch (e) {
+    console.error('permanentlyDeleteFromRecycleBin error', e);
+    return { success: false, error: e.message };
+  }
+}
+
+export async function cleanupRecycleBin() {
+  try {
+    const now = new Date().toISOString();
+    const expired = await db.table('recycle_bin').where('restore_deadline').below(now).toArray();
+    if (expired.length > 0) {
+      await db.table('recycle_bin').bulkDelete(expired.map(e => e.local_uuid));
+    }
+    return { success: true, cleaned: expired.length };
+  } catch (e) {
+    console.error('cleanupRecycleBin error', e);
+    return { success: false, error: e.message };
   }
 }

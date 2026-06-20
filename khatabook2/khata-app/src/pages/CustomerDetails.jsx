@@ -252,21 +252,17 @@ function CustomerDetails() {
                 <span>SMS</span>
               </button>
               <button
-                onClick={() => {
-                  const url = `${window.location.origin}/share/customer/${id}`;
-                  navigator.clipboard.writeText(url).then(() => {
-                    alert("Share link copied to clipboard!");
-                  }).catch(() => {
-                    prompt("Copy this link:", url);
-                  });
-                }}
+                onClick={() => navigate(`/admin/reports/customer-transactions?customerId=${id}&customerName=${encodeURIComponent(customer.name)}`)}
                 className="flex-1 rounded-xl bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] text-[var(--text-primary)] py-2.5 px-2 text-[9px] font-bold uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
               >
-                <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
                 </svg>
-                <span>Copy</span>
+                <span>Report</span>
               </button>
             </div>
           </div>
@@ -306,58 +302,84 @@ function CustomerDetails() {
               No transactions yet. Add your first transaction above.
             </div>
           ) : (
-            <div className="space-y-1.5">
-              {transactionRows.map((txn) => {
-                const itemCount = txn.items?.length || 0;
-                const displayText = itemCount > 0
-                  ? `${itemCount} Product${itemCount !== 1 ? "s" : ""}`
-                  : "Cash/Direct Entry";
+            <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+              {/* Table Header */}
+              <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--background)]">
+                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Description</p>
+                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--danger)] text-center">Gave</p>
+                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--success)] text-center">Got</p>
+                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)] text-right pr-2">Balance</p>
+              </div>
 
-                const isGot = txn.type === "got";
-                const amountColor = isGot ? "text-[var(--success)]" : "text-[var(--danger)]";
-                const itemBg = isGot ? "bg-[var(--primary-light)] border border-[var(--success)]/20" : "bg-[var(--secondary)] border border-[var(--danger)]/20";
+              {/* Transaction Rows */}
+              <div className="divide-y divide-[var(--border)]">
+                {transactionRows.map((txn) => {
+                  const itemCount = txn.items?.length || 0;
+                  const isGot = txn.type === "got";
+                  const isGave = !isGot;
+                  const paymentLabel = isGot && txn.payment_mode
+                    ? txn.payment_mode === "online" ? "Online" : "Cash"
+                    : null;
+                  const description = itemCount > 0
+                    ? txn.items.map(item => `${item.products?.name} × ${item.quantity}`).join(", ")
+                    : "Direct Entry";
 
-                return (
-                  <div
-                    key={txn.id}
-                    className="card rounded-xl px-3.5 py-2.5 hover:card-hover transition-all duration-200 flex items-center justify-between group relative overflow-hidden"
-                  >
-                    <div className="flex-1 min-w-0 mr-2">
-                      <p className="text-[var(--text-secondary)] text-[8px] font-black uppercase tracking-wider">
-                        {new Date(txn.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                      {itemCount > 0 ? (
-                        <div className="mt-1 space-y-0.5">
-                          {txn.items.map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-1.5">
-                              <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] shrink-0" />
-                              <p className="text-[var(--text-primary)] font-semibold text-[11px] truncate">
-                                {item.products?.name} <span className="text-[var(--text-secondary)] font-medium">× {item.quantity}</span>
-                              </p>
-                            </div>
-                          ))}
+                  return (
+                    <div
+                      key={txn.id}
+                      onClick={() => navigate(`/transaction/${txn.id}`)}
+                      className="px-3 py-2 hover:bg-[var(--surface)] transition-colors cursor-pointer"
+                    >
+                      <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 items-center">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-[var(--text-primary)] truncate flex items-center gap-1.5">
+                            <span>{description}</span>
+                            {paymentLabel && (
+                              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${
+                                paymentLabel === "Online"
+                                  ? "bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                                  : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              }`}>
+                                {paymentLabel}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[9px] text-[var(--text-muted)] font-medium mt-0.5">
+                            {new Date(txn.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          </p>
                         </div>
-                      ) : (
-                        <p className="text-[var(--text-primary)] font-bold text-[11px] mt-1 flex items-center gap-1.5">
-                          <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] shrink-0" />
-                          <span>{displayText}</span>
-                        </p>
-                      )}
+                        <div className="text-center">
+                          {isGave && (
+                            <p className="text-sm font-bold text-[var(--danger)]">
+                              ₹{new Intl.NumberFormat("en-IN").format(txn.amount)}
+                            </p>
+                          )}
+                          {!isGave && (
+                            <p className="text-sm font-bold text-[var(--text-muted)]">—</p>
+                          )}
+                        </div>
+                        <div className="text-center">
+                          {isGot && (
+                            <p className="text-sm font-bold text-[var(--success)]">
+                              ₹{new Intl.NumberFormat("en-IN").format(txn.amount)}
+                            </p>
+                          )}
+                          {isGave && (
+                            <p className="text-sm font-bold text-[var(--text-muted)]">—</p>
+                          )}
+                        </div>
+                        <div className="text-right pr-2">
+                          <p className="text-[9px] text-[var(--text-muted)] font-medium">
+                            ₹{new Intl.NumberFormat("en-IN").format(txn.balance)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    
-                    <div className="text-right shrink-0">
-                      <span className={`inline-block px-2 py-1 rounded-lg font-black text-[11px] tracking-wide ${itemBg} ${amountColor}`}>
-                        {isGot ? "+" : "-"}₹{new Intl.NumberFormat("en-IN").format(txn.amount)}
-                      </span>
-                      <p className="text-[var(--text-secondary)] text-[8px] font-black uppercase tracking-wider mt-1">
-                        Bal: ₹{new Intl.NumberFormat("en-IN").format(txn.balance)}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          )}
+            )}
         </div>
       </div>
     </div>
