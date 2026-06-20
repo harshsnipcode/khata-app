@@ -343,14 +343,14 @@ function CustomerDetails() {
                     <div
                       key={txn.id}
                       onClick={() => navigate(`/transaction/${txn.id}`)}
-                      className="px-3 py-2 hover:bg-[var(--surface)] transition-colors cursor-pointer"
+                      className="px-3 py-2.5 hover:bg-[var(--surface)] transition-colors cursor-pointer"
                     >
-                      <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 items-center">
+                      <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 items-start">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-[var(--text-primary)] truncate flex items-center gap-1.5">
-                            <span>{description}</span>
+                          <p className="text-sm font-medium text-[var(--text-primary)] flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                            <span className="break-words">{description}</span>
                             {paymentLabel && (
-                              <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
                                 paymentLabel === "Online"
                                   ? "bg-sky-500/10 text-sky-400 border border-sky-500/20"
                                   : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
@@ -359,7 +359,7 @@ function CustomerDetails() {
                               </span>
                             )}
                           </p>
-                          <p className="text-[9px] text-[var(--text-muted)] font-medium mt-0.5">
+                          <p className="text-[10px] text-[var(--text-muted)] font-medium mt-0.5">
                             {new Date(txn.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                           </p>
                         </div>
@@ -384,7 +384,7 @@ function CustomerDetails() {
                           )}
                         </div>
                         <div className="text-right pr-2">
-                          <p className="text-[9px] text-[var(--text-muted)] font-medium">
+                          <p className="text-[10px] text-[var(--text-muted)] font-medium">
                             ₹{new Intl.NumberFormat("en-IN").format(txn.balance)}
                           </p>
                         </div>
