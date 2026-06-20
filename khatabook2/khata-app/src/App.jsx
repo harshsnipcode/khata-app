@@ -31,6 +31,7 @@ import InventoryReport from "./pages/InventoryReport";
 import SharedLedgerView from "./pages/SharedLedgerView";
 import SettingsPage from "./pages/SettingsPage";
 import RecycleBinPage from "./pages/RecycleBinPage";
+import ReminderMessageEditor from "./pages/ReminderMessageEditor";
 
 function App() {
   return (
@@ -68,6 +69,7 @@ function App() {
         <Route path="/share/customer/:id" element={<SharedLedgerView />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/recycle-bin" element={<RecycleBinPage />} />
+        <Route path="/settings/reminder-message" element={<ReminderMessageEditor />} />
       </Routes>
 
     </BrowserRouter>

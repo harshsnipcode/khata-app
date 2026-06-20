@@ -24,7 +24,7 @@ function buildBalanceMap(transactions) {
   return map;
 }
 
-function applyFilterAndSort(customers, balanceMap, searchTerm, filterType, sortType) {
+function applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType) {
   // 1. Search
   let list = customers.filter((c) => {
     if (!searchTerm) return true;
@@ -48,8 +48,13 @@ function applyFilterAndSort(customers, balanceMap, searchTerm, filterType, sortT
   list = [...list].sort((a, b) => {
     const balA = balanceMap[a.id] ?? 0;
     const balB = balanceMap[b.id] ?? 0;
-    if (sortType === "recent")  return new Date(b.created_at) - new Date(a.created_at);
-    if (sortType === "oldest")  return new Date(a.created_at) - new Date(b.created_at);
+    if (sortType === "recent" || sortType === "oldest") {
+      const aTime = lastActivityMap[a.id] || a.created_at;
+      const bTime = lastActivityMap[b.id] || b.created_at;
+      return sortType === "recent"
+        ? new Date(bTime) - new Date(aTime)
+        : new Date(aTime) - new Date(bTime);
+    }
     if (sortType === "highest") return Math.abs(balB) - Math.abs(balA);
     if (sortType === "lowest")  return Math.abs(balA) - Math.abs(balB);
     if (sortType === "az")      return (a.name || "").localeCompare(b.name || "");
@@ -93,7 +98,7 @@ function AdminHome() {
     setLoading(true);
     const [custRes, txnRes, empRes] = await Promise.all([
       supabase.from("customers").select("*").order("created_at", { ascending: false }),
-      supabase.from("transactions").select("customer_id, type, amount"),
+      supabase.from("transactions").select("customer_id, type, amount, created_at"),
       supabase.from("employees").select("*").order("created_at", { ascending: false }),
     ]);
     setCustomers(custRes.data || []);
@@ -123,6 +128,18 @@ function AdminHome() {
   /* ── balance map (memoised) ── */
   const balanceMap = useMemo(() => buildBalanceMap(transactions), [transactions]);
 
+  /* ── latest activity per customer ── */
+  const lastActivityMap = useMemo(() => {
+    const map = {};
+    transactions.forEach((t) => {
+      const ts = t.created_at;
+      if (ts && (!map[t.customer_id] || new Date(ts) > new Date(map[t.customer_id]))) {
+        map[t.customer_id] = ts;
+      }
+    });
+    return map;
+  }, [transactions]);
+
   /* ── totals for SummaryCard ── */
   const summaryTotals = useMemo(() => {
     let youGet = 0, youGive = 0;
@@ -136,8 +153,8 @@ function AdminHome() {
 
   /* ── filtered + sorted list ── */
   const displayedCustomers = useMemo(
-    () => applyFilterAndSort(customers, balanceMap, searchTerm, filterType, sortType),
-    [customers, balanceMap, searchTerm, filterType, sortType]
+    () => applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType),
+    [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType]
   );
 
   /* ── active filter badge count ── */
@@ -272,7 +289,7 @@ function AdminHome() {
                     id={customer.id}
                     initial={customer.name?.[0]?.toUpperCase()}
                     name={customer.name}
-                    time={customer.created_at}
+                    time={lastActivityMap[customer.id] || customer.created_at}
                     balance={balanceMap[customer.id] ?? 0}
                   />
                 ))}

@@ -100,7 +100,24 @@ function SettingsPage() {
           </svg>
         </button>
 
-        {/* Section 3: Logout */}
+        {/* Section 3: Reminder Message */}
+        <button
+          onClick={() => navigate("/settings/reminder-message")}
+          className="w-full card rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 cursor-pointer outline-none active:scale-95 transition-all"
+        >
+          <div className="w-8 h-8 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center shrink-0">
+            <span className="text-sm">📩</span>
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-bold text-[var(--text-primary)]">Reminder Message</p>
+            <p className="text-[10px] font-medium text-[var(--text-secondary)]">Edit WhatsApp reminder template</p>
+          </div>
+          <svg className="w-4 h-4 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
+        {/* Section 4: Logout */}
         <button
           onClick={handleLogout}
           className="w-full card rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 cursor-pointer outline-none active:scale-95 transition-all"

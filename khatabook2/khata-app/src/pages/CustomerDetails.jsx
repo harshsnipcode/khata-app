@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 
 function getHomePath() {
   try {
@@ -217,7 +218,14 @@ function CustomerDetails() {
                     return;
                   }
 
-                  const text = `Ledger Update - ${customer.name}: Balance Rs.${Math.round(balanceAmount)} (${balanceLabel}). View full ledger: ${window.location.origin}/share/customer/${id}`;
+                  const template = getSavedTemplate();
+                  const text = fillTemplate(template, {
+                    customerName: customer.name,
+                    balance: Math.round(balanceAmount),
+                    balanceType: balanceLabel,
+                    ledgerLink: `${window.location.origin}/share/customer/${id}`,
+                    businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
+                  });
                   const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 
                   const opened = window.open(url, "_blank", "noopener,noreferrer");
@@ -238,7 +246,14 @@ function CustomerDetails() {
                     return;
                   }
 
-                  const text = `Ledger Update - ${customer.name}: Balance Rs.${Math.round(balanceAmount)} (${balanceLabel}). View full ledger: ${window.location.origin}/share/customer/${id}`;
+                  const template = getSavedTemplate();
+                  const text = fillTemplate(template, {
+                    customerName: customer.name,
+                    balance: Math.round(balanceAmount),
+                    balanceType: balanceLabel,
+                    ledgerLink: `${window.location.origin}/share/customer/${id}`,
+                    businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
+                  });
                   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
                   const url = isIOS ? `sms:${phone}&body=${encodeURIComponent(text)}` : `sms:${phone}?body=${encodeURIComponent(text)}`;
 

@@ -93,9 +93,8 @@ function CatalogueView({ isAdmin }) {
 
       <div className="flex flex-col gap-4">
         <div className="flex gap-4 items-center">
-          <div className="bg-[var(--background)] rounded-2xl flex border border-[var(--border)] p-1 flex-1">
-            <button className="flex-1 py-2 text-sm font-bold bg-[var(--surface)] text-[var(--primary)] border border-[var(--border)] rounded-xl shadow-sm">PRODUCTS</button>
-            <button className="flex-1 py-2 text-sm font-bold text-[var(--text-secondary)] cursor-not-allowed" onClick={() => alert('Services coming soon!')}>SERVICES</button>
+          <div className="bg-[var(--background)] rounded-2xl border border-[var(--border)] p-1 flex-1">
+            <div className="py-2 text-sm font-bold bg-[var(--surface)] text-[var(--primary)] border border-[var(--border)] rounded-xl shadow-sm text-center">PRODUCTS</div>
           </div>
           {isAdmin && (
             <button 
