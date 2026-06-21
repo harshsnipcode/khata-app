@@ -356,12 +356,6 @@ function StaffDashboard() {
           )}
         </div>
 
-        <FloatingButton
-          onClick={() => navigate("/admin/staff/new")}
-          isVisible={true}
-          label="+ Add Employee"
-        />
-
         {/* Filter Modal */}
         {showFilterModal && (
           <div
@@ -469,6 +463,13 @@ function StaffDashboard() {
           </div>
         )}
       </div>
+
+      <FloatingButton
+        onClick={() => navigate("/admin/staff/new")}
+        isVisible={true}
+        label="+ Add Employee"
+      />
+
     </div>
   );
 }

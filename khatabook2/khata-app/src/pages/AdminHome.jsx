@@ -400,8 +400,9 @@ function AdminHome() {
           )}
         </div>
 
-        <FloatingButton onClick={() => window.location.href = '/customers/add'} isVisible={activeTab === "customers"} />
       </div>
+
+      <FloatingButton onClick={() => window.location.href = '/customers/add'} isVisible={activeTab === "customers"} />
 
       {/* Business name edit modal */}
       {showNameModal && (
@@ -445,3 +446,4 @@ function AdminHome() {
 }
 
 export default AdminHome;
+

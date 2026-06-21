@@ -237,8 +237,9 @@ function EmployeeHome() {
 
         </div>
 
-        <FloatingButton onClick={() => window.location.href = '/customers/add'} isVisible={activeTab === "customers"} />
       </div>
+
+      <FloatingButton onClick={() => window.location.href = '/customers/add'} isVisible={activeTab === "customers"} />
 
       {/* Filter modal */}
       {showFilter && (
