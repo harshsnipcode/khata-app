@@ -4,7 +4,7 @@ function FloatingButton({ onClick, isVisible = true, label = "Add Customer" }) {
   return (
     <button
       onClick={onClick}
-      className="fixed bottom-6 right-6 font-bold py-3.5 px-5 rounded-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 flex items-center gap-2 z-40 cursor-pointer outline-none text-sm"
+      className="fixed bottom-5 right-5 md:bottom-6 md:right-6 font-bold py-3.5 px-5 rounded-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 flex items-center gap-2 z-50 cursor-pointer outline-none text-sm"
       style={{
         background: "#5cbdb9",
         color: "#fff",
