@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 
 function SettingsPage() {
   const navigate = useNavigate();
@@ -20,7 +21,13 @@ function SettingsPage() {
     return "/";
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const role = localStorage.getItem("khata_role");
+      if (role === "employee") {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {}
     try {
       localStorage.removeItem("khata_role");
       localStorage.removeItem("khata_user");

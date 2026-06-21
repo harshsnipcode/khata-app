@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import Login from "./Login";
 
 function Home() {
   const navigate = useNavigate();
@@ -12,14 +13,15 @@ function Home() {
       navigate("/admin/home", { replace: true });
     } else if (role === "employee") {
       navigate("/employee/home", { replace: true });
-    } else {
-      // Not logged in — send to login
-      navigate("/", { replace: true });
     }
+    // No role — stay on this route (render Login below)
   }, [navigate]);
 
-  // Nothing is rendered — the redirect happens immediately
-  return null;
+  const role = (() => { try { return localStorage.getItem("khata_role"); } catch { return null; } })();
+
+  if (role === "admin" || role === "employee") return null;
+
+  return <Login />;
 }
 
 export default Home;
