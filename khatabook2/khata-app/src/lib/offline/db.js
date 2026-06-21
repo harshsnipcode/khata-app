@@ -124,6 +124,20 @@ db.version(5).stores({
   }
 });
 
+db.version(6).stores({
+  customers: 'local_uuid, id, customer_id, created_at, route_position',
+  transactions: 'local_uuid, id, customer_id, created_at',
+  products: 'local_uuid, id, name, created_at',
+  product_transactions: 'local_uuid, id, product_id, created_at',
+  transaction_items: 'local_uuid, id, transaction_id, product_id, created_at',
+  customer_product_prices: 'local_uuid, id, customer_id, product_id, created_at',
+  employees: 'local_uuid, id, auth_id, created_at',
+  employee_attendance: 'local_uuid, id, employee_id, date, created_at',
+  sync_queue: 'local_uuid,table,created_offline,synced',
+  recycle_bin: 'local_uuid, entity_type, entity_id, entity_name, deleted_at, deleted_by, original_data, restore_deadline',
+  business_settings: 'local_uuid, id',
+});
+
 export async function initDB() {
   await db.open();
 }

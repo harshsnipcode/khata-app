@@ -117,6 +117,25 @@ function SettingsPage() {
           </svg>
         </button>
 
+        {/* Collection Route — Admin only */}
+        {role === "Admin" && (
+          <button
+            onClick={() => navigate("/settings/collection-route")}
+            className="w-full card rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 cursor-pointer outline-none active:scale-95 transition-all"
+          >
+            <div className="w-8 h-8 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center shrink-0">
+              <span className="text-sm">📍</span>
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-bold text-[var(--text-primary)]">Edit Collection Route</p>
+              <p className="text-[10px] font-medium text-[var(--text-secondary)]">Arrange customer visit order</p>
+            </div>
+            <svg className="w-4 h-4 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        )}
+
         {/* Section 4: Logout */}
         <button
           onClick={handleLogout}

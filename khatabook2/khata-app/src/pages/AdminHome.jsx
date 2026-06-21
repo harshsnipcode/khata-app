@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import SummaryCard from "../components/SummaryCard";
@@ -93,6 +94,9 @@ function AdminHome() {
   const [pendingSort,   setPendingSort]   = useState("recent");
   const [showFilter,    setShowFilter]    = useState(false);
 
+  const [collectionMode, setCollectionMode] = useState(false);
+  const [settingsId, setSettingsId] = useState(null);
+
   /* ── data loading ── */
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,6 +129,48 @@ function AdminHome() {
     };
   }, [load]);
 
+  useEffect(() => {
+    supabase
+      .from("business_settings")
+      .select("*")
+      .limit(1)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setSettingsId(data.id);
+          setCollectionMode(!!data.settings?.collection_mode_enabled);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  /* ── toggle collection mode ── */
+  const toggleCollectionMode = useCallback(async () => {
+    const next = !collectionMode;
+    setCollectionMode(next);
+    if (settingsId) {
+      try {
+        await offlineSupabase
+          .from("business_settings")
+          .update({ settings: { collection_mode_enabled: next } })
+          .eq("id", settingsId);
+      } catch {
+        setCollectionMode(!next);
+      }
+    } else {
+      try {
+        const { data } = await offlineSupabase
+          .from("business_settings")
+          .insert({ settings: { collection_mode_enabled: next } })
+          .select("*")
+          .single();
+        if (data) setSettingsId(data.id);
+      } catch {
+        setCollectionMode(!next);
+      }
+    }
+  }, [collectionMode, settingsId]);
+
   /* ── balance map (memoised) ── */
   const balanceMap = useMemo(() => buildBalanceMap(transactions), [transactions]);
 
@@ -152,10 +198,26 @@ function AdminHome() {
   }, [customers, balanceMap]);
 
   /* ── filtered + sorted list ── */
-  const displayedCustomers = useMemo(
-    () => applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType),
-    [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType]
-  );
+  const displayedCustomers = useMemo(() => {
+    if (collectionMode) {
+      let list = [...customers];
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase();
+        list = list.filter(c => c.name?.toLowerCase().includes(q));
+      }
+      if (filterType !== "all") {
+        list = list.filter(c => {
+          const bal = balanceMap[c.id] ?? 0;
+          if (filterType === "get") return bal > 0;
+          if (filterType === "give") return bal < 0;
+          if (filterType === "settled") return bal === 0;
+          return true;
+        });
+      }
+      return list.sort((a, b) => (a.route_position ?? 9999) - (b.route_position ?? 9999));
+    }
+    return applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType);
+  }, [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType, collectionMode]);
 
   /* ── active filter badge count ── */
   const activeFilterCount = (filterType !== "all" ? 1 : 0) + (sortType !== "recent" ? 1 : 0);
@@ -256,6 +318,42 @@ function AdminHome() {
                   )}
                 </div>
               )}
+
+              {/* Collection Mode toggle */}
+              <div
+                onClick={toggleCollectionMode}
+                className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl border cursor-pointer outline-none active:scale-95 transition select-none"
+                style={{
+                  background: collectionMode ? "#ebf6f5" : "var(--surface)",
+                  borderColor: collectionMode ? "#5cbdb9" : "var(--border)",
+                }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-sm">{collectionMode ? "📍" : "🚗"}</span>
+                  <div>
+                    <p
+                      className="text-xs font-bold uppercase tracking-wider"
+                      style={{ color: collectionMode ? "#2d7a78" : "var(--text-primary)" }}
+                    >
+                      {collectionMode ? "Collection Mode ON" : "Collection Mode OFF"}
+                    </p>
+                    <p className="text-[10px] text-[var(--text-muted)] font-medium">
+                      {collectionMode ? "Customers sorted by route order" : "Tap to enable route-based sorting"}
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className="w-10 h-5 rounded-full relative transition-all"
+                  style={{
+                    background: collectionMode ? "#5cbdb9" : "var(--border)",
+                  }}
+                >
+                  <div
+                    className="w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm"
+                    style={{ left: collectionMode ? "22px" : "2px" }}
+                  />
+                </div>
+              </div>
 
               {/* Customer list */}
               <div className="space-y-2">

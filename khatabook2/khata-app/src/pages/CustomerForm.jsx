@@ -48,8 +48,16 @@ function CustomerForm() {
       const user = await supabase.auth.getUser();
       const created_by = user?.data?.user?.id || 'admin';
 
+      const { data: maxRow } = await supabase
+        .from("customers")
+        .select("route_position")
+        .order("route_position", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .single();
+      const nextRoute = (maxRow?.route_position ?? 0) + 1;
+
       const { data, error } = await offlineSupabase.from("customers").insert([
-        { name, phone, type, created_by },
+        { name, phone, type, created_by, route_position: nextRoute },
       ]).select();
 
       if (error) throw error;

@@ -32,6 +32,7 @@ import SharedLedgerView from "./pages/SharedLedgerView";
 import SettingsPage from "./pages/SettingsPage";
 import RecycleBinPage from "./pages/RecycleBinPage";
 import ReminderMessageEditor from "./pages/ReminderMessageEditor";
+import CollectionRouteEditor from "./pages/CollectionRouteEditor";
 
 function App() {
   return (
@@ -70,6 +71,7 @@ function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/recycle-bin" element={<RecycleBinPage />} />
         <Route path="/settings/reminder-message" element={<ReminderMessageEditor />} />
+        <Route path="/settings/collection-route" element={<AdminRoute><CollectionRouteEditor /></AdminRoute>} />
       </Routes>
 
     </BrowserRouter>
