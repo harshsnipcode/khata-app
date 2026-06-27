@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import heroLogo from "../assets/hero.png";
 
-function Header({ businessName = "Shiv Shankar Dairy", onEdit, isAdmin }) {
+function Header({ businessName = "Shiv Shankar Dairy" }) {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [syncStatus, setSyncStatus] = useState('synced');
+  const [logo, setLogo] = useState(() => localStorage.getItem("khata_business_logo"));
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -13,15 +14,20 @@ function Header({ businessName = "Shiv Shankar Dairy", onEdit, isAdmin }) {
         setSyncStatus('synced');
       }
     };
+    const handleLogoUpdate = () => {
+      setLogo(localStorage.getItem("khata_business_logo"));
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     window.addEventListener('sync-status', handleSync);
+    window.addEventListener('business-profile-update', handleLogoUpdate);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('sync-status', handleSync);
+      window.removeEventListener('business-profile-update', handleLogoUpdate);
     };
   }, []);
 
@@ -35,29 +41,14 @@ function Header({ businessName = "Shiv Shankar Dairy", onEdit, isAdmin }) {
     >
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <img
-          src={heroLogo}
-          alt="KhataBook logo"
+          src={logo || heroLogo}
+          alt="Business logo"
           className="w-7 h-7 rounded-xl object-cover shadow-sm shrink-0"
           style={{ background: "rgba(255,255,255,0.22)" }}
         />
         <h1 className="text-sm font-bold tracking-tight text-white truncate max-w-[180px] sm:max-w-[280px]">
           {businessName}
         </h1>
-        {isAdmin && (
-          <button
-            onClick={onEdit}
-            className="p-1 rounded-lg transition-all duration-200 active:scale-90 shrink-0"
-            style={{ color: "rgba(255,255,255,0.75)" }}
-            title="Edit business name"
-            onMouseEnter={e => e.currentTarget.style.color = "#fff"}
-            onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.75)"}
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
-            </svg>
-          </button>
-        )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <div className="flex items-center gap-1.5 text-[10px] font-semibold text-white whitespace-nowrap">

@@ -19,7 +19,7 @@ function SummaryCard({ youGive = 0, youGet = 0 }) {
       <div className="text-right">
         <p
           className="text-lg font-black"
-          style={{ color: isPositive ? "#52b788" : isNegative ? "#e76f51" : "#636e72" }}
+          style={{ color: isPositive ? "#e76f51" : isNegative ? "#52b788" : "#636e72" }}
         >
           ₹{formatted}
         </p>

@@ -5,6 +5,7 @@ import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import FloatingButton from "../components/FloatingButton";
+import useSwipeNavigation from "../hooks/useSwipeNavigation";
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate();
@@ -89,9 +90,16 @@ function StaffDashboard() {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [sortBy, setSortBy] = useState("recent");
 
-  const [businessName, setBusinessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
-  const [editName, setEditName] = useState("");
-  const [showNameModal, setShowNameModal] = useState(false);
+  const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
+
+  useSwipeNavigation({
+    onSwipeLeft: () => {
+      navigate("/settings");
+    },
+    onSwipeRight: () => {
+      navigate("/admin/home", { state: { activeTab: "catalogue" } });
+    },
+  });
 
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
@@ -203,22 +211,10 @@ function StaffDashboard() {
     await loadData();
   };
 
-  const handleEditBusinessName = () => {
-    setEditName(businessName);
-    setShowNameModal(true);
-  };
-
-  const saveBusinessName = () => {
-    const name = editName.trim() || "Shiv Shankar Dairy";
-    localStorage.setItem("khata_business_name", name);
-    setBusinessName(name);
-    setShowNameModal(false);
-  };
-
   return (
     <div className="min-h-screen bg-[var(--background)] relative overflow-hidden">
       <div className="relative z-10 animate-fade-in">
-        <Header businessName={businessName} onEdit={handleEditBusinessName} isAdmin={true} />
+        <Header businessName={businessName} />
         <Navbar activeTab="employees" setActiveTab={() => {}} isAdmin={true} />
 
         <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -437,31 +433,6 @@ function StaffDashboard() {
           </div>
         )}
 
-        {/* Business name edit modal */}
-        {showNameModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-6" onClick={() => setShowNameModal(false)}>
-            <div className="w-full max-w-sm card rounded-3xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-              <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">Edit Business Name</h2>
-              <input
-                type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-5 py-4 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300 text-sm mb-5"
-                placeholder="Enter business name"
-                autoFocus
-                onKeyDown={(e) => { if (e.key === "Enter") saveBusinessName(); }}
-              />
-              <div className="flex gap-3">
-                <button onClick={() => setShowNameModal(false)} className="flex-1 py-3.5 rounded-2xl border border-[var(--border)] text-[var(--text-secondary)] font-bold text-xs uppercase tracking-widest hover:bg-[var(--surface)] transition cursor-pointer outline-none active:scale-95">
-                  Cancel
-                </button>
-                <button onClick={saveBusinessName} className="flex-1 py-3.5 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs uppercase tracking-widest transition cursor-pointer outline-none active:scale-95 shadow-sm">
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       <FloatingButton

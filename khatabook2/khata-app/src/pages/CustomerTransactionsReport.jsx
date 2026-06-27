@@ -218,13 +218,13 @@ function CustomerTransactionsReport() {
       <div className="max-w-4xl mx-auto p-6 space-y-5 animate-fade-in">
         {/* Back */}
         <button
-          onClick={() => navigate("/admin/reports")}
+          onClick={() => navigate("/admin/home")}
           className="flex items-center gap-2 text-[var(--text-secondary)] text-sm font-semibold hover:text-[var(--text-primary)] transition cursor-pointer outline-none"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 12H5" /><path d="M12 19l-7-7 7-7" />
           </svg>
-          Reports
+          Home
         </button>
 
         <h1 className="text-xl font-bold text-[var(--text-primary)]">
@@ -314,11 +314,25 @@ function CustomerTransactionsReport() {
           ) : (
             <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
               {/* Table Header */}
-              <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--background)]">
-                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Description</p>
-                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--danger)] text-center">Gave</p>
-                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--success)] text-center">Got</p>
-                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)] text-right pr-2">Balance</p>
+              <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 px-3 py-3 border-b border-[var(--border)] bg-[var(--background)]">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Total Entries</p>
+                  <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5">{summary.totalEntries}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-[var(--danger)]">You Gave</p>
+                  <p className="text-sm font-bold text-[var(--danger)] mt-0.5">₹{formatINR(summary.totalGave)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-[var(--success)]">You Got</p>
+                  <p className="text-sm font-bold text-[var(--success)] mt-0.5">₹{formatINR(summary.totalGot)}</p>
+                </div>
+                <div className="text-right pr-2">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Balance</p>
+                  <p className={`text-sm font-bold mt-0.5 ${summary.netBalance > 0 ? "text-[#e76f51]" : summary.netBalance < 0 ? "text-[#52b788]" : "text-[var(--text-primary)]"}`}>
+                    ₹{formatINR(Math.abs(summary.netBalance))}
+                  </p>
+                </div>
               </div>
 
               {/* Transaction Rows */}

@@ -4,7 +4,6 @@ const ROUTES = {
   customers: "/admin/home",
   catalogue: "/admin/home",
   employees: "/admin/staff",
-  reports: "/admin/reports",
 };
 
 function isEmployeesRoute(pathname) {
@@ -12,10 +11,6 @@ function isEmployeesRoute(pathname) {
     pathname.startsWith("/admin/staff") ||
     pathname.startsWith("/admin/employees")
   );
-}
-
-function isReportsRoute(pathname) {
-  return pathname.startsWith("/admin/reports");
 }
 
 function isSettingsRoute(pathname) {
@@ -26,14 +21,13 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
   const navigate = useNavigate();
   const location = useLocation();
   const tabs = ["customers", "catalogue"];
-  if (isAdmin) tabs.push("employees", "reports");
+  if (isAdmin) tabs.push("employees");
   tabs.push("settings");
 
   const tabLabels = {
     customers: "Customers",
     catalogue: "Catalogue",
     employees: "Employees",
-    reports: "Reports",
     settings: "Settings",
   };
 
@@ -54,9 +48,8 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
   const isActiveTab = (tab) => {
     if (tab === "settings") return isSettingsRoute(location.pathname);
     if (tab === "employees") return isEmployeesRoute(location.pathname);
-    if (tab === "reports") return isReportsRoute(location.pathname);
     if (tab === "customers" || tab === "catalogue") {
-      if (isEmployeesRoute(location.pathname) || isReportsRoute(location.pathname) || isSettingsRoute(location.pathname)) return false;
+      if (isEmployeesRoute(location.pathname) || isSettingsRoute(location.pathname)) return false;
       return activeTab === tab;
     }
     return activeTab === tab;

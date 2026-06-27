@@ -29,16 +29,16 @@ function CustomerCard({ id, initial, name, time, balance }) {
 
   if (hasBalance) {
     if (balance > 0) {
-      amountColor = "#52b788";
-      labelColor = "#52b788";
-      badgeBg = "#d8f3e3";
-      badgeBorder = "#b7e4c7";
-      label = "You Get";
-    } else if (balance < 0) {
       amountColor = "#e76f51";
       labelColor = "#e76f51";
       badgeBg = "#fde8e2";
       badgeBorder = "#f9c4b5";
+      label = "You Get";
+    } else if (balance < 0) {
+      amountColor = "#52b788";
+      labelColor = "#52b788";
+      badgeBg = "#d8f3e3";
+      badgeBorder = "#b7e4c7";
       label = "You Give";
     } else {
       label = "Settled";

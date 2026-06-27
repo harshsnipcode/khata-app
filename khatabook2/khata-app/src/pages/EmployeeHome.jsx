@@ -9,6 +9,7 @@ import FilterModal from "../components/FilterModal";
 import CatalogueView from "../components/CatalogueView";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import useSwipeNavigation from "../hooks/useSwipeNavigation";
 
 
 
@@ -71,6 +72,21 @@ function EmployeeHome() {
   const [customers,    setCustomers]    = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading,      setLoading]      = useState(true);
+
+  useSwipeNavigation({
+    onSwipeLeft: () => {
+      if (activeTab === "customers") {
+        setActiveTab("catalogue");
+      } else if (activeTab === "catalogue") {
+        navigate("/settings");
+      }
+    },
+    onSwipeRight: () => {
+      if (activeTab === "catalogue") {
+        setActiveTab("customers");
+      }
+    },
+  });
 
   // Search / filter / sort
   const [searchTerm,  setSearchTerm]    = useState("");
@@ -217,7 +233,7 @@ function EmployeeHome() {
   return (
     <div className="min-h-screen bg-[var(--background)] relative overflow-hidden">
       <div className="relative z-10 animate-fade-in">
-         <Header businessName={localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy"} isAdmin={false} />
+         <Header businessName={localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy"} />
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} isAdmin={false} />
 
         <div className="max-w-6xl mx-auto px-4 py-3 space-y-3">

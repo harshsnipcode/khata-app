@@ -13,7 +13,6 @@ import EmployeeDetails from "./pages/EmployeeDetails";
 import EmployeeEdit from "./pages/EmployeeEdit";
 import StaffDashboard from "./pages/StaffDashboard";
 import CreateEmployee from "./pages/CreateEmployee";
-import Reports from "./pages/Reports";
 import CustomerTransactionsReport from "./pages/CustomerTransactionsReport";
 import TransactionDetails from "./pages/TransactionDetails";
 import TransactionDetailPage from "./pages/TransactionDetailPage";
@@ -96,7 +95,6 @@ function AppShell() {
       <Route path="/admin/employees/:id/edit" element={<AdminRoute><EmployeeEdit /></AdminRoute>} />
       <Route path="/admin/staff" element={<AdminRoute><StaffDashboard /></AdminRoute>} />
       <Route path="/admin/staff/new" element={<AdminRoute><CreateEmployee /></AdminRoute>} />
-      <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
       <Route path="/admin/reports/customer-transactions" element={<AdminRoute><CustomerTransactionsReport /></AdminRoute>} />
       <Route path="/admin/reports/customer-transactions/:id" element={<AdminRoute><TransactionDetails /></AdminRoute>} />
       <Route path="/customers/add" element={<CustomerListPage />} />
