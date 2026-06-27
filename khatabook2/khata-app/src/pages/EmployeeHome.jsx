@@ -252,7 +252,7 @@ function EmployeeHome() {
                 </button>
                 {can("add_customer") && (
                   <button
-                    onClick={() => window.location.href = '/customers/add'}
+                    onClick={() => navigate('/customers/add')}
                     className="flex-1 py-3 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs uppercase tracking-widest transition cursor-pointer outline-none active:scale-95 shadow-sm"
                   >
                     Add Customer

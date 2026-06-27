@@ -1,75 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-const STORAGE_KEY = "khata_synced_contacts";
-const FIRST_LAUNCH_KEY = "khata_contacts_first_launch_done";
+const CACHE_KEY = "khata_contact_cache";
 
 function CustomerListPage() {
   const [query, setQuery] = useState("");
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [permState, setPermState] = useState(null);
-  const [apiUnavailable, setApiUnavailable] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [apiSupported, setApiSupported] = useState(true);
   const navigate = useNavigate();
 
-  const formatContacts = (props) =>
-    props
-      .filter((c) => c.name)
-      .map((c, i) => ({
-        id: i,
-        name: c.name,
-        phone: (c.tel && c.tel[0]) || "",
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-  const requestAndLoad = async () => {
-    try {
-      const props = await navigator.contacts.select(["name", "tel"], { multiple: true });
-      const formatted = formatContacts(props);
-      setContacts(formatted);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(formatted));
-      setPermState("granted");
-      return true;
-    } catch (err) {
-      if (err.name === "NotAllowedError") {
-        let state = "prompt";
-        try {
-          const status = await navigator.permissions.query({ name: "contacts" });
-          state = status.state;
-        } catch {}
-        setPermState(state);
-      }
-      return false;
-    }
-  };
-
-  const openAppSettings = () => {
-    try {
-      window.open("app-settings:", "_blank");
-    } catch {}
-    try {
-      window.open(
-        "intent://settings/#Intent;action=android.settings.APPLICATION_DETAILS_SETTINGS;end",
-        "_blank"
-      );
-    } catch {}
-  };
-
-  const handleGiveAccess = async () => {
-    if (permState === "denied") {
-      openAppSettings();
-      return;
-    }
-    setLoading(true);
-    await requestAndLoad();
-    setLoading(false);
-  };
-
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
       try {
-        const parsed = JSON.parse(stored);
+        const parsed = JSON.parse(cached);
         if (parsed.length > 0) {
           setContacts(parsed);
           setLoading(false);
@@ -78,71 +24,51 @@ function CustomerListPage() {
       } catch {}
     }
 
-    const load = async () => {
-      if (!("contacts" in navigator) || !("ContactsManager" in window)) {
-        setApiUnavailable(true);
-        setLoading(false);
-        return;
-      }
-
-      let state = "prompt";
-      try {
-        const status = await navigator.permissions.query({ name: "contacts" });
-        state = status.state;
-      } catch {}
-
-      setPermState(state);
-
-      if (state === "denied") {
-        setLoading(false);
-        return;
-      }
-
-      const firstLaunch = !localStorage.getItem(FIRST_LAUNCH_KEY);
-      if (firstLaunch) {
-        localStorage.setItem(FIRST_LAUNCH_KEY, "true");
-        await requestAndLoad();
-      } else if (state === "granted") {
-        await requestAndLoad();
-      }
-
+    if (!("contacts" in navigator) || !("ContactsManager" in window)) {
+      setApiSupported(false);
       setLoading(false);
-    };
+      return;
+    }
 
-    load();
+    setShowImport(true);
+    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    const onFocus = async () => {
-      if (contacts.length > 0) return;
+  const handleImport = async () => {
+    setLoading(true);
+    try {
+      const props = await navigator.contacts.select(["name", "tel"], { multiple: true });
+      const formatted = props
+        .filter((c) => c.name)
+        .map((c, i) => ({
+          id: i,
+          name: c.name,
+          phone: (c.tel && c.tel[0]) || "",
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-      let state = "prompt";
-      try {
-        const status = await navigator.permissions.query({ name: "contacts" });
-        state = status.state;
-      } catch {}
-
-      if (state !== permState) {
-        setPermState(state);
-        if (state === "granted") {
-          setLoading(true);
-          await requestAndLoad();
-          setLoading(false);
-        }
-      }
-    };
-
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [contacts.length, permState]);
+      setContacts(formatted);
+      localStorage.setItem(CACHE_KEY, JSON.stringify(formatted));
+      setShowImport(false);
+    } catch {
+    }
+    setLoading(false);
+  };
 
   const handleRefresh = async () => {
     setLoading(true);
     try {
       const props = await navigator.contacts.select(["name", "tel"], { multiple: true });
-      const formatted = formatContacts(props);
+      const formatted = props
+        .filter((c) => c.name)
+        .map((c, i) => ({
+          id: i,
+          name: c.name,
+          phone: (c.tel && c.tel[0]) || "",
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
       setContacts(formatted);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(formatted));
+      localStorage.setItem(CACHE_KEY, JSON.stringify(formatted));
     } catch {}
     setLoading(false);
   };
@@ -225,7 +151,7 @@ function CustomerListPage() {
                 </div>
               ))}
             </div>
-          ) : apiUnavailable ? (
+          ) : !apiSupported ? (
             <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border)] py-12 text-center space-y-4">
               <p className="text-[var(--text-secondary)] font-bold text-sm">
                 Contacts access is not available on this device.
@@ -253,18 +179,16 @@ function CustomerListPage() {
                 </button>
               </div>
             ))
-          ) : (
+          ) : showImport ? (
             <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border)] py-12 text-center space-y-5">
               <p className="text-[var(--text-secondary)] font-bold text-sm">
-                No contacts loaded
+                No contacts imported
               </p>
-              {permState === "denied" && (
-                <p className="text-[var(--text-muted)] text-xs max-w-xs mx-auto leading-relaxed">
-                  Contacts permission has been permanently denied. Please enable it from App Settings.
-                </p>
-              )}
+              <p className="text-[var(--text-muted)] text-xs max-w-xs mx-auto leading-relaxed">
+                Import your device contacts to quickly add them as parties.
+              </p>
               <button
-                onClick={handleGiveAccess}
+                onClick={handleImport}
                 className="inline-flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold px-5 py-3 rounded-2xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer outline-none"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -273,7 +197,7 @@ function CustomerListPage() {
                 <span>Give Access to Contacts</span>
               </button>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
