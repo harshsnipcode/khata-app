@@ -2,78 +2,145 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 const STORAGE_KEY = "khata_synced_contacts";
+const FIRST_LAUNCH_KEY = "khata_contacts_first_launch_done";
 
 function CustomerListPage() {
   const [query, setQuery] = useState("");
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fallback, setFallback] = useState(false);
+  const [permState, setPermState] = useState(null);
+  const [apiUnavailable, setApiUnavailable] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const load = async () => {
-      if (!("contacts" in navigator) || !("ContactsManager" in window)) {
-        setFallback(true);
-        setLoading(false);
-        return;
-      }
+  const formatContacts = (props) =>
+    props
+      .filter((c) => c.name)
+      .map((c, i) => ({
+        id: i,
+        name: c.name,
+        phone: (c.tel && c.tel[0]) || "",
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
+  const requestAndLoad = async () => {
+    try {
+      const props = await navigator.contacts.select(["name", "tel"], { multiple: true });
+      const formatted = formatContacts(props);
+      setContacts(formatted);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(formatted));
+      setPermState("granted");
+      return true;
+    } catch (err) {
+      if (err.name === "NotAllowedError") {
+        let state = "prompt";
         try {
-          setContacts(JSON.parse(stored));
+          const status = await navigator.permissions.query({ name: "contacts" });
+          state = status.state;
+        } catch {}
+        setPermState(state);
+      }
+      return false;
+    }
+  };
+
+  const openAppSettings = () => {
+    try {
+      window.open("app-settings:", "_blank");
+    } catch {}
+    try {
+      window.open(
+        "intent://settings/#Intent;action=android.settings.APPLICATION_DETAILS_SETTINGS;end",
+        "_blank"
+      );
+    } catch {}
+  };
+
+  const handleGiveAccess = async () => {
+    if (permState === "denied") {
+      openAppSettings();
+      return;
+    }
+    setLoading(true);
+    await requestAndLoad();
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.length > 0) {
+          setContacts(parsed);
           setLoading(false);
           return;
-        } catch {}
-      }
-
-      let permState = "prompt";
-      try {
-        const status = await navigator.permissions.query({ name: "contacts" });
-        permState = status.state;
+        }
       } catch {}
+    }
 
-      if (permState === "denied") {
-        setFallback(true);
+    const load = async () => {
+      if (!("contacts" in navigator) || !("ContactsManager" in window)) {
+        setApiUnavailable(true);
         setLoading(false);
         return;
       }
 
+      let state = "prompt";
       try {
-        const props = await navigator.contacts.select(["name", "tel"], { multiple: true });
-        const formatted = props
-          .filter((c) => c.name)
-          .map((c, i) => ({
-            id: i,
-            name: c.name,
-            phone: (c.tel && c.tel[0]) || "",
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-        setContacts(formatted);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(formatted));
-      } catch (err) {
-        if (err.name === "NotAllowedError") {
-          setFallback(true);
-        }
+        const status = await navigator.permissions.query({ name: "contacts" });
+        state = status.state;
+      } catch {}
+
+      setPermState(state);
+
+      if (state === "denied") {
+        setLoading(false);
+        return;
       }
+
+      const firstLaunch = !localStorage.getItem(FIRST_LAUNCH_KEY);
+      if (firstLaunch) {
+        localStorage.setItem(FIRST_LAUNCH_KEY, "true");
+        await requestAndLoad();
+      } else if (state === "granted") {
+        await requestAndLoad();
+      }
+
       setLoading(false);
     };
 
     load();
   }, []);
 
+  useEffect(() => {
+    const onFocus = async () => {
+      if (contacts.length > 0) return;
+
+      let state = "prompt";
+      try {
+        const status = await navigator.permissions.query({ name: "contacts" });
+        state = status.state;
+      } catch {}
+
+      if (state !== permState) {
+        setPermState(state);
+        if (state === "granted") {
+          setLoading(true);
+          await requestAndLoad();
+          setLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [contacts.length, permState]);
+
   const handleRefresh = async () => {
     setLoading(true);
     try {
       const props = await navigator.contacts.select(["name", "tel"], { multiple: true });
-      const formatted = props
-        .filter((c) => c.name)
-        .map((c, i) => ({
-          id: i,
-          name: c.name,
-          phone: (c.tel && c.tel[0]) || "",
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const formatted = formatContacts(props);
       setContacts(formatted);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(formatted));
     } catch {}
@@ -158,24 +225,17 @@ function CustomerListPage() {
                 </div>
               ))}
             </div>
-          ) : fallback ? (
+          ) : apiUnavailable ? (
             <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border)] py-12 text-center space-y-4">
               <p className="text-[var(--text-secondary)] font-bold text-sm">
-                {!("contacts" in navigator)
-                  ? "Contacts access is not available on this device."
-                  : "Contacts permission was denied."}
-              </p>
-              <p className="text-[var(--text-muted)] text-xs">
-                You can manually add a customer instead.
+                Contacts access is not available on this device.
               </p>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : contacts.length > 0 && filtered.length === 0 ? (
             <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border)] py-12 text-center text-[var(--text-secondary)] font-bold text-sm">
-              {contacts.length === 0
-                ? "No contacts selected"
-                : "No contacts match your query"}
+              No contacts match your query
             </div>
-          ) : (
+          ) : contacts.length > 0 ? (
             filtered.map((c) => (
               <div
                 key={c.id}
@@ -193,6 +253,26 @@ function CustomerListPage() {
                 </button>
               </div>
             ))
+          ) : (
+            <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border)] py-12 text-center space-y-5">
+              <p className="text-[var(--text-secondary)] font-bold text-sm">
+                No contacts loaded
+              </p>
+              {permState === "denied" && (
+                <p className="text-[var(--text-muted)] text-xs max-w-xs mx-auto leading-relaxed">
+                  Contacts permission has been permanently denied. Please enable it from App Settings.
+                </p>
+              )}
+              <button
+                onClick={handleGiveAccess}
+                className="inline-flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold px-5 py-3 rounded-2xl text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer outline-none"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                <span>Give Access to Contacts</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
