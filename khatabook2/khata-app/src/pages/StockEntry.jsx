@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { requirePermission } from "../lib/permissions";
 
 function StockEntry() {
   const { id } = useParams();
@@ -28,6 +29,7 @@ function StockEntry() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!requirePermission("stock_entry")) return;
     if (!quantity || !price) {
       setError("Please enter quantity and price.");
       return;

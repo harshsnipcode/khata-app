@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { requirePermission } from "../lib/permissions";
 
 function TransactionEntry() {
   const { id } = useParams();
@@ -106,6 +107,7 @@ function TransactionEntry() {
   // Handle save
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!requirePermission("add_transaction")) return;
     setMessage("");
 
     if (finalAmount <= 0) {

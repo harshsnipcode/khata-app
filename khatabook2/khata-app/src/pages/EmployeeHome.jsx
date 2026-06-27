@@ -10,6 +10,7 @@ import CatalogueView from "../components/CatalogueView";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
+import { can } from "../lib/permissions";
 
 
 
@@ -240,6 +241,24 @@ function EmployeeHome() {
           {activeTab === "customers" && (
             <>
               <SummaryCard youGive={summaryTotals.youGive} youGet={summaryTotals.youGet} />
+
+              {/* View Reports + Add Customer */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => navigate("/admin/reports/customer-transactions")}
+                  className="flex-1 py-3 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs uppercase tracking-widest transition cursor-pointer outline-none active:scale-95 shadow-sm"
+                >
+                  View Reports
+                </button>
+                {can("add_customer") && (
+                  <button
+                    onClick={() => window.location.href = '/customers/add'}
+                    className="flex-1 py-3 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs uppercase tracking-widest transition cursor-pointer outline-none active:scale-95 shadow-sm"
+                  >
+                    Add Customer
+                  </button>
+                )}
+              </div>
 
               {/* Search + Filter + Collection Mode */}
               <SearchBar

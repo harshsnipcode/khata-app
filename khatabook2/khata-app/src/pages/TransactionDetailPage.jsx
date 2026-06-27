@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { moveToRecycleBin } from "../lib/offline/db";
+import { requirePermission, can } from "../lib/permissions";
 
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-IN", {
@@ -106,6 +107,7 @@ function TransactionDetailPage() {
   }, [id]);
 
   const handleEditSave = async () => {
+    if (!requirePermission("edit_transaction")) return;
     if (!editAmount || Number(editAmount) <= 0) {
       setError("Please enter a valid amount.");
       return;
@@ -142,6 +144,7 @@ function TransactionDetailPage() {
   };
 
   const handleDelete = async () => {
+    if (!requirePermission("delete_transaction")) return;
     setDeleting(true);
     setDeleteMsg("");
 
@@ -475,16 +478,18 @@ Balance After Transaction:
 
         {/* Action Buttons */}
         <div className="space-y-2 pt-1">
-          <button
-            onClick={() => setEditMode(!editMode)}
-            className="w-full rounded-xl bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] py-3 text-[var(--text-primary)] font-bold text-[10px] uppercase tracking-widest transition active:scale-95 cursor-pointer outline-none flex items-center justify-center gap-2"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-            <span>{editMode ? "Cancel Edit" : "Edit Entry"}</span>
-          </button>
+          {can("edit_transaction") && (
+            <button
+              onClick={() => setEditMode(!editMode)}
+              className="w-full rounded-xl bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] py-3 text-[var(--text-primary)] font-bold text-[10px] uppercase tracking-widest transition active:scale-95 cursor-pointer outline-none flex items-center justify-center gap-2"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              <span>{editMode ? "Cancel Edit" : "Edit Entry"}</span>
+            </button>
+          )}
 
           <button
             onClick={handleShare}
@@ -496,17 +501,19 @@ Balance After Transaction:
             <span>Share Entry</span>
           </button>
 
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="w-full rounded-xl bg-[var(--secondary)] border border-[var(--danger)]/20 text-[var(--danger)] py-3 text-[10px] font-bold uppercase tracking-widest transition active:scale-95 cursor-pointer outline-none flex items-center justify-center gap-2"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 6h18" />
-              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-            </svg>
-            <span>Delete Entry</span>
-          </button>
+          {can("delete_transaction") && (
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="w-full rounded-xl bg-[var(--secondary)] border border-[var(--danger)]/20 text-[var(--danger)] py-3 text-[10px] font-bold uppercase tracking-widest transition active:scale-95 cursor-pointer outline-none flex items-center justify-center gap-2"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              </svg>
+              <span>Delete Entry</span>
+            </button>
+          )}
         </div>
       </div>
 

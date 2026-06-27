@@ -38,12 +38,27 @@ function TransactionSuccess() {
           >
             View Customer
           </button>
-          <button
-            onClick={() => navigate(`/customer/${id}/transaction`, { replace: true, state: { type } })}
-            className="w-full bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--primary)] py-4.5 rounded-2xl text-[var(--text-primary)] font-bold text-xs uppercase tracking-widest transition-all duration-200 active:scale-95 cursor-pointer outline-none"
-          >
-            Add Another Entry
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => navigate(`/customer/${id}/transaction`, { replace: true, state: { type: "gave" } })}
+              className="rounded-xl bg-[var(--secondary)] hover:bg-[var(--secondary-hover)] border border-[var(--danger)]/20 py-3 text-[var(--danger)] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>Gave (Out)</span>
+            </button>
+            <button
+              onClick={() => navigate(`/customer/${id}/transaction`, { replace: true, state: { type: "got" } })}
+              className="rounded-xl bg-[var(--primary-light)] hover:bg-[var(--primary-hover)]/15 border border-[var(--primary)]/20 py-3 text-[var(--primary)] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>Got (In)</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -95,8 +95,8 @@ function AppShell() {
       <Route path="/admin/employees/:id/edit" element={<AdminRoute><EmployeeEdit /></AdminRoute>} />
       <Route path="/admin/staff" element={<AdminRoute><StaffDashboard /></AdminRoute>} />
       <Route path="/admin/staff/new" element={<AdminRoute><CreateEmployee /></AdminRoute>} />
-      <Route path="/admin/reports/customer-transactions" element={<AdminRoute><CustomerTransactionsReport /></AdminRoute>} />
-      <Route path="/admin/reports/customer-transactions/:id" element={<AdminRoute><TransactionDetails /></AdminRoute>} />
+      <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
+      <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetails />} />
       <Route path="/customers/add" element={<CustomerListPage />} />
       <Route path="/party/new" element={<CustomerForm />} />
       <Route path="/customer/:id" element={<CustomerDetails />} />
@@ -106,13 +106,13 @@ function AppShell() {
       <Route path="/transaction/:id" element={<TransactionDetailPage />} />
 
       {/* Catalogue & Inventory */}
-      <Route path="/catalogue/add" element={<AdminRoute><AddProductPage /></AdminRoute>} />
+      <Route path="/catalogue/add" element={<AddProductPage />} />
       <Route path="/product/:id" element={<ProductDetails />} />
-      <Route path="/product/:id/edit" element={<AdminRoute><EditProductPage /></AdminRoute>} />
-      <Route path="/product/:id/stock-in" element={<AdminRoute><StockEntry /></AdminRoute>} />
-      <Route path="/product/:id/stock-out" element={<AdminRoute><StockEntry /></AdminRoute>} />
-      <Route path="/product/:id/stock-success" element={<AdminRoute><StockSuccess /></AdminRoute>} />
-      <Route path="/catalogue/reports" element={<AdminRoute><InventoryReport /></AdminRoute>} />
+      <Route path="/product/:id/edit" element={<EditProductPage />} />
+      <Route path="/product/:id/stock-in" element={<StockEntry />} />
+      <Route path="/product/:id/stock-out" element={<StockEntry />} />
+      <Route path="/product/:id/stock-success" element={<StockSuccess />} />
+      <Route path="/catalogue/reports" element={<InventoryReport />} />
       <Route path="/share/customer/:id" element={<SharedLedgerView />} />
       <Route path="/settings" element={<SettingsPage />} />
       <Route path="/settings/recycle-bin" element={<RecycleBinPage />} />

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
+import { can } from "../lib/permissions";
 
 function getHomePath() {
   try {
@@ -282,27 +283,29 @@ function CustomerDetails() {
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2 relative z-10">
-            <button
-              onClick={() => navigate(`/customer/${id}/transaction`, { state: { type: "gave" } })}
-              className="rounded-xl bg-[var(--secondary)] hover:bg-[var(--secondary-hover)] border border-[var(--danger)]/20 py-3 text-[var(--danger)] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
-            >
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              <span>Gave (Out)</span>
-            </button>
-            <button
-              onClick={() => navigate(`/customer/${id}/transaction`, { state: { type: "got" } })}
-              className="rounded-xl bg-[var(--primary-light)] hover:bg-[var(--primary-hover)]/15 border border-[var(--primary)]/20 py-3 text-[var(--primary)] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
-            >
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              <span>Got (In)</span>
-            </button>
-          </div>
+          {can("add_transaction") && (
+            <div className="mt-3 grid grid-cols-2 gap-2 relative z-10">
+              <button
+                onClick={() => navigate(`/customer/${id}/transaction`, { state: { type: "gave" } })}
+                className="rounded-xl bg-[var(--secondary)] hover:bg-[var(--secondary-hover)] border border-[var(--danger)]/20 py-3 text-[var(--danger)] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span>Gave (Out)</span>
+              </button>
+              <button
+                onClick={() => navigate(`/customer/${id}/transaction`, { state: { type: "got" } })}
+                className="rounded-xl bg-[var(--primary-light)] hover:bg-[var(--primary-hover)]/15 border border-[var(--primary)]/20 py-3 text-[var(--primary)] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span>Got (In)</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* History Area */}

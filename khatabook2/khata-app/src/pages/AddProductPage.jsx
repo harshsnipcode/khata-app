@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { requirePermission } from "../lib/permissions";
 
 function AddProductPage() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ function AddProductPage() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!requirePermission("add_product")) return;
     if (!name || !salePrice || !purchasePrice) {
       setError("Please fill in essential fields: Name, Sale Price, and Purchase Price.");
       return;

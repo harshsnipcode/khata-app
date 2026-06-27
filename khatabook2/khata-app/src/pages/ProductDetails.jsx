@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { can } from "../lib/permissions";
 
 function ProductDetails() {
   const { id } = useParams();
@@ -60,7 +61,9 @@ function ProductDetails() {
           >
             ← Back
           </button>
-          <button onClick={() => navigate(`/product/${product.id}/edit`)} className="bg-[var(--surface)] border border-[var(--border)] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest hover:border-[var(--border-hover)] text-[var(--text-primary)] transition">Edit Product</button>
+          {can("edit_product") && (
+            <button onClick={() => navigate(`/product/${product.id}/edit`)} className="bg-[var(--surface)] border border-[var(--border)] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest hover:border-[var(--border-hover)] text-[var(--text-primary)] transition">Edit Product</button>
+          )}
         </div>
 
         {/* Product Header Card */}
@@ -99,21 +102,22 @@ function ProductDetails() {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-4">
-           <button 
-             onClick={() => navigate(`/product/${product.id}/stock-in`)}
-             className="bg-[var(--primary-light)] border border-[var(--primary)]/20 hover:bg-[#d5eded] py-4 rounded-2xl text-[var(--primary)] font-black uppercase tracking-[0.2em] transition"
-           >
-             Stock In (+ IN)
-           </button>
-           <button 
-             onClick={() => navigate(`/product/${product.id}/stock-out`)}
-             className="bg-[var(--secondary)] border border-[var(--danger)]/20 hover:bg-[#fcd5dc] py-4 rounded-2xl text-[var(--danger)] font-black uppercase tracking-[0.2em] transition"
-           >
-             Stock Out (- OUT)
-           </button>
-        </div>
+        {can("stock_entry") && (
+          <div className="grid grid-cols-2 gap-4">
+             <button 
+               onClick={() => navigate(`/product/${product.id}/stock-in`)}
+               className="bg-[var(--primary-light)] border border-[var(--primary)]/20 hover:bg-[#d5eded] py-4 rounded-2xl text-[var(--primary)] font-black uppercase tracking-[0.2em] transition"
+             >
+               Stock In (+ IN)
+             </button>
+             <button 
+               onClick={() => navigate(`/product/${product.id}/stock-out`)}
+               className="bg-[var(--secondary)] border border-[var(--danger)]/20 hover:bg-[#fcd5dc] py-4 rounded-2xl text-[var(--danger)] font-black uppercase tracking-[0.2em] transition"
+             >
+               Stock Out (- OUT)
+             </button>
+          </div>
+        )}
 
         {/* History Section */}
         <div className="space-y-4 pt-4">

@@ -1,6 +1,8 @@
 import { useNavigate } from "react-router-dom";
+import { can } from "../lib/permissions";
 
 function ProductCard({ product, isAdmin }) {
+  const canStock = isAdmin || can("stock_entry");
   const navigate = useNavigate();
   const isLowStock = product.stock_quantity <= product.low_stock_limit;
 
@@ -40,27 +42,29 @@ function ProductCard({ product, isAdmin }) {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <button
-          onClick={() => navigate(`/product/${product.id}/stock-in`)}
-          className="bg-[var(--primary-light)] border border-[var(--primary)]/20 text-[var(--primary)] py-2.5 rounded-xl text-[10px] font-bold hover:bg-[var(--primary-hover)]/10 transition-all duration-200 uppercase tracking-widest cursor-pointer outline-none active:scale-95 flex items-center justify-center gap-1"
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          <span>Stock In</span>
-        </button>
-        <button
-          onClick={() => navigate(`/product/${product.id}/stock-out`)}
-          className="bg-[var(--secondary)] border border-[var(--danger)]/20 text-[var(--danger)] py-2.5 rounded-xl text-[10px] font-bold hover:bg-[#fcd5dc] transition-all duration-200 uppercase tracking-widest cursor-pointer outline-none active:scale-95 flex items-center justify-center gap-1"
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          <span>Stock Out</span>
-        </button>
-      </div>
+      {canStock && (
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => navigate(`/product/${product.id}/stock-in`)}
+            className="bg-[var(--primary-light)] border border-[var(--primary)]/20 text-[var(--primary)] py-2.5 rounded-xl text-[10px] font-bold hover:bg-[var(--primary-hover)]/10 transition-all duration-200 uppercase tracking-widest cursor-pointer outline-none active:scale-95 flex items-center justify-center gap-1"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>Stock In</span>
+          </button>
+          <button
+            onClick={() => navigate(`/product/${product.id}/stock-out`)}
+            className="bg-[var(--secondary)] border border-[var(--danger)]/20 text-[var(--danger)] py-2.5 rounded-xl text-[10px] font-bold hover:bg-[#fcd5dc] transition-all duration-200 uppercase tracking-widest cursor-pointer outline-none active:scale-95 flex items-center justify-center gap-1"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>Stock Out</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

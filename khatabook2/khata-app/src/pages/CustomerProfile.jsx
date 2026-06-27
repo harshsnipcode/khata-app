@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { moveToRecycleBin } from "../lib/offline/db";
 import DeleteCustomerModal from "../components/DeleteCustomerModal";
+import { requirePermission, can } from "../lib/permissions";
 
 /* Derive initials from a full name */
 function getInitials(name = "") {
@@ -87,6 +88,7 @@ function CustomerProfile() {
 
   /* ── Save edits ── */
   const handleSave = async () => {
+    if (!requirePermission("edit_customer")) return;
     setSaving(true);
     setSaveMsg("");
     const { error } = await offlineSupabase
@@ -129,6 +131,7 @@ function CustomerProfile() {
 
   /* ── Delete customer (called from modal) ── */
   const handleDelete = async () => {
+    if (!requirePermission("delete_customer")) return;
     const deletedBy = localStorage.getItem("khata_user") || "unknown";
 
     // 1. Fetch COMPLETE customer record before deletion
@@ -202,20 +205,22 @@ function CustomerProfile() {
             <span>Back</span>
           </button>
           <h1 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">Customer Profile</h1>
-          <button
-            onClick={() => {
-              if (editMode) handleSave();
-              else setEditMode(true);
-            }}
-            disabled={saving}
-            className={`text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer outline-none active:scale-95 ${
-              editMode
-                ? "bg-[var(--primary)] text-white font-bold shadow-md shadow-[var(--primary)]/10 hover:bg-[var(--primary-hover)]"
-                : "bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] text-[var(--text-primary)]"
-            }`}
-          >
-            {editMode ? (saving ? "Saving…" : "Save") : "Edit"}
-          </button>
+          {can("edit_customer") && (
+            <button
+              onClick={() => {
+                if (editMode) handleSave();
+                else setEditMode(true);
+              }}
+              disabled={saving}
+              className={`text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl transition-all duration-200 cursor-pointer outline-none active:scale-95 ${
+                editMode
+                  ? "bg-[var(--primary)] text-white font-bold shadow-md shadow-[var(--primary)]/10 hover:bg-[var(--primary-hover)]"
+                  : "bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] text-[var(--text-primary)]"
+              }`}
+            >
+              {editMode ? (saving ? "Saving…" : "Save") : "Edit"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -330,12 +335,14 @@ function CustomerProfile() {
           </div>
         )}
 
-        <button
-          onClick={() => setShowDeleteModal(true)}
-          className="w-full py-4 rounded-2xl bg-[var(--secondary)] border border-[var(--danger)]/20 text-[var(--danger)] font-black tracking-widest uppercase text-xs hover:bg-[#fcd5dc] hover:border-[var(--danger)]/40 transition-all duration-200 active:scale-[0.98] cursor-pointer outline-none shadow-sm mt-4"
-        >
-          Delete Customer
-        </button>
+        {can("delete_customer") && (
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="w-full py-4 rounded-2xl bg-[var(--secondary)] border border-[var(--danger)]/20 text-[var(--danger)] font-black tracking-widest uppercase text-xs hover:bg-[#fcd5dc] hover:border-[var(--danger)]/40 transition-all duration-200 active:scale-[0.98] cursor-pointer outline-none shadow-sm mt-4"
+          >
+            Delete Customer
+          </button>
+        )}
 
         <div className="h-4" />
       </div>

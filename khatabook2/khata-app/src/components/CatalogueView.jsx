@@ -4,8 +4,11 @@ import ProductCard from "./ProductCard";
 import SearchBar from "./SearchBar";
 import ProductFilterModal from "./ProductFilterModal";
 import { useNavigate } from "react-router-dom";
+import { can } from "../lib/permissions";
 
 function CatalogueView({ isAdmin }) {
+  const canAddProduct = isAdmin || can("add_product");
+  const canViewReport = isAdmin || can("view_reports");
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -80,7 +83,7 @@ function CatalogueView({ isAdmin }) {
         <div className="card rounded-3xl p-6 shadow-md">
           <p className="text-[var(--text-secondary)] text-xs uppercase tracking-widest mb-2 font-bold">Total Stock Value</p>
           <h2 className="text-[var(--text-primary)] text-3xl font-black">₹{new Intl.NumberFormat("en-IN").format(totals.totalValue)}</h2>
-          {isAdmin && (
+          {canViewReport && (
             <button onClick={() => navigate('/catalogue/reports')} className="mt-3 text-[var(--primary)] text-xs font-bold uppercase tracking-[0.2em] hover:text-[var(--primary-hover)] transition cursor-pointer">View Reports ›</button>
           )}
         </div>
@@ -96,7 +99,7 @@ function CatalogueView({ isAdmin }) {
           <div className="bg-[var(--background)] rounded-2xl border border-[var(--border)] p-1 flex-1">
             <div className="py-2 text-sm font-bold bg-[var(--surface)] text-[var(--primary)] border border-[var(--border)] rounded-xl shadow-sm text-center">PRODUCTS</div>
           </div>
-          {isAdmin && (
+          {canAddProduct && (
             <button 
               onClick={() => navigate('/catalogue/add')}
               className="bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold px-6 py-3 rounded-2xl transition shadow-sm text-sm whitespace-nowrap cursor-pointer"

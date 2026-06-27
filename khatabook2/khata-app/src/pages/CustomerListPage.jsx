@@ -1,21 +1,92 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-// Simple mock contacts for selection. Replace with platform contacts integration later.
-const MOCK_CONTACTS = [
-  { id: 1, name: "Rahul Sharma", phone: "9876543210" },
-  { id: 2, name: "Amit Kumar", phone: "9123456780" },
-  { id: 3, name: "Sneha Patel", phone: "9988776655" },
-];
+const STORAGE_KEY = "khata_synced_contacts";
 
 function CustomerListPage() {
   const [query, setQuery] = useState("");
+  const [contacts, setContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [fallback, setFallback] = useState(false);
   const navigate = useNavigate();
 
-  const filtered = MOCK_CONTACTS.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()) || c.phone.includes(query));
+  useEffect(() => {
+    const load = async () => {
+      if (!("contacts" in navigator) || !("ContactsManager" in window)) {
+        setFallback(true);
+        setLoading(false);
+        return;
+      }
+
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        try {
+          setContacts(JSON.parse(stored));
+          setLoading(false);
+          return;
+        } catch {}
+      }
+
+      let permState = "prompt";
+      try {
+        const status = await navigator.permissions.query({ name: "contacts" });
+        permState = status.state;
+      } catch {}
+
+      if (permState === "denied") {
+        setFallback(true);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const props = await navigator.contacts.select(["name", "tel"], { multiple: true });
+        const formatted = props
+          .filter((c) => c.name)
+          .map((c, i) => ({
+            id: i,
+            name: c.name,
+            phone: (c.tel && c.tel[0]) || "",
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setContacts(formatted);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(formatted));
+      } catch (err) {
+        if (err.name === "NotAllowedError") {
+          setFallback(true);
+        }
+      }
+      setLoading(false);
+    };
+
+    load();
+  }, []);
+
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      const props = await navigator.contacts.select(["name", "tel"], { multiple: true });
+      const formatted = props
+        .filter((c) => c.name)
+        .map((c, i) => ({
+          id: i,
+          name: c.name,
+          phone: (c.tel && c.tel[0]) || "",
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setContacts(formatted);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(formatted));
+    } catch {}
+    setLoading(false);
+  };
+
+  const filtered = contacts.filter(
+    (c) =>
+      c.name.toLowerCase().includes(query.toLowerCase()) ||
+      (c.phone && c.phone.includes(query))
+  );
 
   const handleSelect = (contact) => {
-    // Navigate to party/new with prefilled state
     navigate("/party/new", { state: { name: contact.name, phone: contact.phone } });
   };
 
@@ -34,7 +105,6 @@ function CustomerListPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
-          {/* Search Contacts Bar */}
           <div className="flex-1 relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
               <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -49,7 +119,20 @@ function CustomerListPage() {
               className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl pl-11 pr-4 py-3 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300 text-sm"
             />
           </div>
-          
+
+          {contacts.length > 0 && (
+            <button
+              onClick={handleRefresh}
+              className="bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-4 py-3.5 rounded-2xl text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all duration-200 active:scale-95 cursor-pointer outline-none flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              <span>Sync</span>
+            </button>
+          )}
+
           <Link
             to="/party/new"
             className="bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-black px-6 py-3.5 rounded-2xl transition-all duration-200 hover:scale-[1.02] active:scale-95 text-xs uppercase tracking-widest text-center shadow-md flex items-center justify-center gap-1.5"
@@ -62,11 +145,35 @@ function CustomerListPage() {
           </Link>
         </div>
 
-        {/* Contacts List */}
         <div className="space-y-3">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-4.5 flex items-center justify-between animate-pulse">
+                  <div className="space-y-2">
+                    <div className="h-4 w-36 bg-slate-700/30 rounded" />
+                    <div className="h-3 w-24 bg-slate-700/20 rounded" />
+                  </div>
+                  <div className="h-8 w-16 bg-slate-700/20 rounded-xl" />
+                </div>
+              ))}
+            </div>
+          ) : fallback ? (
+            <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border)] py-12 text-center space-y-4">
+              <p className="text-[var(--text-secondary)] font-bold text-sm">
+                {!("contacts" in navigator)
+                  ? "Contacts access is not available on this device."
+                  : "Contacts permission was denied."}
+              </p>
+              <p className="text-[var(--text-muted)] text-xs">
+                You can manually add a customer instead.
+              </p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border)] py-12 text-center text-[var(--text-secondary)] font-bold text-sm">
-              No contacts match your query
+              {contacts.length === 0
+                ? "No contacts selected"
+                : "No contacts match your query"}
             </div>
           ) : (
             filtered.map((c) => (

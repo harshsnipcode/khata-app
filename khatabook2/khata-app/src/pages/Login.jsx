@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function Login() {
   const [username, setUsername] = useState("");
@@ -31,6 +32,19 @@ function Login() {
     try {
       localStorage.setItem("khata_role", "employee");
       localStorage.setItem("khata_user", username);
+
+      // fetch permission level from employees table
+      try {
+        const { data: emp } = await offlineSupabase
+          .from("employees")
+          .select("permission_level, permissions_enabled")
+          .eq("username", username)
+          .single();
+        if (emp) {
+          const level = emp.permissions_enabled ? (emp.permission_level || 1) : 1;
+          localStorage.setItem("khata_permission_level", String(level));
+        }
+      } catch {}
     } catch (e) {}
 
     navigate("/employee/home", { state: { username } });

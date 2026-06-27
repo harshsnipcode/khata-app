@@ -2,15 +2,13 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { requirePermission } from "../lib/permissions";
 
 function CustomerForm() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const [name, setName] = useState(state?.name || "");
   const [phone, setPhone] = useState(state?.phone || "");
-  const [type, setType] = useState("customer");
-  const [gst, setGst] = useState("");
-  const [address, setAddress] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -40,6 +38,7 @@ function CustomerForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!requirePermission("add_customer")) return;
     if (submitting) return;
     setMessage("");
     setSubmitting(true);
@@ -57,7 +56,7 @@ function CustomerForm() {
       const nextRoute = (maxRow?.route_position ?? 0) + 1;
 
       const { data, error } = await offlineSupabase.from("customers").insert([
-        { name, phone, type, created_by, route_position: nextRoute },
+        { name, phone, created_by, route_position: nextRoute },
       ]).select();
 
       if (error) throw error;
@@ -116,60 +115,12 @@ function CustomerForm() {
             </div>
 
             <div className="space-y-2">
-              <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider pl-1">Phone Number*</label>
+              <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider pl-1">Phone Number</label>
               <input 
                 value={phone} 
                 onChange={(e) => setPhone(e.target.value)} 
                 className="w-full bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-2xl px-5 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all duration-300 text-sm focus:bg-slate-950/60"
                 placeholder="e.g. 9876543210"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider pl-1 mb-2">Party Type</label>
-              <div className="flex gap-3">
-                {[
-                  { id: "customer", label: "Customer" },
-                  { id: "supplier", label: "Supplier" }
-                ].map((opt) => {
-                  const active = type === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setType(opt.id)}
-                      className={`flex-1 py-3 rounded-2xl text-xs font-bold transition-all duration-300 uppercase tracking-wider border cursor-pointer outline-none active:scale-[0.98] ${
-                        active
-                          ? "bg-emerald-500 text-slate-950 border-transparent font-black shadow-lg shadow-emerald-500/10"
-                          : "bg-slate-950/30 text-slate-400 border-white/5 hover:border-white/12 hover:text-slate-200"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider pl-1">GSTIN (Optional)</label>
-              <input 
-                value={gst} 
-                onChange={(e) => setGst(e.target.value)} 
-                className="w-full bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-2xl px-5 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all duration-300 text-sm focus:bg-slate-950/60 font-mono uppercase"
-                placeholder="e.g. 07AAAAA1111A1Z1"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider pl-1">Billing Address (Optional)</label>
-              <textarea 
-                value={address} 
-                onChange={(e) => setAddress(e.target.value)} 
-                rows="3"
-                className="w-full bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-2xl px-5 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all duration-300 text-sm focus:bg-slate-950/60"
-                placeholder="Enter address details..."
               />
             </div>
 

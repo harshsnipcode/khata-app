@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { moveToRecycleBin } from "../lib/offline/db";
+import { requirePermission, can } from "../lib/permissions";
 
 function EditProductPage() {
   const { id } = useParams();
@@ -49,6 +50,7 @@ function EditProductPage() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!requirePermission("edit_product")) return;
     if (!name || !salePrice || !purchasePrice) {
       setError("Please fill in essential fields: Name, Sale Price, and Purchase Price.");
       return;
@@ -85,6 +87,7 @@ function EditProductPage() {
   };
 
   const handleDelete = async () => {
+    if (!requirePermission("delete_product")) return;
     setDeleting(true);
     try {
       const deletedBy = localStorage.getItem("khata_user") || "unknown";
@@ -247,14 +250,16 @@ function EditProductPage() {
 
         <hr className="border-[var(--border)]" />
 
-        <div className="pt-2">
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="w-full bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-black py-4.5 rounded-2xl transition active:scale-95 text-xs uppercase tracking-widest cursor-pointer outline-none"
-          >
-            Delete Product
-          </button>
-        </div>
+        {can("delete_product") && (
+          <div className="pt-2">
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="w-full bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-black py-4.5 rounded-2xl transition active:scale-95 text-xs uppercase tracking-widest cursor-pointer outline-none"
+            >
+              Delete Product
+            </button>
+          </div>
+        )}
       </div>
 
       {showDeleteModal && (
