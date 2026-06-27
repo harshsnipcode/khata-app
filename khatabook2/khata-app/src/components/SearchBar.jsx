@@ -1,8 +1,8 @@
-function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0 }) {
+function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, collectionMode = false, toggleCollectionMode }) {
   return (
     <div className="flex items-center gap-2">
-      {/* Search input */}
-      <div className="flex-1 relative">
+      {/* Search input — ~50-55% */}
+      <div className="flex-[5] relative min-w-0">
         <span
           className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none select-none"
           style={{ color: "#b2bec3" }}
@@ -49,10 +49,10 @@ function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0 })
         )}
       </div>
 
-      {/* Filter button */}
+      {/* Filter button — ~20-22% */}
       <button
         onClick={onOpenFilter}
-        className="relative flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer outline-none active:scale-95"
+        className="flex-[2] relative flex items-center justify-center gap-1 rounded-xl px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer outline-none active:scale-95"
         style={
           activeCount > 0
             ? {
@@ -79,10 +79,10 @@ function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0 })
           }
         }}
       >
-        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
         </svg>
-        <span>Filters</span>
+        <span className="hidden sm:inline">Filters</span>
         {activeCount > 0 && (
           <span
             className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 rounded-full text-[8px] font-black flex items-center justify-center border-2 border-white animate-pulse-soft"
@@ -92,6 +92,33 @@ function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0 })
           </span>
         )}
       </button>
+
+      {/* Collection Mode toggle — remaining width */}
+      <div
+        onClick={toggleCollectionMode}
+        className="flex-[3] flex items-center gap-1.5 rounded-xl px-2 py-2.5 cursor-pointer outline-none active:scale-95 transition select-none border"
+        style={{
+          background: collectionMode ? "#ebf6f5" : "#fff",
+          borderColor: collectionMode ? "#5cbdb9" : "#e9ecef",
+        }}
+      >
+        <span className="text-sm shrink-0 leading-none">{collectionMode ? "📍" : "🚗"}</span>
+        <span
+          className="text-[10px] font-bold whitespace-nowrap truncate"
+          style={{ color: collectionMode ? "#2d7a78" : "#636e72" }}
+        >
+          {collectionMode ? "ON" : "OFF"}
+        </span>
+        <div
+          className="w-7 h-3.5 rounded-full relative transition-all shrink-0 ml-auto"
+          style={{ background: collectionMode ? "#5cbdb9" : "#e9ecef" }}
+        >
+          <div
+            className="w-2.5 h-2.5 rounded-full bg-white absolute top-0.5 transition-all shadow-sm"
+            style={{ left: collectionMode ? "14px" : "2px" }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
