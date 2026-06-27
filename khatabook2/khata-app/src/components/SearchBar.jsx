@@ -16,7 +16,7 @@ function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, c
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search by name or phone…"
+          placeholder="Search"
           className="w-full rounded-xl pl-9 pr-8 py-2.5 text-sm transition-all duration-200 focus:outline-none"
           style={{
             background: "#fff",
@@ -52,7 +52,7 @@ function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, c
       {/* Filter button — ~20-22% */}
       <button
         onClick={onOpenFilter}
-        className="flex-[2] relative flex items-center justify-center gap-1 rounded-xl px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer outline-none active:scale-95"
+        className="flex-[2] relative flex items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer outline-none active:scale-95"
         style={
           activeCount > 0
             ? {
