@@ -5,10 +5,22 @@ import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
 
 function CustomerForm() {
-  const { state } = useLocation();
+  const loc = useLocation();
   const navigate = useNavigate();
-  const [name, setName] = useState(state?.name || "");
-  const [phone, setPhone] = useState(state?.phone || "");
+
+  console.log("[CustomerForm] mount", { pathname: loc.pathname, state: loc.state });
+
+  // Defensively extract state — React Router v7 may restore arbitrary values
+  // from session history after a PWA restart.
+  const navState =
+    loc.state && typeof loc.state === "object" && !Array.isArray(loc.state)
+      ? loc.state
+      : {};
+  const initialName = typeof navState.name === "string" ? navState.name : "";
+  const initialPhone = typeof navState.phone === "string" ? navState.phone : "";
+
+  const [name, setName] = useState(initialName);
+  const [phone, setPhone] = useState(initialPhone);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 

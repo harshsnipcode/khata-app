@@ -33,6 +33,7 @@ import SettingsPage from "./pages/SettingsPage";
 import RecycleBinPage from "./pages/RecycleBinPage";
 import ReminderMessageEditor from "./pages/ReminderMessageEditor";
 import CollectionRouteEditor from "./pages/CollectionRouteEditor";
+import ErrorBoundary from "./lib/ErrorBoundary";
 
 function AppShell() {
   const [ready, setReady] = useState(false);
@@ -98,7 +99,7 @@ function AppShell() {
       <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
       <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetails />} />
       <Route path="/customers/add" element={<CustomerListPage />} />
-      <Route path="/party/new" element={<CustomerForm />} />
+      <Route path="/party/new" element={<ErrorBoundary><CustomerForm /></ErrorBoundary>} />
       <Route path="/customer/:id" element={<CustomerDetails />} />
       <Route path="/customer/:id/profile" element={<CustomerProfile />} />
       <Route path="/customer/:id/transaction" element={<TransactionEntry />} />

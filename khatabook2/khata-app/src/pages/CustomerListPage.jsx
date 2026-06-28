@@ -12,6 +12,14 @@ function isContactsApiSupported() {
   );
 }
 
+function isValidContact(c) {
+  return (
+    c &&
+    typeof c.name === "string" &&
+    c.name.length > 0
+  );
+}
+
 function normaliseContacts(raw) {
   return raw
     .filter((c) => c.name && c.name[0])
@@ -20,7 +28,52 @@ function normaliseContacts(raw) {
       name: Array.isArray(c.name) ? c.name[0] : c.name,
       phone: c.tel?.[0] || c.phone?.[0] || "",
     }))
+    .filter(isValidContact)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function loadCachedContacts() {
+  const cached = localStorage.getItem("khata_contact_cache");
+  if (!cached) return null;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(cached);
+  } catch {
+    localStorage.removeItem("khata_contact_cache");
+    return null;
+  }
+
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    localStorage.removeItem("khata_contact_cache");
+    return null;
+  }
+
+  // Normalise old cached data: the Contact Picker API returns `name` as
+  // string[], and earlier code stored it without converting to a plain
+  // string.  Calling .toLowerCase() on an array throws silently during
+  // render, which blanks the entire screen with no console error.
+  const cleaned = parsed
+    .map((c) => {
+      if (!c || typeof c !== "object") return null;
+      return {
+        id: typeof c.id === "number" ? c.id : undefined,
+        name: Array.isArray(c.name) ? c.name[0] : String(c.name ?? ""),
+        phone: typeof c.phone === "string" ? c.phone : String(c.phone ?? ""),
+      };
+    })
+    .filter((c) => c && isValidContact(c));
+
+  if (cleaned.length === 0) {
+    localStorage.removeItem("khata_contact_cache");
+    return null;
+  }
+
+  if (cleaned.length !== parsed.length) {
+    localStorage.setItem("khata_contact_cache", JSON.stringify(cleaned));
+  }
+
+  return cleaned;
 }
 
 // ── component ────────────────────────────────────────────
@@ -33,17 +86,24 @@ function CustomerListPage() {
 
   // ── Bootstrap: load from cache, then decide UX state ──
   useEffect(() => {
-    const cached = localStorage.getItem(CACHE_KEY);
+    if (import.meta.env.DEV) {
+      const mockContacts = [
+        { id: 0, name: "Harsh Sharma", phone: "9876543210" },
+        { id: 1, name: "Rahul Sharma", phone: "9123456789" },
+        { id: 2, name: "Sneha Patel", phone: "9988776655" },
+      ];
+      setContacts(mockContacts);
+      setPermState("granted");
+      setLoading(false);
+      return;
+    }
+
+    const cached = loadCachedContacts();
     if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setContacts(parsed);
-          setPermState("granted");
-          setLoading(false);
-          return;
-        }
-      } catch { /* bad cache, continue */ }
+      setContacts(cached);
+      setPermState("granted");
+      setLoading(false);
+      return;
     }
 
     if (!isContactsApiSupported()) {
@@ -59,6 +119,7 @@ function CustomerListPage() {
 
   // ── Read contacts via getAll (no picker UI) ──
   const readContacts = useCallback(async () => {
+    if (import.meta.env.DEV) return;
     setLoading(true);
     setPermState("requesting");
     try {
@@ -109,8 +170,8 @@ function CustomerListPage() {
   // ── Filtered list ──
   const filtered = contacts.filter(
     (c) =>
-      c.name.toLowerCase().includes(query.toLowerCase()) ||
-      (c.phone && c.phone.includes(query))
+      (c.name || "").toLowerCase().includes(query.toLowerCase()) ||
+      (c.phone && String(c.phone).includes(query))
   );
 
   // ── Render ──
@@ -295,7 +356,7 @@ function CustomerListPage() {
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Avatar initial */}
                     <div className="w-10 h-10 rounded-xl bg-[var(--primary-light)] flex items-center justify-center text-[var(--primary)] font-black text-sm shrink-0 select-none">
-                      {c.name[0]?.toUpperCase()}
+                      {(c.name || "?")[0].toUpperCase()}
                     </div>
                     <div className="min-w-0">
                       <div className="font-bold text-[var(--text-primary)] text-sm truncate">
