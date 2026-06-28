@@ -216,18 +216,29 @@ function TransactionEntry() {
         {/* Amount Display - Editable */}
         <div className="card rounded-3xl p-6 shadow-md relative overflow-hidden">
           <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none" />
-          <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3 pl-1">Total Transaction Amount</p>
-          <div className="flex items-center gap-3 relative z-10">
-            <span className="text-3xl font-black text-[var(--text-secondary)]">₹</span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={manualAmount}
-              onChange={(e) => setManualAmount(e.target.value)}
-              placeholder={calculatedAmount > 0 ? String(calculatedAmount) : "0"}
-              className="text-5xl font-black bg-transparent border-none text-[var(--text-primary)] focus:outline-none flex-1 placeholder-[var(--text-muted)] w-full"
-            />
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3">Total Transaction Amount</p>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-1 relative z-10 min-w-0">
+              <span className="text-3xl font-black text-[var(--text-secondary)] shrink-0">₹</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={manualAmount}
+                onChange={(e) => setManualAmount(e.target.value)}
+                placeholder={calculatedAmount > 0 ? String(calculatedAmount) : "0"}
+                className="text-5xl font-black bg-transparent border-none text-[var(--text-primary)] focus:outline-none w-full min-w-0 placeholder-[var(--text-muted)]"
+              />
+            </div>
+            {!isGot && (
+              <button
+                onClick={handleSave}
+                disabled={saving || finalAmount <= 0}
+                className="self-stretch aspect-[4/3] bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white font-black rounded-lg text-sm uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer outline-none shadow-md disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center"
+              >
+                {saving ? "..." : "Save"}
+              </button>
+            )}
           </div>
           <p className="text-[var(--text-secondary)] text-xs font-semibold mt-3 pl-1">
             {isGot
@@ -368,20 +379,18 @@ function TransactionEntry() {
           </div>
         )}
 
-        {/* Save Button */}
-        <form onSubmit={handleSave} className="pt-2">
-          <button
-            type="submit"
-            disabled={saving || finalAmount <= 0}
-            className={`w-full py-4.5 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none ${
-              isGot
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/5'
-                : 'bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white shadow-rose-500/5'
-            }`}
-          >
-            {saving ? "Saving Transaction..." : `Save Transaction (₹${formattedAmount})`}
-          </button>
-        </form>
+        {/* Save Button (only for "got" — "gave" uses the compact button in the amount card) */}
+        {isGot && (
+          <form onSubmit={handleSave} className="pt-2">
+            <button
+              type="submit"
+              disabled={saving || finalAmount <= 0}
+              className="w-full py-4.5 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/5"
+            >
+              {saving ? "Saving Transaction..." : `Save Transaction (₹${formattedAmount})`}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
