@@ -239,7 +239,7 @@ function TransactionEntry() {
   const headerClass = isGot ? "text-emerald-400" : "text-rose-400";
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 relative overflow-hidden select-none animate-fade-in">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 relative select-none animate-fade-in">
       <div className="max-w-3xl mx-auto space-y-4 relative z-10">
         {/* Header */}
         <div className="space-y-2">
@@ -262,7 +262,22 @@ function TransactionEntry() {
         {/* Amount Display - Editable */}
         <div className="card rounded-3xl p-4 shadow-md relative overflow-hidden">
           <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none" />
-          <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Total Transaction Amount</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Total Transaction Amount</p>
+            {isGot && (
+              <button
+                type="button"
+                onClick={() => setPaymentMode(paymentMode === "cash" ? "online" : "cash")}
+                className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg transition-all duration-200 cursor-pointer outline-none active:scale-95 border ${
+                  paymentMode === "cash"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : "bg-sky-500/10 text-sky-400 border-sky-500/20"
+                }`}
+              >
+                {paymentMode === "cash" ? "CASH" : "ONLINE"}
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-3 flex-1 relative z-10 min-w-0">
               <span className="text-2xl font-black text-[var(--text-secondary)] shrink-0">₹</span>
@@ -323,46 +338,30 @@ function TransactionEntry() {
           />
         </div>
 
-        {/* Save Button (only for "gave" — inline between date and catalogue) */}
+        {/* Save Button (only for "gave" — sticky while scrolling products) */}
         {!isGot && (
-          <button
-            onClick={handleSave}
-            disabled={saving || finalAmount <= 0}
-            className="w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white shadow-rose-500/5"
-          >
-            {saving ? "Saving..." : `Save (₹${formattedAmount})`}
-          </button>
+          <div className="sticky top-0 z-50 bg-[var(--background)] py-3 -mx-4 px-4">
+            <button
+              onClick={handleSave}
+              disabled={saving || finalAmount <= 0}
+              className="w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white shadow-rose-500/5"
+            >
+              {saving ? "Saving..." : `Save (₹${formattedAmount})`}
+            </button>
+          </div>
         )}
 
-        {/* Payment Mode Toggle (only for "got" transactions) */}
+        {/* Save Button (only for "got") */}
         {isGot && (
-          <div className="card rounded-3xl p-4 shadow-md">
-            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3 pl-1">Payment Mode</p>
-            <div className="flex rounded-xl bg-[var(--surface)] border border-[var(--border)] p-1">
-              <button
-                type="button"
-                onClick={() => setPaymentMode("cash")}
-                className={`flex-1 py-3 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer outline-none ${
-                  paymentMode === "cash"
-                    ? "bg-emerald-500 text-slate-950 shadow-md"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                Cash
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentMode("online")}
-                className={`flex-1 py-3 rounded-lg text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer outline-none ${
-                  paymentMode === "online"
-                    ? "bg-emerald-500 text-slate-950 shadow-md"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                Online
-              </button>
-            </div>
-          </div>
+          <form onSubmit={handleSave}>
+            <button
+              type="submit"
+              disabled={saving || finalAmount <= 0}
+              className="w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/5"
+            >
+              {saving ? "Saving Transaction..." : `Save Transaction (₹${formattedAmount})`}
+            </button>
+          </form>
         )}
 
         {/* Product Catalogue (only for "gave" transactions) */}
@@ -462,18 +461,6 @@ function TransactionEntry() {
           </div>
         )}
 
-        {/* Save Button (only for "got") */}
-        {isGot && (
-          <form onSubmit={handleSave}>
-            <button
-              type="submit"
-              disabled={saving || finalAmount <= 0}
-              className="w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/5"
-            >
-              {saving ? "Saving Transaction..." : `Save Transaction (₹${formattedAmount})`}
-            </button>
-          </form>
-        )}
       </div>
     </div>
   );
