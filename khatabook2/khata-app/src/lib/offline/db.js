@@ -426,8 +426,40 @@ export async function restoreFromRecycleBin(local_uuid) {
     delete originalData.deleted_at;
     delete originalData.in_recycle_bin;
 
+    // Extract and restore embedded transactions before saving customer to Dexie
+    const embeddedTxnList = originalData._transactions;
+    delete originalData._transactions;
+
     // Restore to original table
     await db.table(entityType).put(originalData);
+
+    // Restore any embedded transactions (customer cascade restore)
+    const restoredTransactions = [];
+    if (embeddedTxnList && Array.isArray(embeddedTxnList)) {
+      for (const txnWrapper of embeddedTxnList) {
+        const txnData = txnWrapper.transaction;
+        const itemsData = txnWrapper.transaction_items || [];
+
+        if (txnData) {
+          if (!txnData.local_uuid) txnData.local_uuid = generateUUID();
+          delete txnData.deleted;
+          delete txnData.deleted_at;
+          delete txnData.in_recycle_bin;
+          await db.table("transactions").put(txnData);
+        }
+
+        for (const itemData of itemsData) {
+          if (!itemData.local_uuid) itemData.local_uuid = generateUUID();
+          delete itemData.deleted;
+          delete itemData.deleted_at;
+          delete itemData.in_recycle_bin;
+          delete itemData.products;
+          await db.table("transaction_items").put(itemData);
+        }
+
+        restoredTransactions.push(txnWrapper);
+      }
+    }
 
     // Remove from recycle bin
     await db.table('recycle_bin').delete(local_uuid);
@@ -436,9 +468,10 @@ export async function restoreFromRecycleBin(local_uuid) {
       entityType,
       restoredId: originalData.id,
       local_uuid: originalData.local_uuid,
+      embeddedTransactions: restoredTransactions.length,
     });
 
-    return { success: true, data: originalData, entityType };
+    return { success: true, data: originalData, entityType, _transactions: restoredTransactions };
   } catch (e) {
     console.error('[RecycleBin] restoreFromRecycleBin error:', e);
     return { success: false, error: e.message };

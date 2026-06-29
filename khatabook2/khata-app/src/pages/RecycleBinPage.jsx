@@ -126,7 +126,7 @@ function RecycleBinPage() {
       });
 
       // ── STEP 4: Strip Dexie-only fields and build cleanData ──
-      const { local_uuid: _, synced, created_offline, id, ...cleanRest } = dataForServer;
+      const { local_uuid: _, synced, created_offline, _transactions, id, ...cleanRest } = dataForServer;
       const cleanData = { id, ...cleanRest };
 
       console.log(`[RecycleBin] STEP 4 — cleanData (before upsert):`, {
@@ -174,6 +174,40 @@ function RecycleBinPage() {
           }
         } else {
           console.log(`[RecycleBin] STEP 6 — No transaction_items to restore`);
+        }
+
+        // ── STEP 7: Upsert embedded transactions (customer cascade) ──
+        const embeddedTransactions = rawOriginalData && rawOriginalData._transactions;
+        if (embeddedTransactions && embeddedTransactions.length > 0) {
+          console.log(`[RecycleBin] STEP 7 — Upserting ${embeddedTransactions.length} embedded transaction(s) to Supabase`);
+          for (const txnWrapper of embeddedTransactions) {
+            const txnData = txnWrapper.transaction;
+            if (txnData) {
+              const { local_uuid: _, synced, created_offline, ...cleanTxn } = txnData;
+              const { error: txnErr } = await supabase
+                .from("transactions")
+                .upsert(cleanTxn, { onConflict: 'id' });
+              if (txnErr) {
+                console.error(`[RecycleBin] STEP 7 — Transaction upsert FAILED for id=${cleanTxn.id}:`, txnErr);
+              }
+            }
+
+            const itemsData = txnWrapper.transaction_items;
+            if (itemsData && itemsData.length > 0) {
+              const cleanItems = itemsData.map(item => {
+                const { local_uuid: _, synced, created_offline, products, ...rest } = item;
+                return rest;
+              });
+              const { error: itemsErr } = await supabase
+                .from("transaction_items")
+                .upsert(cleanItems, { onConflict: 'id' });
+              if (itemsErr) {
+                console.error(`[RecycleBin] STEP 7 — transaction_items upsert FAILED:`, itemsErr);
+              }
+            }
+          }
+        } else {
+          console.log(`[RecycleBin] STEP 7 — No embedded transactions to restore`);
         }
       }
 

@@ -141,25 +141,23 @@ function CustomerProfile() {
     const customerToStore = fullCustomer || customer;
     console.log("[RecycleBin] Full customer being stored:", customerToStore);
 
-    // 2. Fetch all transactions to move them to recycle bin
+    // 2. Fetch all transactions to embed inside customer entry
     const { data: allTxns } = await supabase.from("transactions").select("*").eq("customer_id", id);
+    const embeddedTransactions = [];
     if (allTxns) {
       for (const txn of allTxns) {
-        // Fetch COMPLETE individual transaction record and its items
         const { data: fullTxn } = await supabase.from("transactions").select("*").eq("id", txn.id).single();
         const { data: txnItems } = await supabase.from("transaction_items").select("*").eq("transaction_id", txn.id);
-        const txnToStore = {
+        embeddedTransactions.push({
           transaction: fullTxn || txn,
           transaction_items: txnItems || [],
-        };
-        console.log("[RecycleBin] Full transaction being stored:", txnToStore);
-        const txnName = `Transaction #${(fullTxn || txn).id} - ${name} (₹${Math.round((fullTxn || txn).amount)})`;
-        await moveToRecycleBin("transactions", String((fullTxn || txn).id), txnName, txnToStore, deletedBy);
+        });
       }
     }
 
-    // 3. Move customer to recycle bin
-    await moveToRecycleBin("customers", String(id), name, customerToStore, deletedBy);
+    // 3. Store customer with embedded transactions in recycle bin
+    const customerWithTxns = { ...customerToStore, _transactions: embeddedTransactions };
+    await moveToRecycleBin("customers", String(id), name, customerWithTxns, deletedBy);
 
     // 4. Delete customer and transactions from server/offline
     await offlineSupabase.from("transactions").delete({ id }).eq("customer_id", id);

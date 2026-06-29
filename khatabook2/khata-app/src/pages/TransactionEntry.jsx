@@ -85,11 +85,6 @@ function TransactionEntry() {
   const handleQuantityChange = (product, newQuantity) => {
     if (newQuantity < 0) return;
 
-    if (newQuantity > product.stock_quantity) {
-      setMessage(`Only ${product.stock_quantity} ${product.unit}(s) available for ${product.name}.`);
-      return;
-    }
-
     setMessage("");
 
     if (newQuantity === 0) {
@@ -423,8 +418,12 @@ function TransactionEntry() {
                             <span className="text-[var(--text-muted)] ml-1.5 line-through text-[10px]">₹{new Intl.NumberFormat("en-IN").format(product.sale_price)}</span>
                           )}
                         </p>
-                        <p className="text-[var(--text-secondary)] text-[10px] uppercase font-bold tracking-wider mt-1">
-                          {product.stock_quantity} {product.unit} available
+                        <p className={`text-[10px] uppercase font-bold tracking-wider mt-1 ${
+                          Number(product.stock_quantity) <= 0
+                            ? 'text-[var(--danger)]'
+                            : 'text-[var(--text-secondary)]'
+                        }`}>
+                          Stock: {product.stock_quantity} {product.unit}
                         </p>
                       </div>
 
