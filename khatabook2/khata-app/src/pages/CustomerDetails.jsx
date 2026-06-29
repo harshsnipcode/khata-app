@@ -127,7 +127,7 @@ function CustomerDetails() {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] px-4 py-3 relative overflow-hidden select-none">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] px-4 pt-3 pb-28 relative overflow-hidden select-none">
       <div className="relative z-10 max-w-5xl mx-auto space-y-3 animate-fade-in">
         <div className="flex items-center justify-between">
           <button
@@ -283,29 +283,7 @@ function CustomerDetails() {
             </div>
           </div>
 
-          {can("add_transaction") && (
-            <div className="mt-3 grid grid-cols-2 gap-2 relative z-10">
-              <button
-                onClick={() => navigate(`/customer/${id}/transaction`, { state: { type: "gave" } })}
-                className="rounded-xl bg-[var(--secondary)] hover:bg-[var(--secondary-hover)] border border-[var(--danger)]/20 py-3 text-[var(--danger)] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                <span>Gave (Out)</span>
-              </button>
-              <button
-                onClick={() => navigate(`/customer/${id}/transaction`, { state: { type: "got" } })}
-                className="rounded-xl bg-[var(--primary-light)] hover:bg-[var(--primary-hover)]/15 border border-[var(--primary)]/20 py-3 text-[var(--primary)] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                <span>Got (In)</span>
-              </button>
-            </div>
-          )}
+
         </div>
 
         {/* History Area */}
@@ -400,6 +378,32 @@ function CustomerDetails() {
             )}
         </div>
       </div>
+
+      {can("add_transaction") && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 pb-6 bg-gradient-to-t from-[var(--background)] via-[var(--background)] to-transparent pt-6">
+          <div className="max-w-5xl mx-auto grid grid-cols-2 gap-2">
+            <button
+              onClick={() => navigate(`/customer/${id}/transaction`, { state: { type: "gave" } })}
+              className="rounded-xl bg-[var(--secondary)] hover:bg-[var(--secondary-hover)] border border-[var(--danger)]/20 py-3.5 text-[var(--danger)] font-black text-xs uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>Gave (Out)</span>
+            </button>
+            <button
+              onClick={() => navigate(`/customer/${id}/transaction`, { state: { type: "got" } })}
+              className="rounded-xl bg-[var(--primary-light)] hover:bg-[var(--primary-hover)]/15 border border-[var(--primary)]/20 py-3.5 text-[var(--primary)] font-black text-xs uppercase tracking-widest transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>Got (In)</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

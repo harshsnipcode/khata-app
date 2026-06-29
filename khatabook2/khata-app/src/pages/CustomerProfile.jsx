@@ -30,6 +30,7 @@ function CustomerProfile() {
   const [address, setAddress] = useState("");
   const [gstin, setGstin] = useState("");
   const [type, setType] = useState("Customer");
+  const [autoSms, setAutoSms] = useState(false);
 
   /* UI state */
   const [saving, setSaving] = useState(false);
@@ -65,6 +66,7 @@ function CustomerProfile() {
       setAddress(customerData.address || "");
       setGstin(customerData.gstin || "");
       setType(customerData.type || "Customer");
+      setAutoSms(customerData.auto_sms_enabled ?? false);
 
       if (!productRes.error) {
         setProducts(productRes.data || []);
@@ -93,7 +95,7 @@ function CustomerProfile() {
     setSaveMsg("");
     const { error } = await offlineSupabase
       .from("customers")
-      .update({ name, phone, address, gstin, type, updated_at: new Date().toISOString() })
+      .update({ name, phone, address, gstin, type, auto_sms_enabled: autoSms, updated_at: new Date().toISOString() })
       .eq("id", id);
 
     if (error) {
@@ -120,7 +122,7 @@ function CustomerProfile() {
         }
 
       setSaveMsg("Saved successfully!");
-      setCustomer((prev) => ({ ...prev, name, phone, address, gstin, type }));
+      setCustomer((prev) => ({ ...prev, name, phone, address, gstin, type, auto_sms_enabled: autoSms }));
       setEditMode(false);
       setTimeout(() => setSaveMsg(""), 2500);
     } catch (err) {
@@ -260,6 +262,52 @@ function CustomerProfile() {
                     {t}
                   </button>
                 ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Customer SMS Settings */}
+        <div className="rounded-3xl card overflow-hidden shadow-md">
+          <div className="px-6 py-4 border-b border-[var(--border)] bg-[var(--background)]">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">Customer SMS Settings</p>
+          </div>
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-[var(--text-primary)]">Auto SMS Notifications</p>
+                <p className="text-[var(--text-muted)] text-xs font-medium mt-1 leading-relaxed">
+                  Automatically send an SMS to this customer whenever a new "You Gave" or "You Got" entry is created.
+                </p>
+              </div>
+              <div className="shrink-0 ml-4">
+                {editMode ? (
+                  <button
+                    type="button"
+                    onClick={() => setAutoSms(!autoSms)}
+                    className={`relative w-12 h-7 rounded-full transition-colors duration-200 outline-none cursor-pointer ${
+                      autoSms
+                        ? "bg-[var(--primary)]"
+                        : "bg-[var(--border)]"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                        autoSms ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                ) : (
+                  <span
+                    className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg ${
+                      autoSms
+                        ? "bg-[var(--primary-light)] text-[var(--primary)] border border-[var(--primary)]/20"
+                        : "bg-[var(--background)] text-[var(--text-muted)] border border-[var(--border)]"
+                    }`}
+                  >
+                    {autoSms ? "ON" : "OFF"}
+                  </span>
+                )}
               </div>
             </div>
           </div>

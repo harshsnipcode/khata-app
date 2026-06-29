@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
+import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 
 function TransactionEntry() {
   const { id } = useParams();
@@ -21,6 +22,21 @@ function TransactionEntry() {
   const [loading, setLoading] = useState(true);
   const [customerPrices, setCustomerPrices] = useState({});
   const [paymentMode, setPaymentMode] = useState("cash");
+  const todayStr = new Date().toISOString().split("T")[0];
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const handle = () => setKeyboardOffset(Math.max(0, window.innerHeight - vv.height));
+    vv.addEventListener("resize", handle);
+    vv.addEventListener("scroll", handle);
+    return () => {
+      vv.removeEventListener("resize", handle);
+      vv.removeEventListener("scroll", handle);
+    };
+  }, []);
 
   const getEffectivePrice = (product) => {
     return customerPrices[product.id] ?? product.sale_price;
@@ -31,7 +47,7 @@ function TransactionEntry() {
     const loadData = async () => {
       setLoading(true);
       const promises = [
-        supabase.from("customers").select("name, phone").eq("id", id).single(),
+        supabase.from("customers").select("name, phone, auto_sms_enabled").eq("id", id).single(),
       ];
 
       // Only load products and prices for "gave" transactions
@@ -133,6 +149,12 @@ function TransactionEntry() {
         txnPayload.payment_mode = paymentMode;
       }
 
+      // Combine selected date with current time
+      const now = new Date();
+      const dateObj = new Date(selectedDate + "T00:00:00");
+      dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      txnPayload.created_at = dateObj.toISOString();
+
       const { data: txn, error: txnError } = await offlineSupabase
         .from("transactions")
         .insert([txnPayload])
@@ -161,6 +183,43 @@ function TransactionEntry() {
             .eq("id", item.product.id);
 
           if (updateError) throw updateError;
+        }
+      }
+
+      // 3. Auto SMS if enabled
+      if (customer?.auto_sms_enabled && customer?.phone) {
+        try {
+          const { data: allTxns } = await offlineSupabase
+            .from("transactions")
+            .select("type, amount")
+            .eq("customer_id", id);
+          let gave = 0, got = 0;
+          (allTxns || []).forEach((t) => {
+            if (t.type === "gave") gave += Number(t.amount);
+            else got += Number(t.amount);
+          });
+          const balance = gave - got;
+          const balanceLabel = balance >= 0 ? "You Will Get" : "You Will Give";
+
+          const template = getSavedTemplate();
+          const text = fillTemplate(template, {
+            customerName: customer.name,
+            balance: Math.abs(balance),
+            balanceType: balanceLabel,
+            ledgerLink: `${window.location.origin}/share/customer/${id}`,
+            businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
+          });
+          const phone = customer.phone.replace(/[^0-9]/g, "");
+          if (phone) {
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const url = isIOS
+              ? `sms:${phone}&body=${encodeURIComponent(text)}`
+              : `sms:${phone}?body=${encodeURIComponent(text)}`;
+            const smsWindow = window.open(url, "_blank", "noopener,noreferrer");
+            if (!smsWindow) window.location.href = url;
+          }
+        } catch {
+          setMessage("Transaction saved. SMS could not be sent.");
         }
       }
 
@@ -193,8 +252,8 @@ function TransactionEntry() {
   const headerClass = isGot ? "text-emerald-400" : "text-rose-400";
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-6 relative overflow-hidden select-none animate-fade-in">
-      <div className="max-w-3xl mx-auto space-y-6 relative z-10">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] px-6 pt-6 relative overflow-hidden select-none animate-fade-in">
+      <div className="max-w-3xl mx-auto space-y-6 relative z-10 pb-28">
         {/* Header */}
         <div className="space-y-4">
           <button
@@ -230,15 +289,7 @@ function TransactionEntry() {
                 className="text-5xl font-black bg-transparent border-none text-[var(--text-primary)] focus:outline-none w-full min-w-0 placeholder-[var(--text-muted)]"
               />
             </div>
-            {!isGot && (
-              <button
-                onClick={handleSave}
-                disabled={saving || finalAmount <= 0}
-                className="self-stretch aspect-[4/3] bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white font-black rounded-lg text-sm uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer outline-none shadow-md disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center"
-              >
-                {saving ? "..." : "Save"}
-              </button>
-            )}
+
           </div>
           <p className="text-[var(--text-secondary)] text-xs font-semibold mt-3 pl-1">
             {isGot
@@ -249,6 +300,40 @@ function TransactionEntry() {
               ? `From product total: ₹${formattedAmount}`
               : "Type manual amount or select products from catalogue below"}
           </p>
+        </div>
+
+        {/* Date Selector */}
+        <div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              const input = document.getElementById("txn-date-input");
+              if (input?.showPicker) input.showPicker();
+              else input?.click();
+            }}
+            className="w-full flex items-center gap-2.5 bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-2.5 cursor-pointer hover:border-[var(--primary)] transition-all duration-200 text-left"
+          >
+            <svg className="w-4 h-4 text-[var(--text-secondary)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span className="flex-1 text-sm font-semibold text-[var(--text-primary)]">
+              {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+            </span>
+            <svg className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <input
+            id="txn-date-input"
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="hidden"
+          />
         </div>
 
         {/* Payment Mode Toggle (only for "got" transactions) */}
@@ -379,18 +464,37 @@ function TransactionEntry() {
           </div>
         )}
 
-        {/* Save Button (only for "got" — "gave" uses the compact button in the amount card) */}
-        {isGot && (
-          <form onSubmit={handleSave} className="pt-2">
-            <button
-              type="submit"
-              disabled={saving || finalAmount <= 0}
-              className="w-full py-4.5 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/5"
-            >
-              {saving ? "Saving Transaction..." : `Save Transaction (₹${formattedAmount})`}
-            </button>
-          </form>
-        )}
+
+      </div>
+
+      {/* Floating Save Bar */}
+      <div
+        className="fixed left-0 right-0 z-50 transition-all duration-300 ease-in-out"
+        style={{ bottom: `${keyboardOffset}px` }}
+      >
+        <div className="bg-gradient-to-t from-[var(--background)] via-[var(--background)] to-transparent pt-6 pb-4 px-6">
+          <div className="max-w-3xl mx-auto">
+            <form onSubmit={handleSave}>
+              {isGot ? (
+                <button
+                  type="submit"
+                  disabled={saving || finalAmount <= 0}
+                  className="w-full py-4.5 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/5"
+                >
+                  {saving ? "Saving Transaction..." : `Save Transaction (₹${formattedAmount})`}
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={saving || finalAmount <= 0}
+                  className="w-full py-4.5 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white shadow-rose-500/5"
+                >
+                  {saving ? "Saving..." : `Save (₹${formattedAmount})`}
+                </button>
+              )}
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   );
