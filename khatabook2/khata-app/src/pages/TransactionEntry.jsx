@@ -24,19 +24,6 @@ function TransactionEntry() {
   const [paymentMode, setPaymentMode] = useState("cash");
   const todayStr = new Date().toISOString().split("T")[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
-
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const handle = () => setKeyboardOffset(Math.max(0, window.innerHeight - vv.height));
-    vv.addEventListener("resize", handle);
-    vv.addEventListener("scroll", handle);
-    return () => {
-      vv.removeEventListener("resize", handle);
-      vv.removeEventListener("scroll", handle);
-    };
-  }, []);
 
   const getEffectivePrice = (product) => {
     return customerPrices[product.id] ?? product.sale_price;
@@ -252,10 +239,10 @@ function TransactionEntry() {
   const headerClass = isGot ? "text-emerald-400" : "text-rose-400";
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] px-6 pt-6 relative overflow-hidden select-none animate-fade-in">
-      <div className="max-w-3xl mx-auto space-y-6 relative z-10 pb-28">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 relative overflow-hidden select-none animate-fade-in">
+      <div className="max-w-3xl mx-auto space-y-4 relative z-10">
         {/* Header */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-1.5 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95"
@@ -269,16 +256,16 @@ function TransactionEntry() {
           <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${headerClass} text-glow-${type}`}>
             {isGot ? "You Got" : "You Gave"}
           </p>
-          <h1 className={`text-3xl font-black ${headerClass}`}>{headerLabel}</h1>
+          <h1 className={`text-xl font-black ${headerClass}`}>{headerLabel}</h1>
         </div>
 
         {/* Amount Display - Editable */}
-        <div className="card rounded-3xl p-6 shadow-md relative overflow-hidden">
+        <div className="card rounded-3xl p-4 shadow-md relative overflow-hidden">
           <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none" />
-          <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3">Total Transaction Amount</p>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Total Transaction Amount</p>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-3 flex-1 relative z-10 min-w-0">
-              <span className="text-3xl font-black text-[var(--text-secondary)] shrink-0">₹</span>
+              <span className="text-2xl font-black text-[var(--text-secondary)] shrink-0">₹</span>
               <input
                 type="number"
                 min="0"
@@ -286,12 +273,12 @@ function TransactionEntry() {
                 value={manualAmount}
                 onChange={(e) => setManualAmount(e.target.value)}
                 placeholder={calculatedAmount > 0 ? String(calculatedAmount) : "0"}
-                className="text-5xl font-black bg-transparent border-none text-[var(--text-primary)] focus:outline-none w-full min-w-0 placeholder-[var(--text-muted)]"
+                className="text-4xl font-black bg-transparent border-none text-[var(--text-primary)] focus:outline-none w-full min-w-0 placeholder-[var(--text-muted)]"
               />
             </div>
 
           </div>
-          <p className="text-[var(--text-secondary)] text-xs font-semibold mt-3 pl-1">
+          <p className="text-[var(--text-secondary)] text-xs font-semibold mt-1.5 pl-1">
             {isGot
               ? "Enter the payment amount received"
               : manualAmount
@@ -336,10 +323,21 @@ function TransactionEntry() {
           />
         </div>
 
+        {/* Save Button (only for "gave" — inline between date and catalogue) */}
+        {!isGot && (
+          <button
+            onClick={handleSave}
+            disabled={saving || finalAmount <= 0}
+            className="w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white shadow-rose-500/5"
+          >
+            {saving ? "Saving..." : `Save (₹${formattedAmount})`}
+          </button>
+        )}
+
         {/* Payment Mode Toggle (only for "got" transactions) */}
         {isGot && (
-          <div className="card rounded-3xl p-6 shadow-md">
-            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-4 pl-1">Payment Mode</p>
+          <div className="card rounded-3xl p-4 shadow-md">
+            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3 pl-1">Payment Mode</p>
             <div className="flex rounded-xl bg-[var(--surface)] border border-[var(--border)] p-1">
               <button
                 type="button"
@@ -464,37 +462,18 @@ function TransactionEntry() {
           </div>
         )}
 
-
-      </div>
-
-      {/* Floating Save Bar */}
-      <div
-        className="fixed left-0 right-0 z-50 transition-all duration-300 ease-in-out"
-        style={{ bottom: `${keyboardOffset}px` }}
-      >
-        <div className="bg-gradient-to-t from-[var(--background)] via-[var(--background)] to-transparent pt-6 pb-4 px-6">
-          <div className="max-w-3xl mx-auto">
-            <form onSubmit={handleSave}>
-              {isGot ? (
-                <button
-                  type="submit"
-                  disabled={saving || finalAmount <= 0}
-                  className="w-full py-4.5 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/5"
-                >
-                  {saving ? "Saving Transaction..." : `Save Transaction (₹${formattedAmount})`}
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={saving || finalAmount <= 0}
-                  className="w-full py-4.5 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white shadow-rose-500/5"
-                >
-                  {saving ? "Saving..." : `Save (₹${formattedAmount})`}
-                </button>
-              )}
-            </form>
-          </div>
-        </div>
+        {/* Save Button (only for "got") */}
+        {isGot && (
+          <form onSubmit={handleSave}>
+            <button
+              type="submit"
+              disabled={saving || finalAmount <= 0}
+              className="w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/5"
+            >
+              {saving ? "Saving Transaction..." : `Save Transaction (₹${formattedAmount})`}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
