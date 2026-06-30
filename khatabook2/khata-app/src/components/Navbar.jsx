@@ -4,6 +4,7 @@ const ROUTES = {
   customers: "/admin/home",
   catalogue: "/admin/home",
   employees: "/admin/staff",
+  excel: "/admin/excel",
 };
 
 function isEmployeesRoute(pathname) {
@@ -17,17 +18,22 @@ function isSettingsRoute(pathname) {
   return pathname.startsWith("/settings");
 }
 
+function isExcelRoute(pathname) {
+  return pathname.startsWith("/admin/excel");
+}
+
 function Navbar({ activeTab, setActiveTab, isAdmin }) {
   const navigate = useNavigate();
   const location = useLocation();
   const tabs = ["customers", "catalogue"];
-  if (isAdmin) tabs.push("employees");
+  if (isAdmin) tabs.push("employees", "excel");
   tabs.push("settings");
 
   const tabLabels = {
     customers: "Customers",
     catalogue: "Catalogue",
     employees: "Employees",
+    excel: "Excel",
     settings: "Settings",
   };
 
@@ -47,9 +53,10 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
 
   const isActiveTab = (tab) => {
     if (tab === "settings") return isSettingsRoute(location.pathname);
+    if (tab === "excel") return isExcelRoute(location.pathname);
     if (tab === "employees") return isEmployeesRoute(location.pathname);
     if (tab === "customers" || tab === "catalogue") {
-      if (isEmployeesRoute(location.pathname) || isSettingsRoute(location.pathname)) return false;
+      if (isEmployeesRoute(location.pathname) || isExcelRoute(location.pathname) || isSettingsRoute(location.pathname)) return false;
       return activeTab === tab;
     }
     return activeTab === tab;

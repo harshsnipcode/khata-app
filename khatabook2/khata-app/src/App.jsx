@@ -33,6 +33,9 @@ import SettingsPage from "./pages/SettingsPage";
 import RecycleBinPage from "./pages/RecycleBinPage";
 import ReminderMessageEditor from "./pages/ReminderMessageEditor";
 import CollectionRouteEditor from "./pages/CollectionRouteEditor";
+import ExcelImportPage from "./pages/ExcelImportPage";
+import ExcelImportDetail from "./pages/ExcelImportDetail";
+import DownloadExcelPage from "./pages/DownloadExcelPage";
 import ErrorBoundary from "./lib/ErrorBoundary";
 
 function AppShell() {
@@ -96,6 +99,8 @@ function AppShell() {
       <Route path="/admin/employees/:id/edit" element={<AdminRoute><EmployeeEdit /></AdminRoute>} />
       <Route path="/admin/staff" element={<AdminRoute><StaffDashboard /></AdminRoute>} />
       <Route path="/admin/staff/new" element={<AdminRoute><CreateEmployee /></AdminRoute>} />
+      <Route path="/admin/excel" element={<AdminRoute><ExcelImportPage /></AdminRoute>} />
+      <Route path="/admin/excel/:importId" element={<AdminRoute><ExcelImportDetail /></AdminRoute>} />
       <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
       <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetails />} />
       <Route path="/customers/add" element={<CustomerListPage />} />
@@ -119,6 +124,7 @@ function AppShell() {
       <Route path="/settings/recycle-bin" element={<RecycleBinPage />} />
       <Route path="/settings/reminder-message" element={<ReminderMessageEditor />} />
       <Route path="/settings/collection-route" element={<AdminRoute><CollectionRouteEditor /></AdminRoute>} />
+      <Route path="/settings/downloadexcel" element={<DownloadExcelPage />} />
     </Routes>
   );
 }

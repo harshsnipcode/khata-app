@@ -1,0 +1,357 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import Header from "../components/Header";
+import Navbar from "../components/Navbar";
+import { supabase } from "../lib/supabase";
+import { createGaveTransaction } from "../lib/transactionService";
+import {
+  hashFile,
+  normalizeImportName,
+  parseExcelWorkbook,
+  quantityFromCell,
+} from "../lib/excelImport";
+
+const EMPTY_REPORT = { unknownCustomers: [], unknownProducts: [], errors: [] };
+
+function relationErrorMessage(error) {
+  if (error?.code === "42P01" || error?.message?.includes("import_history")) {
+    return "Import History is not configured. Run db/create_import_history_table.sql in Supabase first.";
+  }
+  return error?.message || "Unable to process the Excel file.";
+}
+
+function ExcelImportPage() {
+  const navigate = useNavigate();
+  const inputRef = useRef(null);
+  const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [dragging, setDragging] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [summary, setSummary] = useState(null);
+  const [report, setReport] = useState(EMPTY_REPORT);
+  const [pendingDuplicate, setPendingDuplicate] = useState(null);
+  const businessName = localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy";
+
+  const loadHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    const { data, error } = await supabase
+      .from("import_history")
+      .select("id, filename, uploaded_at, uploader, status, import_statistics, is_reimport")
+      .order("uploaded_at", { ascending: false });
+    if (error) setMessage(relationErrorMessage(error));
+    else setHistory(data || []);
+    setLoadingHistory(false);
+  }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(loadHistory, 0);
+    return () => window.clearTimeout(timeout);
+  }, [loadHistory]);
+
+  const runImport = async (prepared, forceReimport = false) => {
+    setImporting(true);
+    setPendingDuplicate(null);
+    setMessage("");
+    setSummary(null);
+    setReport(EMPTY_REPORT);
+    const startedAt = performance.now();
+    let historyId = null;
+
+    try {
+      if (!navigator.onLine) throw new Error("Bulk Excel import requires an internet connection.");
+
+      const userResult = await supabase.auth.getUser();
+      const uploader = userResult?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
+      const { data: historyRow, error: historyError } = await supabase
+        .from("import_history")
+        .insert([{
+          filename: prepared.file.name,
+          uploader,
+          file_hash: prepared.fileHash,
+          sheet_name: prepared.parsed.sheetName,
+          parsed_preview: prepared.parsed.preview,
+          status: "processing",
+          is_reimport: forceReimport,
+          source_import_id: forceReimport ? prepared.duplicate?.id : null,
+        }])
+        .select("id")
+        .single();
+      if (historyError) throw historyError;
+      historyId = historyRow.id;
+
+      // All reference data is loaded once; the transaction writes themselves
+      // still pass through the shared manual transaction service.
+      const [customerResult, productResult, priceResult] = await Promise.all([
+        supabase.from("customers").select("id, name"),
+        supabase.from("products").select("id, name, sale_price, stock_quantity"),
+        supabase.from("customer_product_prices").select("customer_id, product_id, custom_price"),
+      ]);
+      if (customerResult.error) throw customerResult.error;
+      if (productResult.error) throw productResult.error;
+      if (priceResult.error) throw priceResult.error;
+
+      const customerMap = new Map((customerResult.data || []).map((item) => [normalizeImportName(item.name), item]));
+      const productMap = new Map((productResult.data || []).map((item) => [normalizeImportName(item.name), item]));
+      const priceMap = new Map((priceResult.data || []).map((item) => [
+        `${item.customer_id}:${item.product_id}`,
+        Number(item.custom_price),
+      ]));
+      const productHeaders = prepared.parsed.headers.slice(1);
+      const unknownProducts = [...new Set(productHeaders.filter((name) => !productMap.has(normalizeImportName(name))))];
+      const unknownCustomers = [...new Set(
+        prepared.parsed.rows
+          .map((row) => row.customerName)
+          .filter((name) => name && !customerMap.has(normalizeImportName(name))),
+      )];
+      const errors = [];
+      const processedCustomers = new Set();
+      const processedProducts = new Set();
+      let transactionsCreated = 0;
+      let rowsSkipped = 0;
+      let totalQuantity = 0;
+
+      for (const row of prepared.parsed.rows) {
+        const customer = customerMap.get(normalizeImportName(row.customerName));
+        for (let columnIndex = 0; columnIndex < row.values.length; columnIndex += 1) {
+          const quantityResult = quantityFromCell(row.values[columnIndex]);
+          if (quantityResult.kind === "empty") continue;
+
+          const productName = productHeaders[columnIndex];
+          const product = productMap.get(normalizeImportName(productName));
+          if (quantityResult.kind === "invalid") {
+            rowsSkipped += 1;
+            errors.push(`Row ${row.rowNumber}, ${productName}: ${quantityResult.message}`);
+            continue;
+          }
+          if (!row.customerName) {
+            rowsSkipped += 1;
+            errors.push(`Row ${row.rowNumber}: customer name is blank.`);
+            continue;
+          }
+          if (!customer || !product) {
+            rowsSkipped += 1;
+            continue;
+          }
+
+          const price = priceMap.get(`${customer.id}:${product.id}`) ?? Number(product.sale_price);
+          try {
+            await createGaveTransaction({
+              customerId: customer.id,
+              createdBy: uploader,
+              items: [{ product, quantity: quantityResult.quantity, price }],
+            });
+            transactionsCreated += 1;
+            totalQuantity += quantityResult.quantity;
+            processedCustomers.add(customer.id);
+            processedProducts.add(product.id);
+          } catch (error) {
+            rowsSkipped += 1;
+            errors.push(`Row ${row.rowNumber}, ${productName}: ${error.message || "transaction failed"}`);
+          }
+        }
+      }
+
+      const statistics = {
+        customersProcessed: processedCustomers.size,
+        productsProcessed: processedProducts.size,
+        transactionsCreated,
+        rowsSkipped,
+        unknownCustomers: unknownCustomers.length,
+        unknownProducts: unknownProducts.length,
+        totalQuantityImported: totalQuantity,
+        processingTimeMs: Math.round(performance.now() - startedAt),
+      };
+      const validationReport = { unknownCustomers, unknownProducts, errors };
+      const hasIssues = rowsSkipped > 0 || unknownCustomers.length > 0 || unknownProducts.length > 0;
+      const { error: updateError } = await supabase
+        .from("import_history")
+        .update({
+          import_statistics: statistics,
+          validation_report: validationReport,
+          status: hasIssues ? "completed_with_errors" : "completed",
+        })
+        .eq("id", historyId);
+      if (updateError) throw updateError;
+
+      setSummary(statistics);
+      setReport(validationReport);
+      setMessage("Import Successful");
+      await loadHistory();
+    } catch (error) {
+      const errorMessage = relationErrorMessage(error);
+      setMessage(errorMessage);
+      if (historyId) {
+        await supabase
+          .from("import_history")
+          .update({
+            status: "failed",
+            validation_report: { ...EMPTY_REPORT, errors: [errorMessage] },
+            import_statistics: { processingTimeMs: Math.round(performance.now() - startedAt) },
+          })
+          .eq("id", historyId);
+        await loadHistory();
+      }
+    } finally {
+      setImporting(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const prepareFile = async (file) => {
+    if (!file) return;
+    setMessage("");
+    setSummary(null);
+    setReport(EMPTY_REPORT);
+    setPendingDuplicate(null);
+
+    if (!/\.(xlsx|xls)$/i.test(file.name)) {
+      setMessage("Please upload an .xlsx or .xls file.");
+      return;
+    }
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const [parsed, fileHash] = await Promise.all([
+        parseExcelWorkbook(arrayBuffer),
+        hashFile(arrayBuffer),
+      ]);
+      const { data: duplicate, error } = await supabase
+        .from("import_history")
+        .select("id, filename, uploaded_at")
+        .eq("file_hash", fileHash)
+        .in("status", ["processing", "completed", "completed_with_errors"])
+        .order("uploaded_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+
+      const prepared = { file, parsed, fileHash, duplicate };
+      if (duplicate) {
+        setPendingDuplicate(prepared);
+        setMessage("This file has already been imported.");
+      } else {
+        await runImport(prepared, false);
+      }
+    } catch (error) {
+      setMessage(relationErrorMessage(error));
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
+      <Header businessName={businessName} />
+      <Navbar activeTab="excel" isAdmin={true} />
+      <main className="max-w-5xl mx-auto px-4 py-5 space-y-5">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--primary)]">Admin only</p>
+          <h1 className="text-2xl font-black mt-1">Bulk Excel Transaction Import</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">Each non-zero cell becomes a normal You Gave transaction.</p>
+        </div>
+
+        <section
+          onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            prepareFile(event.dataTransfer.files?.[0]);
+          }}
+          className={`card rounded-3xl border-2 border-dashed p-8 sm:p-12 text-center transition ${dragging ? "border-[var(--primary)] bg-[var(--primary-light)]" : "border-[var(--border)]"}`}
+        >
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center mb-4">
+            <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12m0-12 4 4m-4-4L8 7"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+          </div>
+          <h2 className="font-black text-lg">Upload your Excel file</h2>
+          <p className="text-xs text-[var(--text-secondary)] mt-1 mb-5">Drag and drop here, or choose a file. Supported: .xlsx, .xls</p>
+          <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => prepareFile(event.target.files?.[0])} />
+          <button disabled={importing} onClick={() => inputRef.current?.click()} className="px-6 py-3 rounded-2xl bg-[var(--primary)] text-white text-xs font-black uppercase tracking-wider disabled:opacity-50 cursor-pointer">
+            {importing ? "Importing…" : "Upload Excel File"}
+          </button>
+        </section>
+
+        {message && (
+          <section className={`rounded-2xl border p-4 ${message === "Import Successful" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600" : "bg-amber-500/10 border-amber-500/20 text-amber-700"}`}>
+            <p className="font-black text-sm">{message}</p>
+            {pendingDuplicate && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => runImport(pendingDuplicate, true)} className="px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold cursor-pointer">Re-import anyway</button>
+                <button onClick={() => { setPendingDuplicate(null); setMessage(""); }} className="px-4 py-2 rounded-xl bg-white/70 text-xs font-bold cursor-pointer">Cancel</button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {summary && (
+          <section className="card rounded-3xl p-5">
+            <h2 className="font-black mb-4">Import Summary</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                ["Customers processed", summary.customersProcessed],
+                ["Products processed", summary.productsProcessed],
+                ["Transactions created", summary.transactionsCreated],
+                ["Rows skipped", summary.rowsSkipped],
+                ["Unknown customers", summary.unknownCustomers],
+                ["Unknown products", summary.unknownProducts],
+                ["Total quantity imported", summary.totalQuantityImported],
+                ["Processing time", `${(summary.processingTimeMs / 1000).toFixed(2)}s`],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl bg-[var(--background)] border border-[var(--border)] p-3">
+                  <p className="text-xl font-black">{value}</p><p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wide mt-1">{label}</p>
+                </div>
+              ))}
+            </div>
+            {(report.unknownCustomers.length > 0 || report.unknownProducts.length > 0 || report.errors.length > 0) && (
+              <div className="grid sm:grid-cols-3 gap-4 mt-5 text-sm">
+                <ValidationList title="Unknown Customers" items={report.unknownCustomers} />
+                <ValidationList title="Unknown Products" items={report.unknownProducts} />
+                <ValidationList title="Validation Errors" items={report.errors} />
+              </div>
+            )}
+          </section>
+        )}
+
+        <section>
+          <h2 className="font-black text-lg mb-3">Import History</h2>
+          {loadingHistory ? <p className="text-sm text-[var(--text-secondary)]">Loading uploads…</p> : history.length === 0 ? (
+            <div className="card rounded-2xl p-8 text-center text-sm text-[var(--text-secondary)]">No Excel imports yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {history.map((item) => {
+                const stats = item.import_statistics || {};
+                const date = new Date(item.uploaded_at);
+                return (
+                  <button key={item.id} onClick={() => navigate(`/admin/excel/${item.id}`)} className="w-full card rounded-2xl p-4 flex items-center gap-4 text-left hover:card-hover transition cursor-pointer">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-black shrink-0">XLS</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold truncate">{item.filename}</p>
+                      <p className="text-[11px] text-[var(--text-secondary)] mt-1">{date.toLocaleDateString("en-IN")} · {date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} · by {item.uploader}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-black">{stats.transactionsCreated || 0} created</p>
+                      <p className="text-[10px] text-[var(--text-secondary)]">{stats.rowsSkipped || 0} skipped</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function ValidationList({ title, items }) {
+  if (!items.length) return null;
+  return (
+    <div>
+      <p className="font-black text-xs uppercase tracking-wide mb-2">{title}</p>
+      <ul className="space-y-1 text-[var(--text-secondary)] max-h-40 overflow-auto">
+        {items.map((item, index) => <li key={`${item}-${index}`}>• {item}</li>)}
+      </ul>
+    </div>
+  );
+}
+
+export default ExcelImportPage;

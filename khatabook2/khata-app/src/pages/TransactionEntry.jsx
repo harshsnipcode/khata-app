@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
 import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
+import { createGaveTransaction } from "../lib/transactionService";
 
 function TransactionEntry() {
   const { id } = useParams();
@@ -118,57 +119,41 @@ function TransactionEntry() {
       const user = await supabase.auth.getUser();
       const created_by = user?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
 
-      // 1. Create main transaction
-      const txnPayload = {
-        customer_id: Number(id),
-        type,
-        amount: finalAmount,
-        created_by,
-      };
-
-      // Include payment_mode for "got" transactions
-      if (isGot) {
-        txnPayload.payment_mode = paymentMode;
-      }
-
       // Combine selected date with current time
       const now = new Date();
       const dateObj = new Date(selectedDate + "T00:00:00");
       dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
-      txnPayload.created_at = dateObj.toISOString();
+      const createdAt = dateObj.toISOString();
 
-      const { data: txn, error: txnError } = await offlineSupabase
-        .from("transactions")
-        .insert([txnPayload])
-        .select()
-        .single();
-
-      if (txnError) throw txnError;
-
-      // 2. For "gave" transactions: create transaction items and reduce stock
-      if (!isGot && Object.keys(selectedProducts).length > 0) {
-        const items = Object.values(selectedProducts).map((item) => ({
-          transaction_id: txn.id,
-          product_id: item.product.id,
-          quantity: item.quantity,
-          price: getEffectivePrice(item.product),
-        }));
-
-        const { error: itemsError } = await offlineSupabase.from("transaction_items").insert(items);
-        if (itemsError) throw itemsError;
-
-        for (const item of Object.values(selectedProducts)) {
-          const newStock = item.product.stock_quantity - item.quantity;
-          const { error: updateError } = await offlineSupabase
-            .from("products")
-            .update({ stock_quantity: newStock })
-            .eq("id", item.product.id);
-
-          if (updateError) throw updateError;
-        }
+      if (isGot) {
+        const { error: txnError } = await offlineSupabase
+          .from("transactions")
+          .insert([{
+            customer_id: Number(id),
+            type,
+            amount: finalAmount,
+            created_by,
+            payment_mode: paymentMode,
+            created_at: createdAt,
+          }])
+          .select()
+          .single();
+        if (txnError) throw txnError;
+      } else {
+        await createGaveTransaction({
+          customerId: id,
+          amount: finalAmount,
+          createdBy: created_by,
+          createdAt,
+          items: Object.values(selectedProducts).map((item) => ({
+            product: item.product,
+            quantity: item.quantity,
+            price: getEffectivePrice(item.product),
+          })),
+        });
       }
 
-      // 3. Auto SMS if enabled
+      // Auto SMS if enabled
       if (customer?.auto_sms_enabled && customer?.phone) {
         try {
           const { data: allTxns } = await offlineSupabase

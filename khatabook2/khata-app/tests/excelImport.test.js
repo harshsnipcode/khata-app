@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import * as XLSX from "xlsx";
+import { normalizeImportName, parseExcelWorkbook, parseImportMatrix, quantityFromCell } from "../src/lib/excelImport.js";
+
+test("parses the documented customer/product matrix", () => {
+  const parsed = parseImportMatrix([
+    ["Customer", "P-1", "P-2", "P-3"],
+    ["Cust-1", 20, 50, 0],
+    ["Cust-2", 10, "", 15],
+  ]);
+
+  assert.deepEqual(parsed.headers, ["Customer", "P-1", "P-2", "P-3"]);
+  assert.equal(parsed.rows.length, 2);
+  assert.deepEqual(parsed.rows[1].values, [10, "", 15]);
+});
+
+test("blank, null, empty string, and zero produce no transaction", () => {
+  for (const value of [undefined, null, "", "   ", 0, "0"]) {
+    assert.equal(quantityFromCell(value).kind, "empty");
+  }
+});
+
+test("positive numeric cells become quantities and invalid cells are rejected", () => {
+  assert.deepEqual(quantityFromCell("1,250.5"), { kind: "quantity", quantity: 1250.5 });
+  assert.equal(quantityFromCell(-1).kind, "invalid");
+  assert.equal(quantityFromCell("many").kind, "invalid");
+});
+
+test("validates headers without making matching case-sensitive", () => {
+  assert.equal(normalizeImportName("  Rahul   Dairy "), "rahul dairy");
+  assert.throws(() => parseImportMatrix([]), /Header row missing/);
+  assert.throws(() => parseImportMatrix([["Party", "P-1"]]), /First column/);
+  assert.throws(() => parseImportMatrix([["Customer"]]), /product column/);
+  assert.throws(() => parseImportMatrix([["Customer", "P-1", " p-1 "]]), /unique/);
+});
+
+for (const bookType of ["xlsx", "biff8"]) {
+  test(`reads a real ${bookType === "biff8" ? ".xls" : ".xlsx"} workbook`, async () => {
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ["Customer", "P-1"],
+      ["Cust-1", 12],
+    ]), "Transactions");
+    const bytes = XLSX.write(workbook, { type: "array", bookType });
+    const parsed = await parseExcelWorkbook(bytes);
+    assert.equal(parsed.sheetName, "Transactions");
+    assert.equal(parsed.rows[0].values[0], 12);
+  });
+}

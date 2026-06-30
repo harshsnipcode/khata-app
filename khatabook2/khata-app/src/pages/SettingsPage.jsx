@@ -213,6 +213,25 @@ function SettingsPage() {
           </div>
         </div>
 
+        {/* Section: Download all entries */}
+        <button
+          onClick={() => navigate("/settings/downloadexcel")}
+          className="w-full card rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 cursor-pointer outline-none active:scale-95 transition-all"
+        >
+          <div className="w-8 h-8 rounded-full bg-[var(--primary-light)] border border-[var(--primary)]/20 flex items-center justify-center shrink-0">
+            <svg className="w-4 h-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v12" /><polyline points="7 10 12 15 17 10" /><path d="M5 21h14" />
+            </svg>
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-bold text-[var(--text-primary)]">Download All Entries</p>
+            <p className="text-[10px] font-medium text-[var(--text-secondary)]">Export transaction quantities to Excel</p>
+          </div>
+          <svg className="w-4 h-4 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
         {/* Section: Recycle Bin */}
         <button
           onClick={() => navigate("/settings/recycle-bin")}
