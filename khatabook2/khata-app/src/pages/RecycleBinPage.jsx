@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import db, { getRecycleBin, restoreFromRecycleBin, permanentlyDeleteFromRecycleBin, cleanupRecycleBin } from "../lib/offline/db";
+import { permanentlyDeleteImportBatch, restoreImportBatch, getImportActor } from "../lib/importReversal";
 
 function getEntityIcon(type) {
+  if (type === "excel_import") return "XLS";
   switch (type) {
     case "transactions": return "💳";
     case "customers": return "👤";
@@ -13,6 +15,7 @@ function getEntityIcon(type) {
 }
 
 function getEntityLabel(type) {
+  if (type === "excel_import") return "Excel Import";
   switch (type) {
     case "transactions": return "Transaction";
     case "customers": return "Customer";
@@ -48,7 +51,25 @@ function RecycleBinPage() {
 
   const loadItems = async () => {
     setLoading(true);
-    const data = await getRecycleBin();
+    const [localData, batchResult] = await Promise.all([
+      getRecycleBin(),
+      supabase.from("import_batch_recycle_bin").select("*").order("deleted_at", { ascending: false }),
+    ]);
+    const batchData = batchResult.error ? [] : (batchResult.data || []).map((item) => ({
+      local_uuid: `excel-import:${item.id}`,
+      entity_type: "excel_import",
+      entity_id: item.import_history_id,
+      entity_name: item.filename,
+      deleted_at: item.deleted_at,
+      deleted_by: item.deleted_by,
+      restore_deadline: item.restore_deadline,
+      server_managed: true,
+      original_data: {
+        import_id: item.import_history_id,
+        transaction_count: item.transaction_count,
+      },
+    }));
+    const data = [...localData, ...batchData];
     // Sort by deleted_at descending
     data.sort((a, b) => new Date(b.deleted_at) - new Date(a.deleted_at));
     setItems(data);
@@ -62,6 +83,19 @@ function RecycleBinPage() {
   }, []);
 
   const handleRestore = async (local_uuid) => {
+    const targetItem = items.find((item) => item.local_uuid === local_uuid);
+    if (targetItem?.entity_type === "excel_import") {
+      try {
+        await restoreImportBatch(targetItem.entity_id, getImportActor());
+        setActionMsg("Excel import restored successfully!");
+        await loadItems();
+        setTimeout(() => setActionMsg(""), 2500);
+      } catch (restoreError) {
+        setActionMsg("Failed to restore: " + (restoreError.message || "Unknown error"));
+      }
+      return;
+    }
+
     console.log(`[RecycleBin] === START RESTORE FLOW === local_uuid: ${local_uuid}`);
 
     // ── STEP 1: Read raw recycle bin entry BEFORE restore (since restore deletes it) ──
@@ -221,6 +255,20 @@ function RecycleBinPage() {
   };
 
   const handlePermanentDelete = async (local_uuid) => {
+    const targetItem = items.find((item) => item.local_uuid === local_uuid);
+    if (targetItem?.entity_type === "excel_import") {
+      try {
+        await permanentlyDeleteImportBatch(targetItem.entity_id);
+        setActionMsg("Import snapshot permanently deleted.");
+        setConfirmDelete(null);
+        await loadItems();
+        setTimeout(() => setActionMsg(""), 2500);
+      } catch (deleteError) {
+        setActionMsg("Failed to delete: " + (deleteError.message || "Unknown error"));
+      }
+      return;
+    }
+
     const result = await permanentlyDeleteFromRecycleBin(local_uuid);
     if (result.success) {
       setActionMsg("Item permanently deleted.");
@@ -279,6 +327,7 @@ function RecycleBinPage() {
               const isExpired = new Date(item.restore_deadline) < new Date();
               const originalData = item.original_data || {};
               const amount = originalData?.amount;
+              const transactionCount = originalData?.transaction_count;
 
               return (
                 <div
@@ -309,9 +358,17 @@ function RecycleBinPage() {
                         </p>
                       )}
 
+                      {item.entity_type === "excel_import" && (
+                        <p className="text-[11px] font-bold text-[var(--text-primary)] mt-0.5">
+                          {transactionCount || 0} Transactions
+                        </p>
+                      )}
+
                       <div className="flex items-center gap-3 mt-1">
                         <p className="text-[9px] text-[var(--text-muted)] font-medium">
-                          Deleted {timeAgo(item.deleted_at)}
+                          Deleted {item.entity_type === "excel_import"
+                            ? new Date(item.deleted_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                            : timeAgo(item.deleted_at)}
                         </p>
                         <p className="text-[9px] text-[var(--text-muted)] font-medium">
                           by {item.deleted_by}

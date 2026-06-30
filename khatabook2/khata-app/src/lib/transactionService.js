@@ -12,6 +12,7 @@ export async function createGaveTransaction({
   amount,
   createdBy,
   createdAt,
+  importHistoryId,
 }) {
   const normalizedItems = (items || []).map((item) => ({
     product: item.product,
@@ -30,7 +31,7 @@ export async function createGaveTransaction({
   // several network round trips to one. Older databases safely use the legacy
   // path below until the migration has been applied.
   if (typeof navigator !== "undefined" && navigator.onLine) {
-    const { data, error } = await supabase.rpc("create_gave_transaction", {
+    const rpcPayload = {
       p_customer_id: Number(customerId),
       p_items: normalizedItems.map((item) => ({
         product_id: item.product.id,
@@ -40,7 +41,9 @@ export async function createGaveTransaction({
       p_amount: transactionAmount,
       p_created_by: createdBy,
       p_created_at: createdAt || new Date().toISOString(),
-    });
+    };
+    if (importHistoryId) rpcPayload.p_import_history_id = importHistoryId;
+    const { data, error } = await supabase.rpc("create_gave_transaction", rpcPayload);
     const missingFunction = error && (error.code === "PGRST202" || error.code === "42883");
     if (!error) {
       normalizedItems.forEach((item) => {
@@ -49,6 +52,9 @@ export async function createGaveTransaction({
       return Array.isArray(data) ? data[0] : data;
     }
     if (!missingFunction) throw error;
+    if (importHistoryId) {
+      throw new Error("Import Batch Reversal is not configured. Run db/extend_import_history_batch_reversal.sql in Supabase first.");
+    }
   }
 
   const { data: transaction, error: transactionError } = await offlineSupabase

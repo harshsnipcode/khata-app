@@ -99,8 +99,11 @@ function CustomerDetails() {
   const balanceAmount = Math.abs(balance);
 
   const transactionRows = useMemo(() => {
+    const sorted = [...transactions].sort(
+      (a, b) => new Date(a.created_at) - new Date(b.created_at)
+    );
     let runningBalance = 0;
-    const rows = transactions.map((txn) => {
+    const rows = sorted.map((txn) => {
       runningBalance += txn.type === "got" ? -Number(txn.amount) : Number(txn.amount);
       return {
         ...txn,

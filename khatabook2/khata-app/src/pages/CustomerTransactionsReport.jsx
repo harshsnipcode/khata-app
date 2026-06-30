@@ -139,8 +139,10 @@ function CustomerTransactionsReport() {
 
   const runningBalance = useMemo(() => {
     let bal = 0;
-    const reversed = [...filteredTransactions].reverse();
-    return reversed.map((t) => {
+    const sorted = [...filteredTransactions].sort(
+      (a, b) => new Date(a.created_at) - new Date(b.created_at)
+    );
+    return sorted.map((t) => {
       if (t.type === "gave") bal += Number(t.amount);
       else bal -= Number(t.amount);
       return { ...t, runningBal: bal };

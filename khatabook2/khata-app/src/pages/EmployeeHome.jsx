@@ -107,7 +107,7 @@ function EmployeeHome() {
     setLoading(true);
     const [custRes, txnRes] = await Promise.all([
       supabase.from("customers").select("*").order("created_at", { ascending: false }),
-      supabase.from("transactions").select("customer_id, type, amount, created_at"),
+      supabase.from("transactions").select("customer_id, type, amount, created_at").order("created_at", { ascending: false }),
     ]);
     setCustomers(custRes.data || []);
     setTransactions(txnRes.data || []);

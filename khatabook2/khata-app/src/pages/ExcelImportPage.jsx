@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
+import ImportStatusBadge from "../components/ImportStatusBadge";
 import { supabase } from "../lib/supabase";
 import { createGaveTransaction } from "../lib/transactionService";
 import {
@@ -60,6 +61,14 @@ function ExcelImportPage() {
 
     try {
       if (!navigator.onLine) throw new Error("Bulk Excel import requires an internet connection.");
+
+      const { error: reversalSetupError } = await supabase
+        .from("import_batch_recycle_bin")
+        .select("id")
+        .limit(1);
+      if (reversalSetupError) {
+        throw new Error("Import Batch Reversal is not configured. Run db/extend_import_history_batch_reversal.sql in Supabase first.");
+      }
 
       const userResult = await supabase.auth.getUser();
       const uploader = userResult?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
@@ -139,6 +148,7 @@ function ExcelImportPage() {
             await createGaveTransaction({
               customerId: customer.id,
               createdBy: uploader,
+              importHistoryId: historyId,
               items: [{ product, quantity: quantityResult.quantity, price }],
             });
             transactionsCreated += 1;
@@ -163,13 +173,12 @@ function ExcelImportPage() {
         processingTimeMs: Math.round(performance.now() - startedAt),
       };
       const validationReport = { unknownCustomers, unknownProducts, errors };
-      const hasIssues = rowsSkipped > 0 || unknownCustomers.length > 0 || unknownProducts.length > 0;
       const { error: updateError } = await supabase
         .from("import_history")
         .update({
           import_statistics: statistics,
           validation_report: validationReport,
-          status: hasIssues ? "completed_with_errors" : "completed",
+          status: "imported",
         })
         .eq("id", historyId);
       if (updateError) throw updateError;
@@ -219,7 +228,7 @@ function ExcelImportPage() {
         .from("import_history")
         .select("id, filename, uploaded_at")
         .eq("file_hash", fileHash)
-        .in("status", ["processing", "completed", "completed_with_errors"])
+        .in("status", ["processing", "imported", "deleted", "restored", "completed", "completed_with_errors"])
         .order("uploaded_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -328,6 +337,7 @@ function ExcelImportPage() {
                       <p className="text-[11px] text-[var(--text-secondary)] mt-1">{date.toLocaleDateString("en-IN")} · {date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} · by {item.uploader}</p>
                     </div>
                     <div className="text-right shrink-0">
+                      <ImportStatusBadge status={item.status} />
                       <p className="text-sm font-black">{stats.transactionsCreated || 0} created</p>
                       <p className="text-[10px] text-[var(--text-secondary)]">{stats.rowsSkipped || 0} skipped</p>
                     </div>
