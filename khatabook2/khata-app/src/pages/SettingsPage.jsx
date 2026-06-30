@@ -11,6 +11,7 @@ function SettingsPage() {
   const [logo, setLogo] = useState(null);
   const [newLogo, setNewLogo] = useState(null);
   const [role, setRole] = useState("");
+  const [profileName, setProfileName] = useState("");
   const [saved, setSaved] = useState(false);
 
   const isAdmin = role === "Admin";
@@ -23,6 +24,15 @@ function SettingsPage() {
     setEditName(name);
     setLogo(savedLogo);
     setRole(r === "admin" ? "Admin" : r === "employee" ? "Employee" : "");
+    if (r === "admin") {
+      const storedProfile = localStorage.getItem("khata_profile_name");
+      if (storedProfile) {
+        setProfileName(storedProfile);
+      } else {
+        const user = localStorage.getItem("khata_user") || "";
+        setProfileName(user.charAt(0).toUpperCase() + user.slice(1));
+      }
+    }
   }, []);
 
   useSwipeNavigation({
@@ -77,6 +87,7 @@ function SettingsPage() {
     try {
       localStorage.removeItem("khata_role");
       localStorage.removeItem("khata_user");
+      localStorage.removeItem("khata_profile_name");
     } catch (e) {}
     window.location.href = "/";
   };
@@ -196,20 +207,37 @@ function SettingsPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-[var(--secondary)] border border-[var(--danger)]/20 flex items-center justify-center shrink-0">
-                  <svg className="w-4 h-4 text-[var(--danger)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-[11px] font-medium text-[var(--text-secondary)]">Role</p>
-                  <p className="text-sm font-bold text-[var(--text-primary)]">{role}</p>
+            {isAdmin ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-[var(--primary-light)] border border-[var(--primary)]/20 flex items-center justify-center shrink-0">
+                    <svg className="w-4 h-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-[var(--text-secondary)]">Profile</p>
+                    <p className="text-sm font-bold text-[var(--text-primary)]">{profileName} ({role})</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-[var(--secondary)] border border-[var(--danger)]/20 flex items-center justify-center shrink-0">
+                    <svg className="w-4 h-4 text-[var(--danger)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-[var(--text-secondary)]">Role</p>
+                    <p className="text-sm font-bold text-[var(--text-primary)]">{role}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -265,6 +293,28 @@ function SettingsPage() {
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </button>
+
+        {/* Manage Admin Profiles */}
+        {isAdmin && (
+          <button
+            onClick={() => navigate("/settings/admins")}
+            className="w-full card rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 cursor-pointer outline-none active:scale-95 transition-all"
+          >
+            <div className="w-8 h-8 rounded-full bg-[var(--primary-light)] border border-[var(--primary)]/20 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-bold text-[var(--text-primary)]">Manage Admin Profiles</p>
+              <p className="text-[10px] font-medium text-[var(--text-secondary)]">Add, edit, or remove admin accounts</p>
+            </div>
+            <svg className="w-4 h-4 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        )}
 
         {/* Collection Route — Admin only */}
         {isAdmin && (

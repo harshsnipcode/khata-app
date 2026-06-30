@@ -30,6 +30,7 @@ import StockSuccess from "./pages/StockSuccess";
 import InventoryReport from "./pages/InventoryReport";
 import SharedLedgerView from "./pages/SharedLedgerView";
 import SettingsPage from "./pages/SettingsPage";
+import AdminProfilesPage from "./pages/AdminProfilesPage";
 import RecycleBinPage from "./pages/RecycleBinPage";
 import ReminderMessageEditor from "./pages/ReminderMessageEditor";
 import CollectionRouteEditor from "./pages/CollectionRouteEditor";
@@ -46,7 +47,19 @@ function AppShell() {
       const role = localStorage.getItem("khata_role");
 
       if (role === "admin") {
-        console.log("[Auth] Admin restored");
+        const user = localStorage.getItem("khata_user");
+        if (user) {
+          try {
+            const { data } = await supabase
+              .from("admin_profiles")
+              .select("id, profile_name")
+              .eq("username", user.toLowerCase())
+              .maybeSingle();
+            if (data?.profile_name) {
+              localStorage.setItem("khata_profile_name", data.profile_name);
+            }
+          } catch {}
+        }
         setReady(true);
         return;
       }
@@ -121,6 +134,7 @@ function AppShell() {
       <Route path="/catalogue/reports" element={<InventoryReport />} />
       <Route path="/share/customer/:id" element={<SharedLedgerView />} />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/settings/admins" element={<AdminRoute><AdminProfilesPage /></AdminRoute>} />
       <Route path="/settings/recycle-bin" element={<RecycleBinPage />} />
       <Route path="/settings/reminder-message" element={<ReminderMessageEditor />} />
       <Route path="/settings/collection-route" element={<AdminRoute><CollectionRouteEditor /></AdminRoute>} />

@@ -1,25 +1,69 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
+import { hashPassword, generateSalt } from "../lib/adminAuth";
 
 function Signup() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
+    setLoading(true);
 
+    try {
+      const { data: admins, error: fetchError } = await supabase
+        .from("admin_profiles")
+        .select("id, profile_name, username, password_hash, password_salt");
+
+      if (!fetchError && admins && admins.length > 0) {
+        const admin = admins.find((a) => a.username === username);
+        if (admin) {
+          const hash = await hashPassword(password, admin.password_salt);
+          if (hash === admin.password_hash) {
+            try {
+              localStorage.setItem("khata_role", "admin");
+              localStorage.setItem("khata_user", username);
+              localStorage.setItem("khata_profile_name", admin.profile_name);
+            } catch (err) {}
+            setLoading(false);
+            navigate("/admin/home");
+            return;
+          }
+        }
+        setError("Invalid admin credentials.");
+        setLoading(false);
+        return;
+      }
+    } catch {}
+
+    // Fallback: migrate hardcoded admin
     if (username === "gopal" && password === "gopalchoudhary@123") {
       try {
+        const salt = generateSalt();
+        const pwdHash = await hashPassword(password, salt);
+        await supabase.from("admin_profiles").insert({
+          profile_name: "Gopal",
+          username: "gopal",
+          password_hash: pwdHash,
+          password_salt: salt,
+        });
         localStorage.setItem("khata_role", "admin");
         localStorage.setItem("khata_user", username);
+        localStorage.setItem("khata_profile_name", "Gopal");
       } catch (err) {}
+      setLoading(false);
       navigate("/admin/home");
-    } else {
-      setError("Invalid admin credentials.");
+      return;
     }
+
+    setError("Invalid admin credentials.");
+    setLoading(false);
   };
 
   return (
@@ -92,9 +136,10 @@ function Signup() {
 
           <button
             type="submit"
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs tracking-widest uppercase transition-all duration-200 active:scale-[0.98] shadow-lg shadow-emerald-500/10 cursor-pointer outline-none mt-2"
+            disabled={loading}
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs tracking-widest uppercase transition-all duration-200 active:scale-[0.98] shadow-lg shadow-emerald-500/10 disabled:opacity-50 cursor-pointer outline-none mt-2"
           >
-            Access Dashboard
+            {loading ? "Authenticating..." : "Access Dashboard"}
           </button>
         </form>
 
