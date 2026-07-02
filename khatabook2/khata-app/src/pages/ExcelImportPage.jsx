@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import ImportStatusBadge from "../components/ImportStatusBadge";
@@ -23,6 +24,14 @@ function relationErrorMessage(error) {
 
 function ExcelImportPage() {
   const navigate = useNavigate();
+  useSwipeNavigation({
+    onSwipeLeft: () => {
+      navigate("/settings");
+    },
+    onSwipeRight: () => {
+      navigate("/admin/staff", { state: { activeTab: "employees" } });
+    },
+  });
   const inputRef = useRef(null);
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);

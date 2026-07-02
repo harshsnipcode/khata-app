@@ -94,7 +94,7 @@ function StaffDashboard() {
 
   useSwipeNavigation({
     onSwipeLeft: () => {
-      navigate("/settings");
+      navigate("/admin/excel", { state: { activeTab: "excel" } });
     },
     onSwipeRight: () => {
       navigate("/admin/home", { state: { activeTab: "catalogue" } });
