@@ -22,6 +22,7 @@ const ACTIONS_BY_LEVEL = {
     "add_transaction",
     "add_product",
     "stock_entry",
+    "excel_access",
   ],
   3: [
     "view_customers",
@@ -35,6 +36,7 @@ const ACTIONS_BY_LEVEL = {
     "add_transaction",
     "add_product",
     "stock_entry",
+    "excel_access",
     "edit_customer",
     "delete_customer",
     "edit_transaction",

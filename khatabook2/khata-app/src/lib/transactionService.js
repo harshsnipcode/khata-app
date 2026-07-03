@@ -100,3 +100,84 @@ export async function createGaveTransaction({
 
   return transaction;
 }
+
+export async function updateGaveTransaction({
+  transactionId,
+  customerId,
+  items,
+  amount,
+  createdBy,
+  createdAt,
+  originalItems,
+}) {
+  const normalizedItems = (items || []).map((item) => ({
+    product: item.product,
+    quantity: Number(item.quantity),
+    price: Number(item.price),
+  }));
+
+  const calculatedAmount = normalizedItems.reduce(
+    (sum, item) => sum + item.quantity * item.price,
+    0,
+  );
+  const transactionAmount = amount === undefined ? calculatedAmount : Number(amount);
+
+  // Calculate stock deltas: +original items (restore) and -new items (deduct)
+  const stockDeltas = {};
+  for (const orig of (originalItems || [])) {
+    stockDeltas[orig.product_id] = (stockDeltas[orig.product_id] || 0) + Number(orig.quantity);
+  }
+  for (const item of normalizedItems) {
+    stockDeltas[item.product.id] = (stockDeltas[item.product.id] || 0) - item.quantity;
+  }
+
+  // Apply stock deltas
+  for (const [productId, delta] of Object.entries(stockDeltas)) {
+    if (delta === 0) continue;
+    const { data: prod, error: fetchErr } = await offlineSupabase
+      .from("products")
+      .select("stock_quantity")
+      .eq("id", productId)
+      .single();
+    if (fetchErr) throw fetchErr;
+    const newStock = Number(prod.stock_quantity) + delta;
+    const { error: stockErr } = await offlineSupabase
+      .from("products")
+      .update({ stock_quantity: newStock })
+      .eq("id", productId);
+    if (stockErr) throw stockErr;
+  }
+
+  // Delete old transaction_items
+  const { error: delErr } = await offlineSupabase
+    .from("transaction_items")
+    .delete()
+    .eq("transaction_id", transactionId);
+  if (delErr) throw delErr;
+
+  // Insert new transaction_items
+  if (normalizedItems.length > 0) {
+    const transactionItems = normalizedItems.map((item) => ({
+      transaction_id: transactionId,
+      product_id: item.product.id,
+      quantity: item.quantity,
+      price: item.price,
+    }));
+    const { error: itemErr } = await offlineSupabase
+      .from("transaction_items")
+      .insert(transactionItems);
+    if (itemErr) throw itemErr;
+  }
+
+  // Update transaction record
+  const { error: txnErr } = await offlineSupabase
+    .from("transactions")
+    .update({
+      amount: transactionAmount,
+      created_at: createdAt || new Date().toISOString(),
+    })
+    .eq("id", transactionId);
+  if (txnErr) throw txnErr;
+
+  return { id: transactionId };
+}

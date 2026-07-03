@@ -259,11 +259,10 @@ function ExcelImportPage() {
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
       <Header businessName={businessName} />
-      <Navbar activeTab="excel" isAdmin={true} />
+      <Navbar activeTab="excel" isAdmin={localStorage.getItem("khata_role") === "admin"} />
       <main className="max-w-5xl mx-auto px-4 py-5 space-y-5">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--primary)]">Admin only</p>
-          <h1 className="text-2xl font-black mt-1">Bulk Excel Transaction Import</h1>
+          <h1 className="text-2xl font-black">Bulk Excel Transaction Import</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">Each non-zero cell becomes a normal You Gave transaction.</p>
         </div>
 

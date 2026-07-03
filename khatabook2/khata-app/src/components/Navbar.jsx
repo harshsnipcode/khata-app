@@ -26,7 +26,12 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
   const navigate = useNavigate();
   const location = useLocation();
   const tabs = ["customers", "catalogue"];
-  if (isAdmin) tabs.push("employees", "excel");
+  if (isAdmin) {
+    tabs.push("employees", "excel");
+  } else {
+    const level = Number(localStorage.getItem("khata_permission_level")) || 1;
+    if (level >= 2) tabs.push("excel");
+  }
   tabs.push("settings");
 
   const tabLabels = {
@@ -42,9 +47,10 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
       navigate("/settings");
       return;
     }
-    if (isAdmin) {
-      const route = ROUTES[tab];
-      navigate(route, { state: { activeTab: tab } });
+    if (tab === "excel") {
+      navigate("/admin/excel", { state: { activeTab: "excel" } });
+    } else if (isAdmin) {
+      navigate(ROUTES[tab], { state: { activeTab: tab } });
     } else {
       navigate("/employee/home", { state: { activeTab: tab } });
     }

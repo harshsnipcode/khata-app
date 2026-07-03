@@ -33,15 +33,8 @@ function TransactionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [editMode, setEditMode] = useState(false);
-  const [editAmount, setEditAmount] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editType, setEditType] = useState("gave");
-  const [editDate, setEditDate] = useState("");
-  const [editPaymentMode, setEditPaymentMode] = useState("cash");
-  const [saving, setSaving] = useState(false);
-
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   const [deleting, setDeleting] = useState(false);
   const [deleteMsg, setDeleteMsg] = useState("");
 
@@ -62,11 +55,6 @@ function TransactionDetailPage() {
         return;
       }
       setTransaction(txn);
-      setEditAmount(String(txn.amount));
-      setEditDescription(txn.description || "");
-      setEditType(txn.type || "gave");
-      setEditDate(txn.created_at?.slice(0, 16) || "");
-      setEditPaymentMode(txn.payment_mode || "cash");
 
       const { data: cust } = await supabase
         .from("customers")
@@ -105,43 +93,6 @@ function TransactionDetailPage() {
 
     load();
   }, [id]);
-
-  const handleEditSave = async () => {
-    if (!requirePermission("edit_transaction")) return;
-    if (!editAmount || Number(editAmount) <= 0) {
-      setError("Please enter a valid amount.");
-      return;
-    }
-    setSaving(true);
-    setError("");
-
-    const { error: uErr } = await offlineSupabase
-      .from("transactions")
-      .update({
-        amount: Number(editAmount),
-        description: editDescription || null,
-        type: editType,
-        payment_mode: editPaymentMode,
-        created_at: editDate ? new Date(editDate).toISOString() : undefined,
-      })
-      .eq("id", id);
-
-    if (uErr) {
-      setError(uErr.message || "Failed to update.");
-      setSaving(false);
-      return;
-    }
-
-    setTransaction((prev) => ({
-      ...prev,
-      amount: Number(editAmount),
-      description: editDescription || null,
-      type: editType,
-      created_at: editDate ? new Date(editDate).toISOString() : prev.created_at,
-    }));
-    setEditMode(false);
-    setSaving(false);
-  };
 
   const handleDelete = async () => {
     if (!requirePermission("delete_transaction")) return;
@@ -365,129 +316,43 @@ Balance After Transaction:
             </div>
           )}
 
-          {(transaction.description || editDescription) && (
+          {transaction.description && (
             <div>
               <p className="text-[8px] text-[var(--text-secondary)] font-black uppercase tracking-wider mb-0.5">Description</p>
               <p className="text-[11px] font-medium text-[var(--text-primary)] bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2">
-                {transaction.description || editDescription}
+                {transaction.description}
               </p>
             </div>
           )}
         </div>
 
-        {/* Edit Mode Form */}
-        {editMode && (
-          <div className="card rounded-2xl px-4 py-3 shadow-sm space-y-3">
-            <p className="text-[8px] text-[var(--text-secondary)] font-black uppercase tracking-wider">Edit Transaction</p>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block mb-1">Amount</label>
-                <input
-                  type="number"
-                  value={editAmount}
-                  onChange={(e) => setEditAmount(e.target.value)}
-                  className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
-                />
-              </div>
-              <div>
-                <label className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block mb-1">Type</label>
-                <select
-                  value={editType}
-                  onChange={(e) => setEditType(e.target.value)}
-                  className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] appearance-none cursor-pointer"
-                >
-                  <option value="gave">You Gave</option>
-                  <option value="got">You Got</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block mb-1">Date & Time</label>
-              <input
-                type="datetime-local"
-                value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
-                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
-              />
-            </div>
-
-            {editType === "got" && (
-              <div>
-                <label className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block mb-1">Payment Mode</label>
-                <div className="flex rounded-xl bg-[var(--surface)] border border-[var(--border)] p-1">
-                  <button
-                    type="button"
-                    onClick={() => setEditPaymentMode("cash")}
-                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer outline-none ${
-                      editPaymentMode === "cash"
-                        ? "bg-emerald-500 text-slate-950 shadow-md"
-                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                    }`}
-                  >
-                    Cash
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditPaymentMode("online")}
-                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer outline-none ${
-                      editPaymentMode === "online"
-                        ? "bg-emerald-500 text-slate-950 shadow-md"
-                        : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                    }`}
-                  >
-                    Online
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="text-[8px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block mb-1">Description</label>
-              <input
-                type="text"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="Add a note..."
-                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] placeholder-[var(--text-muted)]"
-              />
-            </div>
-
-            {error && (
-              <div className="bg-[var(--danger-light)] border border-[var(--danger)]/20 text-[var(--danger)] text-[10px] font-bold p-3 rounded-xl">{error}</div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setEditMode(false); setError(""); }}
-                className="flex-1 bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--border)] text-[var(--text-primary)] font-bold py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition active:scale-95 cursor-pointer outline-none"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEditSave}
-                disabled={saving}
-                className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition active:scale-95 cursor-pointer outline-none disabled:opacity-50"
-              >
-                {saving ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Action Buttons */}
         <div className="space-y-2 pt-1">
           {can("edit_transaction") && (
             <button
-              onClick={() => setEditMode(!editMode)}
+              onClick={() => {
+                navigate(`/customer/${transaction.customer_id}/transaction`, {
+                  state: {
+                    type: transaction.type,
+                    editTransactionId: transaction.id,
+                    amount: transaction.amount,
+                    date: transaction.created_at,
+                    paymentMode: transaction.payment_mode,
+                    items: items.map(item => ({
+                      product_id: item.product_id,
+                      quantity: item.quantity,
+                      price: item.price,
+                    })),
+                  },
+                });
+              }}
               className="w-full rounded-xl bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] py-3 text-[var(--text-primary)] font-bold text-[10px] uppercase tracking-widest transition active:scale-95 cursor-pointer outline-none flex items-center justify-center gap-2"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
-              <span>{editMode ? "Cancel Edit" : "Edit Entry"}</span>
+              <span>Edit Entry</span>
             </button>
           )}
 

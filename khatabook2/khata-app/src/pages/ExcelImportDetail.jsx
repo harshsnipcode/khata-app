@@ -44,7 +44,7 @@ function ExcelImportDetail() {
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
       <Header businessName={businessName} />
-      <Navbar activeTab="excel" isAdmin={true} />
+      <Navbar activeTab="excel" isAdmin={localStorage.getItem("khata_role") === "admin"} />
       <main className="max-w-6xl mx-auto px-4 py-5 space-y-5">
         <button onClick={() => navigate("/admin/excel")} className="text-xs font-bold text-[var(--primary)] cursor-pointer">← Back to Excel imports</button>
         {error ? <div className="rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 p-4 font-bold text-sm">{error}</div> : !record ? (

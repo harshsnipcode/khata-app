@@ -4,14 +4,17 @@ import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
 import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
-import { createGaveTransaction } from "../lib/transactionService";
+import { createGaveTransaction, updateGaveTransaction } from "../lib/transactionService";
 
 function TransactionEntry() {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const type = location.state?.type === "got" ? "got" : "gave";
+  const stateData = location.state || {};
+  const type = stateData.type === "got" ? "got" : "gave";
   const isGot = type === "got";
+  const editTransactionId = stateData.editTransactionId;
+  const isEditing = !!editTransactionId;
 
   const [customer, setCustomer] = useState(null);
   const [products, setProducts] = useState([]);
@@ -63,6 +66,33 @@ function TransactionEntry() {
     loadData();
   }, [id, isGot]);
 
+  // Pre-fill fields when editing
+  useEffect(() => {
+    if (isEditing) {
+      setPaymentMode(stateData.paymentMode || "cash");
+      if (stateData.date) setSelectedDate(stateData.date.split("T")[0]);
+      // Only restore manual amount for manual entries (no products).
+      // Product-based transactions derive amount dynamically from calculatedAmount.
+      if (isGot || !stateData.items?.length) {
+        setManualAmount(String(stateData.amount ?? ""));
+      }
+    }
+  }, []);
+
+  // Pre-fill selected products when editing a "gave" transaction
+  useEffect(() => {
+    if (isEditing && !isGot && stateData.items && products.length > 0) {
+      const selected = {};
+      stateData.items.forEach(item => {
+        const product = products.find(p => p.id === item.product_id);
+        if (product) {
+          selected[product.id] = { product, quantity: item.quantity };
+        }
+      });
+      setSelectedProducts(selected);
+    }
+  }, [products]);
+
   // Calculate total amount from selected products using effective price
   const calculatedAmount = useMemo(() => {
     return Object.values(selectedProducts).reduce(
@@ -106,7 +136,11 @@ function TransactionEntry() {
   // Handle save
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!requirePermission("add_transaction")) return;
+    if (isEditing) {
+      if (!requirePermission("edit_transaction")) return;
+    } else {
+      if (!requirePermission("add_transaction")) return;
+    }
     setMessage("");
 
     if (finalAmount <= 0) {
@@ -119,13 +153,50 @@ function TransactionEntry() {
       const user = await supabase.auth.getUser();
       const created_by = user?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
 
-      // Combine selected date with current time
-      const now = new Date();
-      const dateObj = new Date(selectedDate + "T00:00:00");
-      dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
-      const createdAt = dateObj.toISOString();
+      let createdAt;
+      if (isEditing && stateData.date) {
+        const origDateStr = stateData.date.split("T")[0];
+        if (selectedDate === origDateStr) {
+          // Date unchanged — preserve original timestamp exactly
+          createdAt = stateData.date;
+        } else {
+          // Date changed — combine new date with original time
+          const orig = new Date(stateData.date);
+          const dateObj = new Date(selectedDate + "T00:00:00");
+          dateObj.setHours(orig.getHours(), orig.getMinutes(), orig.getSeconds(), orig.getMilliseconds());
+          createdAt = dateObj.toISOString();
+        }
+      } else {
+        const now = new Date();
+        const dateObj = new Date(selectedDate + "T00:00:00");
+        dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+        createdAt = dateObj.toISOString();
+      }
 
-      if (isGot) {
+      if (isEditing) {
+        if (isGot) {
+          const { error: uErr } = await offlineSupabase
+            .from("transactions")
+            .update({ amount: finalAmount, payment_mode: paymentMode, created_at: createdAt })
+            .eq("id", editTransactionId);
+          if (uErr) throw uErr;
+        } else {
+          await updateGaveTransaction({
+            transactionId: editTransactionId,
+            customerId: id,
+            amount: finalAmount,
+            createdBy: created_by,
+            createdAt,
+            items: Object.values(selectedProducts).map((item) => ({
+              product: item.product,
+              quantity: item.quantity,
+              price: getEffectivePrice(item.product),
+            })),
+            originalItems: stateData.items || [],
+          });
+        }
+        navigate(`/customer/${id}`, { replace: true });
+      } else if (isGot) {
         const { error: txnError } = await offlineSupabase
           .from("transactions")
           .insert([{
@@ -153,50 +224,52 @@ function TransactionEntry() {
         });
       }
 
-      // Auto SMS if enabled
-      if (customer?.auto_sms_enabled && customer?.phone) {
-        try {
-          const { data: allTxns } = await offlineSupabase
-            .from("transactions")
-            .select("type, amount")
-            .eq("customer_id", id);
-          let gave = 0, got = 0;
-          (allTxns || []).forEach((t) => {
-            if (t.type === "gave") gave += Number(t.amount);
-            else got += Number(t.amount);
-          });
-          const balance = gave - got;
-          const balanceLabel = balance >= 0 ? "You Will Get" : "You Will Give";
+      if (!isEditing) {
+        // Auto SMS if enabled (only for new transactions)
+        if (customer?.auto_sms_enabled && customer?.phone) {
+          try {
+            const { data: allTxns } = await offlineSupabase
+              .from("transactions")
+              .select("type, amount")
+              .eq("customer_id", id);
+            let gave = 0, got = 0;
+            (allTxns || []).forEach((t) => {
+              if (t.type === "gave") gave += Number(t.amount);
+              else got += Number(t.amount);
+            });
+            const balance = gave - got;
+            const balanceLabel = balance >= 0 ? "You Will Get" : "You Will Give";
 
-          const template = getSavedTemplate();
-          const text = fillTemplate(template, {
-            customerName: customer.name,
-            balance: Math.abs(balance),
-            balanceType: balanceLabel,
-            ledgerLink: `${window.location.origin}/share/customer/${id}`,
-            businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
-          });
-          const phone = customer.phone.replace(/[^0-9]/g, "");
-          if (phone) {
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-            const url = isIOS
-              ? `sms:${phone}&body=${encodeURIComponent(text)}`
-              : `sms:${phone}?body=${encodeURIComponent(text)}`;
-            const smsWindow = window.open(url, "_blank", "noopener,noreferrer");
-            if (!smsWindow) window.location.href = url;
+            const template = getSavedTemplate();
+            const text = fillTemplate(template, {
+              customerName: customer.name,
+              balance: Math.abs(balance),
+              balanceType: balanceLabel,
+              ledgerLink: `${window.location.origin}/share/customer/${id}`,
+              businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
+            });
+            const phone = customer.phone.replace(/[^0-9]/g, "");
+            if (phone) {
+              const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+              const url = isIOS
+                ? `sms:${phone}&body=${encodeURIComponent(text)}`
+                : `sms:${phone}?body=${encodeURIComponent(text)}`;
+              const smsWindow = window.open(url, "_blank", "noopener,noreferrer");
+              if (!smsWindow) window.location.href = url;
+            }
+          } catch {
+            setMessage("Transaction saved. SMS could not be sent.");
           }
-        } catch {
-          setMessage("Transaction saved. SMS could not be sent.");
         }
-      }
 
-      navigate(`/customer/${id}/transaction/success`, {
-        state: {
-          amount: finalAmount,
-          type,
-          itemCount: isGot ? 0 : Object.values(selectedProducts).length,
-        },
-      });
+        navigate(`/customer/${id}/transaction/success`, {
+          state: {
+            amount: finalAmount,
+            type,
+            itemCount: isGot ? 0 : Object.values(selectedProducts).length,
+          },
+        });
+      }
     } catch (err) {
       setMessage(err.message || "Unable to save transaction.");
     } finally {

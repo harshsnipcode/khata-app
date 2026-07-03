@@ -1,4 +1,4 @@
-function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, collectionMode = false, toggleCollectionMode }) {
+function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, collectionMode = false, toggleCollectionMode, showPreview = false }) {
   return (
     <div className="flex items-center gap-2">
       {/* Merged Search + Filter container */}
@@ -73,32 +73,56 @@ function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, c
         </button>
       </div>
 
-      {/* Collection Mode toggle */}
-      <div
-        onClick={toggleCollectionMode}
-        className="flex-[3] flex items-center gap-1.5 rounded-xl px-2 py-2.5 cursor-pointer outline-none active:scale-95 transition select-none border"
-        style={{
-          background: collectionMode ? "#ebf6f5" : "#fff",
-          borderColor: collectionMode ? "#5cbdb9" : "#e9ecef",
-        }}
-      >
-        <span className="text-sm shrink-0 leading-none">{collectionMode ? "📍" : "🚗"}</span>
-        <span
-          className="text-[10px] font-bold whitespace-nowrap truncate"
-          style={{ color: collectionMode ? "#2d7a78" : "#636e72" }}
+      {showPreview ? (
+        <button
+          onClick={() => alert("Product Preview feature coming soon.")}
+          className="flex-[3] flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 cursor-pointer outline-none active:scale-95 transition select-none border text-[10px] font-semibold"
+          style={{
+            background: "#fff",
+            borderColor: "#e9ecef",
+            color: "#636e72",
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = "#5cbdb9";
+            e.currentTarget.style.color = "#5cbdb9";
+            e.currentTarget.style.background = "#ebf6f5";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = "#e9ecef";
+            e.currentTarget.style.color = "#636e72";
+            e.currentTarget.style.background = "#fff";
+          }}
         >
-          {collectionMode ? "ON" : "OFF"}
-        </span>
+          <span className="text-sm shrink-0 leading-none">👁</span>
+          Preview
+        </button>
+      ) : (
         <div
-          className="w-7 h-3.5 rounded-full relative transition-all shrink-0 ml-auto"
-          style={{ background: collectionMode ? "#5cbdb9" : "#e9ecef" }}
+          onClick={toggleCollectionMode}
+          className="flex-[3] flex items-center gap-1.5 rounded-xl px-2 py-2.5 cursor-pointer outline-none active:scale-95 transition select-none border"
+          style={{
+            background: collectionMode ? "#ebf6f5" : "#fff",
+            borderColor: collectionMode ? "#5cbdb9" : "#e9ecef",
+          }}
         >
+          <span className="text-sm shrink-0 leading-none">{collectionMode ? "📍" : "🚗"}</span>
+          <span
+            className="text-[10px] font-bold whitespace-nowrap truncate"
+            style={{ color: collectionMode ? "#2d7a78" : "#636e72" }}
+          >
+            {collectionMode ? "ON" : "OFF"}
+          </span>
           <div
-            className="w-2.5 h-2.5 rounded-full bg-white absolute top-0.5 transition-all shadow-sm"
-            style={{ left: collectionMode ? "14px" : "2px" }}
-          />
+            className="w-7 h-3.5 rounded-full relative transition-all shrink-0 ml-auto"
+            style={{ background: collectionMode ? "#5cbdb9" : "#e9ecef" }}
+          >
+            <div
+              className="w-2.5 h-2.5 rounded-full bg-white absolute top-0.5 transition-all shadow-sm"
+              style={{ left: collectionMode ? "14px" : "2px" }}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { supabase } from "./lib/supabase";
 import AdminRoute from "./components/AdminRoute";
+import ExcelRoute from "./components/ExcelRoute";
 import EmployeeRoute from "./components/EmployeeRoute";
 
 import AdminLogin from "./pages/Signup";
@@ -112,8 +113,8 @@ function AppShell() {
       <Route path="/admin/employees/:id/edit" element={<AdminRoute><EmployeeEdit /></AdminRoute>} />
       <Route path="/admin/staff" element={<AdminRoute><StaffDashboard /></AdminRoute>} />
       <Route path="/admin/staff/new" element={<AdminRoute><CreateEmployee /></AdminRoute>} />
-      <Route path="/admin/excel" element={<AdminRoute><ExcelImportPage /></AdminRoute>} />
-      <Route path="/admin/excel/:importId" element={<AdminRoute><ExcelImportDetail /></AdminRoute>} />
+      <Route path="/admin/excel" element={<ExcelRoute><ExcelImportPage /></ExcelRoute>} />
+      <Route path="/admin/excel/:importId" element={<ExcelRoute><ExcelImportDetail /></ExcelRoute>} />
       <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
       <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetails />} />
       <Route path="/customers/add" element={<CustomerListPage />} />

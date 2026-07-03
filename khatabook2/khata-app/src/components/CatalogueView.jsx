@@ -114,6 +114,7 @@ function CatalogueView({ isAdmin }) {
           setSearchTerm={setSearchTerm}
           onOpenFilter={() => { setPendingFilter(filterType); setPendingSort(sortType); setShowFilter(true); }}
           activeCount={activeFilterCount}
+          showPreview={true}
         />
       </div>
 
