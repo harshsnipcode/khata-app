@@ -197,28 +197,28 @@ function CataloguePreview() {
   const isEmpty = matrixData.customers.length === 0 || matrixData.products.length === 0;
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-6 relative overflow-hidden select-none animate-fade-in">
-      <div className="max-w-[75%] mx-auto space-y-6 relative z-10">
+    <div className="h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col overflow-hidden select-none animate-fade-in">
+      <div className="w-full flex flex-col flex-1 min-h-0 px-3 md:px-4 pt-3 md:pt-4 pb-2 md:pb-3 gap-2 md:gap-3">
         
         {/* Header Section */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/5 pb-4">
-          <div className="space-y-1">
-            <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
-              Daily Product Distribution Matrix
+        <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-2 shrink-0">
+          <div className="space-y-0.5">
+            <h1 className="text-sm md:text-xl font-bold tracking-tight text-[var(--text-primary)]">
+              Distribution Matrix
             </h1>
-            <p className="text-xs text-[var(--text-secondary)] font-medium">
+            <p className="text-[10px] md:text-xs text-[var(--text-secondary)] font-medium">
               {isEmpty 
-                ? "Select a date or date range to view distribution" 
+                ? "Select a date or range to view sheet" 
                 : filterMode === "single" 
-                  ? `Showing distribution sheet for ${getFormattedDate(selectedDate)}` 
-                  : `Showing distribution sheet from ${getFormattedDate(startDate)} to ${getFormattedDate(endDate)}`}
+                  ? `Showing sheet for ${getFormattedDate(selectedDate)}` 
+                  : `Showing sheet from ${getFormattedDate(startDate)} to ${getFormattedDate(endDate)}`}
             </p>
           </div>
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-1.5 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95"
+            className="flex items-center gap-1 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm"
           >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="w-3 h-3 md:w-3.5 md:h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12" />
               <polyline points="12 19 5 12 12 5" />
             </svg>
@@ -226,16 +226,16 @@ function CataloguePreview() {
           </button>
         </div>
 
-        {/* Toolbar: Filters (Toggle Mode + Date inputs) & Transpose button */}
-        <div className="flex flex-wrap items-center justify-between gap-4 bg-[var(--surface)] border border-[var(--border)] p-4 rounded-2xl shadow-sm">
+        {/* Toolbar: Filters & Transpose button */}
+        <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between bg-[var(--surface)] border border-[var(--border)] p-2 md:p-3 rounded-xl shadow-sm shrink-0">
           
-          <div className="flex flex-wrap items-center gap-6">
-            {/* Mode Toggle Button Group */}
-            <div className="flex bg-slate-900/40 p-1 rounded-xl border border-white/5">
+          {/* Row 1: Mode Switcher */}
+          <div className="w-full md:w-auto flex items-center justify-between md:justify-start gap-4">
+            <div className="flex bg-slate-900/40 p-0.5 rounded-lg border border-white/5 w-full md:w-auto">
               <button
                 type="button"
                 onClick={() => setFilterMode("single")}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer outline-none ${
+                className={`flex-1 md:flex-none text-center px-2 py-1 md:px-3 md:py-1.5 rounded-md text-[9px] md:text-[10px] font-bold uppercase tracking-wider transition cursor-pointer outline-none ${
                   filterMode === "single"
                     ? "bg-[var(--primary)] text-white shadow-sm"
                     : "text-[var(--text-secondary)] hover:text-white"
@@ -246,7 +246,7 @@ function CataloguePreview() {
               <button
                 type="button"
                 onClick={() => setFilterMode("range")}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer outline-none ${
+                className={`flex-1 md:flex-none text-center px-2 py-1 md:px-3 md:py-1.5 rounded-md text-[9px] md:text-[10px] font-bold uppercase tracking-wider transition cursor-pointer outline-none ${
                   filterMode === "range"
                     ? "bg-[var(--primary)] text-white shadow-sm"
                     : "text-[var(--text-secondary)] hover:text-white"
@@ -255,72 +255,75 @@ function CataloguePreview() {
                 Date Range
               </button>
             </div>
+          </div>
 
-            {/* Conditional Date Pickers */}
+          {/* Row 2: Date Picker(s) + Transpose Button */}
+          <div className="flex items-center justify-between md:justify-end gap-2.5 w-full md:w-auto">
             {filterMode === "single" ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Date:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Date:</span>
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-xl px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-sm cursor-pointer"
+                  className="bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-lg px-2.5 py-1 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-xs cursor-pointer"
                 />
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Start:</span>
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Start:</span>
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-xl px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-sm cursor-pointer"
+                    className="w-[95px] md:w-auto bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-lg px-1.5 py-1 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-xs cursor-pointer"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">End:</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">End:</span>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-xl px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-sm cursor-pointer"
+                    className="w-[95px] md:w-auto bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-lg px-1.5 py-1 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-xs cursor-pointer"
                   />
                 </div>
               </div>
             )}
+
+            <button
+              onClick={() => setIsTransposed(!isTransposed)}
+              className="flex items-center gap-1 bg-transparent hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 rounded-lg md:rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm"
+            >
+              <span>🔄</span>
+              <span className="hidden xs:inline">Transpose</span>
+            </button>
           </div>
 
-          <button
-            onClick={() => setIsTransposed(!isTransposed)}
-            className="flex items-center gap-2 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shadow-sm"
-          >
-            <span>🔄</span>
-            <span>Transpose</span>
-          </button>
         </div>
 
         {/* Matrix Container */}
         {loading ? (
-          <div className="card rounded-3xl py-24 text-center text-[var(--text-secondary)] font-bold animate-pulse uppercase tracking-widest">
+          <div className="card rounded-2xl flex-1 flex items-center justify-center text-[var(--text-secondary)] font-bold animate-pulse uppercase tracking-widest text-xs md:text-sm">
             Loading Matrix Data...
           </div>
         ) : isEmpty ? (
-          <div className="card border-dashed rounded-3xl py-24 text-center text-[var(--text-secondary)]">
+          <div className="card border-dashed rounded-2xl flex-1 flex flex-col items-center justify-center text-[var(--text-secondary)]">
             <span className="text-3xl block mb-3">📦</span>
-            <p className="font-bold uppercase tracking-widest text-sm text-[var(--text-primary)]">No Product Distributions</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1.5 font-medium">
+            <p className="font-bold uppercase tracking-widest text-xs md:text-sm text-[var(--text-primary)]">No Product Distributions</p>
+            <p className="text-[10px] md:text-xs text-[var(--text-muted)] mt-1.5 font-medium">
               No product transactions found for the selected period.
             </p>
           </div>
         ) : (
-          <div className="card rounded-3xl p-5 shadow-sm space-y-4">
-            <div className="overflow-auto border border-[var(--border)] rounded-2xl max-h-[65vh] max-w-full">
-              <table className="min-w-full text-sm border-collapse">
+          <div className="card rounded-2xl flex-1 min-h-0 flex flex-col p-0 overflow-hidden shadow-sm">
+            <div className="flex-1 min-h-0 overflow-auto border border-[var(--border)] rounded-2xl">
+              <table className="min-w-full text-xs md:text-sm border-collapse">
                 <thead>
                   <tr className="bg-[var(--primary-light)] sticky top-0 z-30">
                     {/* Top-Left Corner Header (Sticky left + top) */}
-                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-left whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky left-0 top-0 z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                    <th className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-left whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky left-0 top-0 z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                       {isTransposed ? "Product" : "Customer"}
                     </th>
                     {/* Column Headers */}
@@ -330,7 +333,7 @@ function CataloguePreview() {
                           return (
                             <th
                               key={prodKey}
-                              className="px-4 py-3 text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20"
+                              className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20"
                             >
                               {p.name}
                             </th>
@@ -341,14 +344,14 @@ function CataloguePreview() {
                           return (
                             <th
                               key={custKey}
-                              className="px-4 py-3 text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20"
+                              className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20"
                             >
                               {c.name}
                             </th>
                           );
                         })}
                     {/* Row Totals Header */}
-                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20">
+                    <th className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20">
                       TOTAL
                     </th>
                   </tr>
@@ -360,7 +363,7 @@ function CataloguePreview() {
                         return (
                           <tr key={custKey} className="bg-[var(--surface)] hover:bg-slate-900/5 transition">
                             {/* Sticky Left Customer Header cell */}
-                            <td className="px-4 py-3 border-b border-r border-[var(--border)] font-bold bg-[var(--surface)] text-[var(--text-primary)] sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
+                            <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
                               {c.name}
                             </td>
                             {/* Product cells */}
@@ -370,14 +373,14 @@ function CataloguePreview() {
                               return (
                                 <td
                                   key={prodKey}
-                                  className="px-4 py-3 border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]"
+                                  className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]"
                                 >
                                   {qty}
                                 </td>
                               );
                             })}
                             {/* Row Total cell */}
-                            <td className="px-4 py-3 border-b border-r border-[var(--border)] font-bold text-right bg-[var(--surface)] text-[var(--text-primary)] whitespace-nowrap">
+                            <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] whitespace-nowrap">
                               {totals.rowTotals[custKey] || 0}
                             </td>
                           </tr>
@@ -388,7 +391,7 @@ function CataloguePreview() {
                         return (
                           <tr key={prodKey} className="bg-[var(--surface)] hover:bg-slate-900/5 transition">
                             {/* Sticky Left Product Header cell */}
-                            <td className="px-4 py-3 border-b border-r border-[var(--border)] font-bold bg-[var(--surface)] text-[var(--text-primary)] sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
+                            <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
                               {p.name}
                             </td>
                             {/* Customer cells */}
@@ -398,14 +401,14 @@ function CataloguePreview() {
                               return (
                                 <td
                                   key={custKey}
-                                  className="px-4 py-3 border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]"
+                                  className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]"
                                 >
                                   {qty}
                                 </td>
                               );
                             })}
                             {/* Row Total cell */}
-                            <td className="px-4 py-3 border-b border-r border-[var(--border)] font-bold text-right bg-[var(--surface)] text-[var(--text-primary)] whitespace-nowrap">
+                            <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] whitespace-nowrap">
                               {totals.rowTotals[prodKey] || 0}
                             </td>
                           </tr>
@@ -415,7 +418,7 @@ function CataloguePreview() {
                 <tfoot>
                   <tr className="bg-[var(--primary-light)] sticky bottom-0 z-30">
                     {/* Sticky Left Bottom "TOTAL" cell */}
-                    <td className="px-4 py-3 border-b border-r border-[var(--border)] font-bold bg-[var(--primary-light)] text-[var(--primary)] sticky left-0 bottom-0 z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
+                    <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky left-0 bottom-0 z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
                       TOTAL
                     </td>
                     {/* Column Totals cells */}
@@ -425,7 +428,7 @@ function CataloguePreview() {
                           return (
                             <td
                               key={prodKey}
-                              className="px-4 py-3 border-b border-r border-[var(--border)] font-bold text-right bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap"
+                              className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap"
                             >
                               {totals.colTotals[prodKey] || 0}
                             </td>
@@ -436,14 +439,14 @@ function CataloguePreview() {
                           return (
                             <td
                               key={custKey}
-                              className="px-4 py-3 border-b border-r border-[var(--border)] font-bold text-right bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap"
+                              className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap"
                             >
                               {totals.colTotals[custKey] || 0}
                             </td>
                           );
                         })}
                     {/* Grand Total cell */}
-                    <td className="px-4 py-3 border-b border-r border-[var(--border)] font-black text-right bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap">
+                    <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-black text-right text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap">
                       {totals.grandTotal}
                     </td>
                   </tr>
