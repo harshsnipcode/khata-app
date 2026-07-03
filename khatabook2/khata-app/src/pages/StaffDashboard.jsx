@@ -153,16 +153,6 @@ function StaffDashboard() {
     return employeeSalaries.reduce((sum, emp) => sum + (emp.cumulativeDue || 0), 0);
   }, [employeeSalaries]);
 
-  const todayStats = useMemo(() => {
-    let present = 0, absent = 0, paidLeave = 0;
-    Object.values(todayAttendance).forEach((status) => {
-      if (status === "present") present++;
-      else if (status === "absent") absent++;
-      else if (status === "paid_leave") paidLeave++;
-    });
-    return { present, absent, paidLeave };
-  }, [todayAttendance]);
-
   const filteredEmployees = useMemo(() => {
     let list = [...employeeSalaries];
 
@@ -222,48 +212,16 @@ function StaffDashboard() {
           {/* Top Summary Card */}
           <div className="card rounded-3xl p-6 shadow-md">
             {loading ? (
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <div className="h-3 w-24 bg-[var(--border)] rounded animate-pulse mb-3" />
-                  <div className="h-8 w-32 bg-[var(--border)] rounded animate-pulse" />
-                  <div className="h-3 w-20 bg-[var(--border)] rounded animate-pulse mt-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-3 w-28 bg-[var(--border)] rounded animate-pulse mb-2" />
-                  <div className="flex gap-3">
-                    <div className="h-5 w-16 bg-[var(--border)] rounded animate-pulse" />
-                    <div className="h-5 w-16 bg-[var(--border)] rounded animate-pulse" />
-                    <div className="h-5 w-16 bg-[var(--border)] rounded animate-pulse" />
-                  </div>
-                </div>
+              <div>
+                <div className="h-3 w-24 bg-[var(--border)] rounded animate-pulse mb-3" />
+                <div className="h-8 w-32 bg-[var(--border)] rounded animate-pulse" />
+                <div className="h-3 w-20 bg-[var(--border)] rounded animate-pulse mt-2" />
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider mb-1">Total Due Salary</p>
-                  <p className="text-[var(--primary)] text-3xl font-bold">₹{Math.round(totalDue).toLocaleString()}</p>
-                  <p className="text-[var(--text-muted)] text-xs font-medium mt-1">for {employees.length} staff</p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider mb-2">Today's Attendance</p>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#2d6a4f]" />
-                      <span className="font-semibold text-[var(--text-primary)]">{todayStats.present}</span>
-                      <span className="text-[var(--text-muted)] text-[10px]">Present</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#e76f51]" />
-                      <span className="font-semibold text-[var(--text-primary)]">{todayStats.absent}</span>
-                      <span className="text-[var(--text-muted)] text-[10px]">Absent</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#636e72]" />
-                      <span className="font-semibold text-[var(--text-primary)]">{todayStats.paidLeave}</span>
-                      <span className="text-[var(--text-muted)] text-[10px]">Leave</span>
-                    </span>
-                  </div>
-                </div>
+              <div>
+                <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider mb-1">Total Due Salary</p>
+                <p className="text-[var(--primary)] text-3xl font-bold">₹{Math.round(totalDue).toLocaleString()}</p>
+                <p className="text-[var(--text-muted)] text-xs font-medium mt-1">for {employees.length} staff</p>
               </div>
             )}
           </div>
