@@ -38,6 +38,7 @@ import CollectionRouteEditor from "./pages/CollectionRouteEditor";
 import ExcelImportPage from "./pages/ExcelImportPage";
 import ExcelImportDetail from "./pages/ExcelImportDetail";
 import DownloadExcelPage from "./pages/DownloadExcelPage";
+import CataloguePreview from "./pages/CataloguePreview";
 import ErrorBoundary from "./lib/ErrorBoundary";
 
 function AppShell() {
@@ -126,6 +127,7 @@ function AppShell() {
       <Route path="/transaction/:id" element={<TransactionDetailPage />} />
 
       {/* Catalogue & Inventory */}
+      <Route path="/catalogue/preview" element={<CataloguePreview />} />
       <Route path="/catalogue/add" element={<AddProductPage />} />
       <Route path="/product/:id" element={<ProductDetails />} />
       <Route path="/product/:id/edit" element={<EditProductPage />} />

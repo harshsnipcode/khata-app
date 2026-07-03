@@ -1,4 +1,7 @@
+import { useNavigate } from "react-router-dom";
+
 function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, collectionMode = false, toggleCollectionMode, showPreview = false }) {
+  const navigate = useNavigate();
   return (
     <div className="flex items-center gap-2">
       {/* Merged Search + Filter container */}
@@ -75,7 +78,7 @@ function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, c
 
       {showPreview ? (
         <button
-          onClick={() => alert("Product Preview feature coming soon.")}
+          onClick={() => navigate("/catalogue/preview")}
           className="flex-[3] flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 cursor-pointer outline-none active:scale-95 transition select-none border text-[10px] font-semibold"
           style={{
             background: "#fff",
