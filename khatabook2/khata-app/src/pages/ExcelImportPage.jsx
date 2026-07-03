@@ -6,14 +6,29 @@ import Navbar from "../components/Navbar";
 import ImportStatusBadge from "../components/ImportStatusBadge";
 import { supabase } from "../lib/supabase";
 import { createGaveTransaction } from "../lib/transactionService";
+import { collectExcelRowItems } from "../lib/excelImportGrouping";
+import { excludeTotalSummaries } from "../lib/excelImportValidation";
 import {
   hashFile,
   normalizeImportName,
   parseExcelWorkbook,
-  quantityFromCell,
 } from "../lib/excelImport";
 
 const EMPTY_REPORT = { unknownCustomers: [], unknownProducts: [], errors: [] };
+const CATALOGUE_PAGE_SIZE = 1000;
+
+async function fetchAllCatalogueNames() {
+  const names = [];
+  for (let from = 0; ; from += CATALOGUE_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("name")
+      .range(from, from + CATALOGUE_PAGE_SIZE - 1);
+    if (error) throw error;
+    names.push(...(data || []).map((product) => product.name));
+    if (!data || data.length < CATALOGUE_PAGE_SIZE) return names;
+  }
+}
 
 function relationErrorMessage(error) {
   if (error?.code === "42P01" || error?.message?.includes("import_history")) {
@@ -115,10 +130,11 @@ function ExcelImportPage() {
         `${item.customer_id}:${item.product_id}`,
         Number(item.custom_price),
       ]));
-      const productHeaders = prepared.parsed.headers.slice(1);
+      const processingView = excludeTotalSummaries(prepared.parsed);
+      const productHeaders = processingView.productHeaders;
       const unknownProducts = [...new Set(productHeaders.filter((name) => !productMap.has(normalizeImportName(name))))];
       const unknownCustomers = [...new Set(
-        prepared.parsed.rows
+        processingView.rows
           .map((row) => row.customerName)
           .filter((name) => name && !customerMap.has(normalizeImportName(name))),
       )];
@@ -129,45 +145,36 @@ function ExcelImportPage() {
       let rowsSkipped = 0;
       let totalQuantity = 0;
 
-      for (const row of prepared.parsed.rows) {
+      for (const row of processingView.rows) {
         const customer = customerMap.get(normalizeImportName(row.customerName));
-        for (let columnIndex = 0; columnIndex < row.values.length; columnIndex += 1) {
-          const quantityResult = quantityFromCell(row.values[columnIndex]);
-          if (quantityResult.kind === "empty") continue;
+        const groupedRow = collectExcelRowItems({
+          row,
+          customer,
+          productHeaders,
+          productMap,
+          priceMap,
+        });
+        rowsSkipped += groupedRow.skipped;
+        errors.push(...groupedRow.errors);
 
-          const productName = productHeaders[columnIndex];
-          const product = productMap.get(normalizeImportName(productName));
-          if (quantityResult.kind === "invalid") {
-            rowsSkipped += 1;
-            errors.push(`Row ${row.rowNumber}, ${productName}: ${quantityResult.message}`);
-            continue;
-          }
-          if (!row.customerName) {
-            rowsSkipped += 1;
-            errors.push(`Row ${row.rowNumber}: customer name is blank.`);
-            continue;
-          }
-          if (!customer || !product) {
-            rowsSkipped += 1;
-            continue;
-          }
+        if (!customer || groupedRow.items.length === 0) continue;
 
-          const price = priceMap.get(`${customer.id}:${product.id}`) ?? Number(product.sale_price);
-          try {
-            await createGaveTransaction({
-              customerId: customer.id,
-              createdBy: uploader,
-              importHistoryId: historyId,
-              items: [{ product, quantity: quantityResult.quantity, price }],
-            });
-            transactionsCreated += 1;
-            totalQuantity += quantityResult.quantity;
-            processedCustomers.add(customer.id);
-            processedProducts.add(product.id);
-          } catch (error) {
-            rowsSkipped += 1;
-            errors.push(`Row ${row.rowNumber}, ${productName}: ${error.message || "transaction failed"}`);
+        try {
+          await createGaveTransaction({
+            customerId: customer.id,
+            createdBy: uploader,
+            importHistoryId: historyId,
+            items: groupedRow.items,
+          });
+          transactionsCreated += 1;
+          processedCustomers.add(customer.id);
+          for (const item of groupedRow.items) {
+            totalQuantity += item.quantity;
+            processedProducts.add(item.product.id);
           }
+        } catch (error) {
+          rowsSkipped += groupedRow.items.length;
+          errors.push(`Row ${row.rowNumber}: ${error.message || "transaction failed"}`);
         }
       }
 
@@ -229,10 +236,11 @@ function ExcelImportPage() {
     }
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const [parsed, fileHash] = await Promise.all([
-        parseExcelWorkbook(arrayBuffer),
+      const [catalogueProductNames, fileHash] = await Promise.all([
+        fetchAllCatalogueNames(),
         hashFile(arrayBuffer),
       ]);
+      const parsed = await parseExcelWorkbook(arrayBuffer, catalogueProductNames);
       const { data: duplicate, error } = await supabase
         .from("import_history")
         .select("id, filename, uploaded_at")

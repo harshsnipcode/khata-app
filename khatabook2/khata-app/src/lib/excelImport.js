@@ -12,19 +12,51 @@ function serializableCell(value) {
   return String(value ?? "");
 }
 
-export function parseImportMatrix(inputMatrix, sheetName = "Sheet1") {
+export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", catalogueProductNames = null) {
   const matrix = (inputMatrix || []).map((row) => (row || []).map(serializableCell));
-  while (matrix.length && matrix[matrix.length - 1].every(isEmpty)) matrix.pop();
 
-  if (matrix.length === 0 || matrix[0].every(isEmpty)) {
+  if (matrix.length === 0 || matrix.every((row) => row.every(isEmpty))) {
     throw new Error("Header row missing.");
   }
 
-  const lastHeaderIndex = matrix[0].reduce(
+  let headerRowIndex = 0;
+  let customerColumnIndex = 0;
+
+  if (Array.isArray(catalogueProductNames)) {
+    const catalogueNames = new Set(catalogueProductNames.map(normalizeImportName).filter(Boolean));
+    let detected = null;
+
+    for (let rowIndex = 0; rowIndex < matrix.length && !detected; rowIndex += 1) {
+      const row = matrix[rowIndex];
+      for (let columnIndex = 0; columnIndex < row.length; columnIndex += 1) {
+        if (normalizeImportName(row[columnIndex]) !== "customer") continue;
+        let matchingProducts = 0;
+        for (let scanIndex = 0; scanIndex < row.length; scanIndex += 1) {
+          if (scanIndex !== columnIndex && catalogueNames.has(normalizeImportName(row[scanIndex]))) {
+            matchingProducts += 1;
+            if (matchingProducts >= 2) break;
+          }
+        }
+        if (matchingProducts >= 2) {
+          detected = { rowIndex, columnIndex };
+          break;
+        }
+      }
+    }
+
+    if (!detected) throw new Error("Header row missing.");
+    headerRowIndex = detected.rowIndex;
+    customerColumnIndex = detected.columnIndex;
+  }
+
+  const headerRow = matrix[headerRowIndex] || [];
+  const lastHeaderIndex = headerRow.reduce(
     (last, value, index) => (isEmpty(value) ? last : index),
     -1,
   );
-  const headers = matrix[0].slice(0, lastHeaderIndex + 1).map((value) => String(value ?? "").trim());
+  const headers = headerRow
+    .slice(customerColumnIndex, lastHeaderIndex + 1)
+    .map((value) => String(value ?? "").trim());
 
   if (normalizeImportName(headers[0]) !== "customer") {
     throw new Error('First column must contain customer names and be headed "Customer".');
@@ -42,8 +74,10 @@ export function parseImportMatrix(inputMatrix, sheetName = "Sheet1") {
   }
 
   const rows = [];
-  for (let index = 1; index < matrix.length; index += 1) {
-    const source = matrix[index].slice(0, headers.length);
+  let lastPreviewRowIndex = headerRowIndex;
+  for (let index = headerRowIndex + 1; index < matrix.length; index += 1) {
+    const source = matrix[index].slice(customerColumnIndex, customerColumnIndex + headers.length);
+    if (source.some((value) => !isEmpty(value))) lastPreviewRowIndex = index;
     if (source.every(isEmpty)) continue;
     rows.push({
       rowNumber: index + 1,
@@ -52,15 +86,22 @@ export function parseImportMatrix(inputMatrix, sheetName = "Sheet1") {
     });
   }
 
+  const preview = matrix
+    .slice(headerRowIndex, lastPreviewRowIndex + 1)
+    .map((row) => Array.from(
+      { length: headers.length },
+      (_, columnOffset) => row[customerColumnIndex + columnOffset] ?? null,
+    ));
+
   return {
     sheetName,
     headers,
     rows,
-    preview: [headers, ...rows.map((row) => [row.customerName, ...row.values])],
+    preview,
   };
 }
 
-export async function parseExcelWorkbook(arrayBuffer) {
+export async function parseExcelWorkbook(arrayBuffer, catalogueProductNames = null) {
   let workbook;
   let XLSX;
   try {
@@ -71,12 +112,16 @@ export async function parseExcelWorkbook(arrayBuffer) {
   }
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) throw new Error("Header row missing.");
-  const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+  const worksheet = workbook.Sheets[sheetName];
+  const usedRange = worksheet["!ref"] ? XLSX.utils.decode_range(worksheet["!ref"]) : null;
+  if (!usedRange) throw new Error("Header row missing.");
+  const matrix = XLSX.utils.sheet_to_json(worksheet, {
     header: 1,
     defval: null,
     raw: true,
+    range: { s: { r: 0, c: 0 }, e: usedRange.e },
   });
-  return parseImportMatrix(matrix, sheetName);
+  return parseImportMatrix(matrix, sheetName, catalogueProductNames);
 }
 
 export async function hashFile(arrayBuffer) {

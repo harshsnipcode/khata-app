@@ -35,6 +35,38 @@ test("validates headers without making matching case-sensitive", () => {
   assert.throws(() => parseImportMatrix([["Customer", "P-1", " p-1 "]]), /unique/);
 });
 
+test("detects a catalogue-backed header and crops preview to the table bounds", () => {
+  const matrix = [
+    ["Shiv Shankar Dairy"],
+    ["Morning Delivery Sheet"],
+    ["01 July 2026"],
+    [null, null, "  CUSTOMER  ", "Aamras", "Paneer", "TOTAL"],
+    [null, null, "Harsh Sharma", 2, null, 3],
+    [null, null, "TOTAL", 2, 1, 3],
+    [null, null, null, null, null, null],
+  ];
+  const parsed = parseImportMatrix(matrix, "Transactions", ["Aamras", "Paneer"]);
+
+  assert.deepEqual(parsed.headers, ["CUSTOMER", "Aamras", "Paneer", "TOTAL"]);
+  assert.equal(parsed.rows[0].rowNumber, 5);
+  assert.deepEqual(parsed.rows[0].values, [2, null, 3]);
+  assert.deepEqual(parsed.preview, [
+    ["  CUSTOMER  ", "Aamras", "Paneer", "TOTAL"],
+    ["Harsh Sharma", 2, null, 3],
+    ["TOTAL", 2, 1, 3],
+  ]);
+});
+
+test("requires Customer and two known catalogue products on the same row", () => {
+  assert.throws(
+    () => parseImportMatrix([
+      ["Customer", "Aamras", "Unknown"],
+      ["Customer", "Aamras", "Paneer"],
+    ], "Sheet1", ["Aamras"]),
+    /Header row missing/,
+  );
+});
+
 for (const bookType of ["xlsx", "biff8"]) {
   test(`reads a real ${bookType === "biff8" ? ".xls" : ".xlsx"} workbook`, async () => {
     const workbook = XLSX.utils.book_new();
