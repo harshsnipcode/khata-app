@@ -5,6 +5,7 @@ import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
 import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { createGaveTransaction, updateGaveTransaction } from "../lib/transactionService";
+import { moveCustomerToCollectionQueueEnd } from "../lib/collectionQueue";
 
 function TransactionEntry() {
   const { id } = useParams();
@@ -225,6 +226,17 @@ function TransactionEntry() {
       }
 
       if (!isEditing) {
+        const { data: collectionSettings } = await offlineSupabase
+          .from("business_settings")
+          .select("settings")
+          .limit(1)
+          .maybeSingle();
+        if (collectionSettings?.settings?.collection_mode_enabled) {
+          moveCustomerToCollectionQueueEnd(id);
+        }
+
+        await offlineSupabase.from("customers").update({ updated_at: new Date().toISOString() }).eq("id", id);
+
         // Auto SMS if enabled (only for new transactions)
         if (customer?.auto_sms_enabled && customer?.phone) {
           try {

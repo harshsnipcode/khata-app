@@ -331,6 +331,16 @@ function EmployeeEdit() {
             Delete Staff
           </button>
         </div>
+
+        {/* Edit Credentials */}
+        <div className="pt-2">
+          <button
+            onClick={() => navigate(`/admin/employees/${id}/credentials`)}
+            className="w-full py-3.5 rounded-2xl border border-[var(--primary)]/30 text-[var(--primary)] font-bold text-xs uppercase tracking-widest hover:bg-[var(--primary-light)] transition cursor-pointer outline-none active:scale-95"
+          >
+            Edit Username / Password
+          </button>
+        </div>
       </div>
 
       {/* Delete Confirmation */}

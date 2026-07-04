@@ -10,6 +10,7 @@ import SearchBar from "../components/SearchBar";
 import FilterModal from "../components/FilterModal";
 import CatalogueView from "../components/CatalogueView";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
+import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
 
 
 /* ── helpers ─────────────────────────────────────────── */
@@ -50,11 +51,19 @@ function applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, 
     const balA = balanceMap[a.id] ?? 0;
     const balB = balanceMap[b.id] ?? 0;
     if (sortType === "recent" || sortType === "oldest") {
-      const aTime = lastActivityMap[a.id] || a.created_at;
-      const bTime = lastActivityMap[b.id] || b.created_at;
+      const aTime = Math.max(
+        new Date(lastActivityMap[a.id] || 0).getTime(),
+        new Date(a.updated_at || 0).getTime(),
+        new Date(a.created_at || 0).getTime(),
+      );
+      const bTime = Math.max(
+        new Date(lastActivityMap[b.id] || 0).getTime(),
+        new Date(b.updated_at || 0).getTime(),
+        new Date(b.created_at || 0).getTime(),
+      );
       return sortType === "recent"
-        ? new Date(bTime) - new Date(aTime)
-        : new Date(aTime) - new Date(bTime);
+        ? bTime - aTime
+        : aTime - bTime;
     }
     if (sortType === "highest") return Math.abs(balB) - Math.abs(balA);
     if (sortType === "lowest")  return Math.abs(balA) - Math.abs(balB);
@@ -109,6 +118,7 @@ function AdminHome() {
   const [showFilter,    setShowFilter]    = useState(false);
 
   const [collectionMode, setCollectionMode] = useState(false);
+  const [collectionQueue, setCollectionQueue] = useState(() => getCollectionQueue());
   const [settingsId, setSettingsId] = useState(null);
 
   /* ── data loading ── */
@@ -228,10 +238,15 @@ function AdminHome() {
           return true;
         });
       }
-      return list.sort((a, b) => (a.route_position ?? 9999) - (b.route_position ?? 9999));
+      return applyCollectionQueue(list, collectionQueue);
     }
     return applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType);
-  }, [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType, collectionMode]);
+  }, [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType, collectionMode, collectionQueue]);
+
+  const reloadCollectionOrder = useCallback(() => {
+    resetCollectionQueue();
+    setCollectionQueue([]);
+  }, []);
 
   /* ── active filter badge count ── */
   const activeFilterCount = (filterType !== "all" ? 1 : 0) + (sortType !== "recent" ? 1 : 0);
@@ -311,6 +326,7 @@ function AdminHome() {
                 activeCount={activeFilterCount}
                 collectionMode={collectionMode}
                 toggleCollectionMode={toggleCollectionMode}
+                onReloadCollectionOrder={reloadCollectionOrder}
               />
 
               {/* Active filter pills (quick context) */}
@@ -363,7 +379,11 @@ function AdminHome() {
                     id={customer.id}
                     initial={customer.name?.[0]?.toUpperCase()}
                     name={customer.name}
-                    time={lastActivityMap[customer.id] || customer.created_at}
+                    time={new Date(Math.max(
+                      ...[lastActivityMap[customer.id], customer.updated_at, customer.created_at]
+                        .filter(Boolean)
+                        .map((timestamp) => new Date(timestamp).getTime()),
+                    )).toISOString()}
                     balance={balanceMap[customer.id] ?? 0}
                   />
                 ))}

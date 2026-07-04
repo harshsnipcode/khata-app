@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 
-function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, collectionMode = false, toggleCollectionMode, showPreview = false }) {
+function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, collectionMode = false, toggleCollectionMode, onReloadCollectionOrder, showPreview = false }) {
   const navigate = useNavigate();
   return (
     <div className="flex items-center gap-2">
@@ -50,6 +50,25 @@ function SearchBar({ searchTerm, setSearchTerm, onOpenFilter, activeCount = 0, c
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
+        )}
+
+        {collectionMode && onReloadCollectionOrder && (
+          <>
+            <div className="w-px h-5 shrink-0" style={{ background: "#e9ecef" }} />
+            <button
+              type="button"
+              onClick={onReloadCollectionOrder}
+              title="Reset collection order"
+              aria-label="Reset collection order"
+              className="flex items-center justify-center px-2.5 py-2.5 cursor-pointer outline-none active:scale-95 shrink-0 transition-colors"
+              style={{ color: "#636e72" }}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 11a8.1 8.1 0 1 0 2 5.3" />
+                <polyline points="20 4 20 11 13 11" />
+              </svg>
+            </button>
+          </>
         )}
 
         {/* Vertical divider */}

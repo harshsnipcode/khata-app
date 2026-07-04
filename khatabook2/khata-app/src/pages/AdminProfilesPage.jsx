@@ -16,6 +16,7 @@ function AdminProfilesPage() {
   const [formData, setFormData] = useState({ profile_name: "", username: "", password: "" });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [showPassword, setShowPassword] = useState(true);
 
   useEffect(() => {
     setCurrentUsername((localStorage.getItem("khata_user") || "").toLowerCase());
@@ -342,13 +343,35 @@ function AdminProfilesPage() {
                   <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider mb-1">
                     Password {editingId && "(leave blank to keep current)"}
                   </p>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => handleFormChange("password", e.target.value)}
-                    className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition"
-                    placeholder={editingId ? "New password (optional)" : "Enter password"}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={formData.password}
+                      onChange={(e) => handleFormChange("password", e.target.value)}
+                      className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-2.5 pr-10 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition"
+                      placeholder={editingId ? "New password (optional)" : "Enter password"}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none p-1"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? (
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                          <line x1="1" y1="1" x2="23" y2="23" />
+                          <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 

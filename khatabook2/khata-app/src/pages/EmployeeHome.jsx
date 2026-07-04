@@ -48,8 +48,8 @@ function applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, 
     const balA = balanceMap[a.id] ?? 0;
     const balB = balanceMap[b.id] ?? 0;
     if (sortType === "recent" || sortType === "oldest") {
-      const aTime = lastActivityMap[a.id] || a.created_at;
-      const bTime = lastActivityMap[b.id] || b.created_at;
+      const aTime = lastActivityMap[a.id] || a.updated_at || a.created_at;
+      const bTime = lastActivityMap[b.id] || b.updated_at || b.created_at;
       return sortType === "recent"
         ? new Date(bTime) - new Date(aTime)
         : new Date(aTime) - new Date(bTime);

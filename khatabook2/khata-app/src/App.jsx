@@ -12,6 +12,7 @@ import AdminHome from "./pages/AdminHome";
 import EmployeeSetup from "./pages/EmployeeSetup";
 import EmployeeDetails from "./pages/EmployeeDetails";
 import EmployeeEdit from "./pages/EmployeeEdit";
+import EmployeeCredentialsEdit from "./pages/EmployeeCredentialsEdit";
 import StaffDashboard from "./pages/StaffDashboard";
 import CreateEmployee from "./pages/CreateEmployee";
 import CustomerTransactionsReport from "./pages/CustomerTransactionsReport";
@@ -112,6 +113,7 @@ function AppShell() {
       <Route path="/admin/employees/setup" element={<AdminRoute><EmployeeSetup /></AdminRoute>} />
       <Route path="/admin/employees/:id" element={<AdminRoute><EmployeeDetails /></AdminRoute>} />
       <Route path="/admin/employees/:id/edit" element={<AdminRoute><EmployeeEdit /></AdminRoute>} />
+      <Route path="/admin/employees/:id/credentials" element={<AdminRoute><EmployeeCredentialsEdit /></AdminRoute>} />
       <Route path="/admin/staff" element={<AdminRoute><StaffDashboard /></AdminRoute>} />
       <Route path="/admin/staff/new" element={<AdminRoute><CreateEmployee /></AdminRoute>} />
       <Route path="/admin/excel" element={<ExcelRoute><ExcelImportPage /></ExcelRoute>} />

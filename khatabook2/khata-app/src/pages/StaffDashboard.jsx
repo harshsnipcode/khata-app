@@ -414,7 +414,7 @@ function StaffDashboard() {
       <FloatingButton
         onClick={() => navigate("/admin/staff/new")}
         isVisible={true}
-        label="+ Add Employee"
+        label="Add Employee"
       />
 
     </div>
