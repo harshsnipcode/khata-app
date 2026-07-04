@@ -124,16 +124,22 @@ function CustomerTransactionsReport() {
   }, [transactions, effectiveDates, searchTerm, customerMap]);
 
   const summary = useMemo(() => {
-    let totalGave = 0, totalGot = 0;
+    let totalGave = 0, totalGot = 0, onlineGot = 0, cashGot = 0;
     filteredTransactions.forEach((t) => {
       if (t.type === "gave") totalGave += Number(t.amount);
-      else totalGot += Number(t.amount);
+      else {
+        totalGot += Number(t.amount);
+        if (t.payment_mode === "online") onlineGot += Number(t.amount);
+        else cashGot += Number(t.amount);
+      }
     });
     return {
       netBalance: totalGot - totalGave,
       totalEntries: filteredTransactions.length,
       totalGave,
       totalGot,
+      onlineGot,
+      cashGot,
     };
   }, [filteredTransactions]);
 
@@ -252,6 +258,13 @@ function CustomerTransactionsReport() {
           <div className="card rounded-2xl p-4 shadow-sm">
             <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">You Got</p>
             <p className="text-lg font-bold mt-1 text-[#52b788]">₹{formatINR(summary.totalGot)}</p>
+            <p className="text-[9px] font-semibold mt-0.5 whitespace-nowrap">
+              <span className="text-[var(--text-muted)]">Online</span>{' '}
+              <span className="text-[#52b788]">₹{formatINR(summary.onlineGot)}</span>
+              <span className="text-[var(--text-muted)]"> • </span>
+              <span className="text-[var(--text-muted)]">Cash</span>{' '}
+              <span className="text-[#52b788]">₹{formatINR(summary.cashGot)}</span>
+            </p>
           </div>
         </div>
 

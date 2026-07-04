@@ -27,10 +27,7 @@ const getFormattedDate = (dateStr) => {
 function CataloguePreview() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [filterMode, setFilterMode] = useState("single"); // "single" | "range"
   const [selectedDate, setSelectedDate] = useState(getTodayString());
-  const [startDate, setStartDate] = useState(getTodayString());
-  const [endDate, setEndDate] = useState(getTodayString());
   const [isTransposed, setIsTransposed] = useState(false);
   const [data, setData] = useState({
     customers: [],
@@ -85,17 +82,13 @@ function CataloguePreview() {
     return map;
   }, [data.products]);
 
-  // Filter transactions for selected date or date range
+  // Filter transactions for the selected date
   const filteredTxns = useMemo(() => {
     return data.transactions.filter((t) => {
       const txnDate = t.created_at?.split("T")[0] || t.date;
-      if (filterMode === "single") {
-        return txnDate === selectedDate;
-      } else {
-        return txnDate >= startDate && txnDate <= endDate;
-      }
+      return txnDate === selectedDate;
     });
-  }, [data.transactions, filterMode, selectedDate, startDate, endDate]);
+  }, [data.transactions, selectedDate]);
 
   // Map transactions on this date for fast item lookup
   const filteredTxnsMap = useMemo(() => {
@@ -207,11 +200,9 @@ function CataloguePreview() {
               Distribution Matrix
             </h1>
             <p className="text-[10px] md:text-xs text-[var(--text-secondary)] font-medium">
-              {isEmpty 
-                ? "Select a date or range to view sheet" 
-                : filterMode === "single" 
-                  ? `Showing sheet for ${getFormattedDate(selectedDate)}` 
-                  : `Showing sheet from ${getFormattedDate(startDate)} to ${getFormattedDate(endDate)}`}
+              {isEmpty
+                ? "Select a date to view the sheet"
+                : `Showing sheet for ${getFormattedDate(selectedDate)}`}
             </p>
           </div>
           <button
@@ -226,81 +217,25 @@ function CataloguePreview() {
           </button>
         </div>
 
-        {/* Toolbar: Filters & Transpose button */}
-        <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:justify-between bg-[var(--surface)] border border-[var(--border)] p-2 md:p-3 rounded-xl shadow-sm shrink-0">
-          
-          {/* Row 1: Mode Switcher */}
-          <div className="w-full md:w-auto flex items-center justify-between md:justify-start gap-4">
-            <div className="flex bg-slate-900/40 p-0.5 rounded-lg border border-white/5 w-full md:w-auto">
-              <button
-                type="button"
-                onClick={() => setFilterMode("single")}
-                className={`flex-1 md:flex-none text-center px-2 py-1 md:px-3 md:py-1.5 rounded-md text-[9px] md:text-[10px] font-bold uppercase tracking-wider transition cursor-pointer outline-none ${
-                  filterMode === "single"
-                    ? "bg-[var(--primary)] text-white shadow-sm"
-                    : "text-[var(--text-secondary)] hover:text-white"
-                }`}
-              >
-                Single Date
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterMode("range")}
-                className={`flex-1 md:flex-none text-center px-2 py-1 md:px-3 md:py-1.5 rounded-md text-[9px] md:text-[10px] font-bold uppercase tracking-wider transition cursor-pointer outline-none ${
-                  filterMode === "range"
-                    ? "bg-[var(--primary)] text-white shadow-sm"
-                    : "text-[var(--text-secondary)] hover:text-white"
-                }`}
-              >
-                Date Range
-              </button>
-            </div>
+        {/* Toolbar: Date picker + Transpose button */}
+        <div className="flex items-center justify-end gap-2.5 bg-[var(--surface)] border border-[var(--border)] p-2 md:p-3 rounded-xl shadow-sm shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Date:</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-lg px-2.5 py-1 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-xs cursor-pointer"
+            />
           </div>
 
-          {/* Row 2: Date Picker(s) + Transpose Button */}
-          <div className="flex items-center justify-between md:justify-end gap-2.5 w-full md:w-auto">
-            {filterMode === "single" ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Date:</span>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-lg px-2.5 py-1 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-xs cursor-pointer"
-                />
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Start:</span>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-[95px] md:w-auto bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-lg px-1.5 py-1 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-xs cursor-pointer"
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">End:</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-[95px] md:w-auto bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-lg px-1.5 py-1 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition text-xs cursor-pointer"
-                  />
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => setIsTransposed(!isTransposed)}
-              className="flex items-center gap-1 bg-transparent hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 rounded-lg md:rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm"
-            >
-              <span>🔄</span>
-              <span className="hidden xs:inline">Transpose</span>
-            </button>
-          </div>
-
+          <button
+            onClick={() => setIsTransposed(!isTransposed)}
+            className="flex items-center gap-1 bg-transparent hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 rounded-lg md:rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm"
+          >
+            <span>🔄</span>
+            <span className="hidden xs:inline">Transpose</span>
+          </button>
         </div>
 
         {/* Matrix Container */}

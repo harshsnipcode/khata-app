@@ -1,30 +1,31 @@
 function SummaryCard({ youGive = 0, youGet = 0 }) {
-  const net = youGet - youGive;
-  const isPositive = net > 0;
-  const isNegative = net < 0;
-  const absNet = Math.abs(net);
-  const formatted = new Intl.NumberFormat("en-IN").format(absNet);
+  const fmt = (v) => new Intl.NumberFormat("en-IN").format(v);
 
   return (
     <div
-      className="rounded-2xl px-4 py-3 relative overflow-hidden flex items-center justify-between"
+      className="rounded-2xl px-4 py-3 relative overflow-hidden flex items-stretch"
       style={{
         background: "#ebf6f5",
         border: "1px solid #c8e9e7",
       }}
     >
-      <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#636e72" }}>
-        NET BALANCE
-      </p>
-      <div className="text-right">
-        <p
-          className="text-lg font-black"
-          style={{ color: isPositive ? "#e76f51" : isNegative ? "#52b788" : "#636e72" }}
-        >
-          ₹{formatted}
+      <div className="flex-1 flex flex-col items-center justify-center gap-0.5">
+        <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#636e72" }}>
+          YOU WILL GIVE
         </p>
-        <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "#636e72" }}>
-          {isPositive ? 'YOU WILL GET' : isNegative ? 'YOU WILL GIVE' : 'SETTLED'}
+        <p className="text-lg font-black" style={{ color: "#e76f51" }}>
+          ₹{fmt(youGive)}
+        </p>
+      </div>
+
+      <div className="w-px self-stretch mx-2" style={{ background: "#c8e9e7" }} />
+
+      <div className="flex-1 flex flex-col items-center justify-center gap-0.5">
+        <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#636e72" }}>
+          YOU WILL GET
+        </p>
+        <p className="text-lg font-black" style={{ color: "#52b788" }}>
+          ₹{fmt(youGet)}
         </p>
       </div>
     </div>
