@@ -68,10 +68,15 @@ function calculateSalary(employee, attendanceMap, year, month) {
 
   const daysInMonth = getDaysInMonth(year, month);
   const amount = Number(employee.salary_amount) || 0;
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
 
   let present = 0, absent = 0, paidLeave = 0;
 
   for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(year, month, d);
+    if (dateObj > today) continue;
+
     const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     const status = attendanceMap[key];
     if (status === "absent") absent++;
@@ -104,6 +109,7 @@ function EmployeeDetails() {
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [payments, setPayments] = useState([]);
 
   const loadEmployee = useCallback(async () => {
     const { data } = await supabase.from("employees").select("*").eq("id", id).single();
@@ -121,22 +127,31 @@ function EmployeeDetails() {
     setAttendance(data || []);
   }, [id, currentYear, currentMonth]);
 
+  const loadPayments = useCallback(async () => {
+    const { data } = await supabase
+      .from("salary_payments")
+      .select("amount")
+      .eq("employee_id", id);
+    setPayments(data || []);
+  }, [id]);
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      await Promise.all([loadEmployee(), loadAttendance()]);
+      await Promise.all([loadEmployee(), loadAttendance(), loadPayments()]);
       setLoading(false);
     };
     init();
-  }, [loadEmployee, loadAttendance]);
+  }, [loadEmployee, loadAttendance, loadPayments]);
 
   useEffect(() => {
     const channel = supabase
       .channel(`employee-details-${id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "employee_attendance", filter: `employee_id=eq.${id}` }, () => loadAttendance())
+      .on("postgres_changes", { event: "*", schema: "public", table: "salary_payments", filter: `employee_id=eq.${id}` }, () => loadPayments())
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [id, loadAttendance]);
+  }, [id, loadAttendance, loadPayments]);
 
   const attendanceMap = {};
   attendance.forEach((a) => {
@@ -144,6 +159,8 @@ function EmployeeDetails() {
   });
 
   const cumulativeDue = employee ? cumulativeDueSalary(employee, attendanceMap) : 0;
+  const totalPayments = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const adjustedDue = cumulativeDue - totalPayments;
   const salaryData = employee
     ? calculateSalary(employee, attendanceMap, currentYear, currentMonth)
     : { totalSalary: 0, payableSalary: 0, present: 0, absent: 0, paidLeave: 0 };
@@ -200,6 +217,7 @@ function EmployeeDetails() {
       if (employee.auth_id) {
         await supabase.auth.admin.deleteUser(employee.auth_id);
       }
+      await offlineSupabase.from("salary_payments").delete({ id }).eq("employee_id", id);
       await offlineSupabase.from("employee_attendance").delete({ id }).eq("employee_id", id);
       await offlineSupabase.from("employees").delete({ id }).eq("id", id);
       navigate("/admin/staff", { replace: true });
@@ -253,7 +271,7 @@ function EmployeeDetails() {
             <div className="w-14 h-14 rounded-full bg-[var(--primary-light)] border border-[var(--primary)]/20 flex items-center justify-center text-[var(--primary)] font-bold text-xl shrink-0">
               {employee.username[0]?.toUpperCase() || "?"}
             </div>
-            <div>
+            <div className="flex-1">
               <p
                 onClick={() => navigate(`/admin/employees/${id}/edit`)}
                 className="text-[var(--text-primary)] font-bold text-lg hover:text-[var(--primary)] transition cursor-pointer"
@@ -264,6 +282,12 @@ function EmployeeDetails() {
                 Created {new Date(employee.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })}
               </p>
             </div>
+            <button
+              onClick={() => navigate(`/admin/employees/${id}/summary`)}
+              className="px-4 py-2 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--text-secondary)] font-bold text-xs uppercase tracking-wider hover:border-[var(--primary)] hover:text-[var(--primary)] transition cursor-pointer outline-none"
+            >
+              Summary
+            </button>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -291,7 +315,7 @@ function EmployeeDetails() {
             </div>
             <div className="bg-[var(--primary-light)] border border-[var(--primary)]/20 rounded-2xl p-4">
               <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider mb-1">Total Due</p>
-              <p className="text-[var(--primary)] text-lg font-bold">₹{Math.round(cumulativeDue).toLocaleString()}</p>
+              <p className="text-[var(--primary)] text-lg font-bold">₹{Math.max(0, Math.round(adjustedDue)).toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -402,6 +426,18 @@ function EmployeeDetails() {
                 <span className="text-sm font-bold text-[#636e72]">{salaryData.paidLeave}</span>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Add Payment */}
+        {employee.attendance_enabled && (
+          <div>
+            <button
+              onClick={() => navigate(`/admin/employees/${id}/payment`)}
+              className="w-full py-3.5 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs uppercase tracking-widest transition cursor-pointer outline-none active:scale-95 shadow-sm"
+            >
+              Add Payment
+            </button>
           </div>
         )}
 

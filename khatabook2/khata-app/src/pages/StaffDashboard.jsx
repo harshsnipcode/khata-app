@@ -16,10 +16,15 @@ function calcEmployeeSalary(employee, attendanceMap, year, month) {
 
   const daysInMonth = getDaysInMonth(year, month);
   const amount = Number(employee.salary_amount) || 0;
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
 
   let present = 0, absent = 0, paidLeave = 0;
 
   for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(year, month, d);
+    if (dateObj > today) continue;
+
     const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     const status = attendanceMap[key];
     if (status === "absent") absent++;
@@ -83,6 +88,7 @@ function StaffDashboard() {
   const [attendanceData, setAttendanceData] = useState({});
   const [todayAttendance, setTodayAttendance] = useState({});
   const [loading, setLoading] = useState(true);
+  const [paymentsByEmployee, setPaymentsByEmployee] = useState({});
 
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -114,6 +120,13 @@ function StaffDashboard() {
       .gte("date", start.toISOString().split("T")[0])
       .lte("date", end.toISOString().split("T")[0]);
 
+    const { data: pays } = await supabase.from("salary_payments").select("employee_id, amount");
+    const paymentMap = {};
+    (pays || []).forEach((p) => {
+      paymentMap[p.employee_id] = (paymentMap[p.employee_id] || 0) + Number(p.amount);
+    });
+    setPaymentsByEmployee(paymentMap);
+
     const map = {};
     const todayMap = {};
     (att || []).forEach((a) => {
@@ -133,20 +146,26 @@ function StaffDashboard() {
       .channel("staff-dashboard-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "employee_attendance" }, () => loadData())
       .on("postgres_changes", { event: "*", schema: "public", table: "employees" }, () => loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "salary_payments" }, () => loadData())
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [loadData]);
 
   const employeeSalaries = useMemo(() => {
-    return employees.map((emp) => ({
-      ...emp,
-      salaryCalc: calcEmployeeSalary(emp, attendanceData[emp.id] || {}, currentYear, currentMonth),
-      cumulativeDue: cumulativeDue(emp, attendanceData[emp.id] || {}),
-    }));
-  }, [employees, attendanceData, currentYear, currentMonth]);
+    return employees.map((emp) => {
+      const due = cumulativeDue(emp, attendanceData[emp.id] || {});
+      const paid = paymentsByEmployee[emp.id] || 0;
+      return {
+        ...emp,
+        salaryCalc: calcEmployeeSalary(emp, attendanceData[emp.id] || {}, currentYear, currentMonth),
+        cumulativeDue: due,
+        adjustedDue: Math.max(0, due - paid),
+      };
+    });
+  }, [employees, attendanceData, currentYear, currentMonth, paymentsByEmployee]);
 
   const totalDue = useMemo(() => {
-    return employeeSalaries.reduce((sum, emp) => sum + (emp.cumulativeDue || 0), 0);
+    return employeeSalaries.reduce((sum, emp) => sum + (emp.adjustedDue || 0), 0);
   }, [employeeSalaries]);
 
   const filteredEmployees = useMemo(() => {
@@ -263,7 +282,7 @@ function StaffDashboard() {
                       </div>
                       <div className="flex items-center gap-3 mt-2">
                         <span className="text-xs text-[var(--text-secondary)] font-medium">
-                          Due: <span className="font-bold text-[var(--primary)]">₹{Math.round(emp.cumulativeDue || 0).toLocaleString()}</span>
+                          Due: <span className="font-bold text-[var(--primary)]">₹{Math.round(emp.adjustedDue || 0).toLocaleString()}</span>
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] font-medium">
                           {emp.permissions_enabled ? PERMISSION_SHORT[emp.permission_level] || "Custom" : "Default"}
