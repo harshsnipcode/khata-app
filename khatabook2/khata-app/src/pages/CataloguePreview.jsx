@@ -107,13 +107,14 @@ function CataloguePreview() {
     });
   }, [data.transactionItems, filteredTxnsMap]);
 
-  // Build the distribution matrix & identify active customers/products
+  // Build the distribution matrix from the COMPLETE customer/product lists,
+  // then merge in the selected date's transactions on top.
   const matrixData = useMemo(() => {
     // grid[customerKey][productKey] = quantity sum
     const grid = {};
-    const activeCustKeys = new Set();
-    const activeProdKeys = new Set();
 
+    // 1. Start with every customer, every product quantity implicitly 0
+    // 2. Apply that day's transactions on top
     dateItems.forEach((item) => {
       const txn = filteredTxnsMap[item.transaction_id];
       if (!txn) return;
@@ -125,27 +126,24 @@ function CataloguePreview() {
       const custKey = cust.id || cust.local_uuid;
       const prodKey = prod.id || prod.local_uuid;
 
-      activeCustKeys.add(custKey);
-      activeProdKeys.add(prodKey);
-
       if (!grid[custKey]) grid[custKey] = {};
       grid[custKey][prodKey] = (grid[custKey][prodKey] || 0) + Number(item.quantity);
     });
 
-    // Extract and sort active customers alphabetically
-    const activeCustomers = data.customers
-      .filter((c) => activeCustKeys.has(c.id || c.local_uuid))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    // Include ALL customers, sorted alphabetically (same ordering as before)
+    const allCustomers = [...data.customers].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "")
+    );
 
-    // Extract and sort active products alphabetically
-    const activeProducts = data.products
-      .filter((p) => activeProdKeys.has(p.id || p.local_uuid))
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    // Include ALL products, sorted alphabetically (same ordering as before)
+    const allProducts = [...data.products].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "")
+    );
 
     return {
       grid,
-      customers: activeCustomers,
-      products: activeProducts,
+      customers: allCustomers,
+      products: allProducts,
     };
   }, [dateItems, filteredTxnsMap, customerMap, productMap, data.customers, data.products]);
 
