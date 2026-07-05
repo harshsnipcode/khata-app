@@ -85,10 +85,6 @@ function StaffDashboard() {
   const [loading, setLoading] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState("all");
-
-  const [showFilterModal, setShowFilterModal] = useState(false);
-  const [sortBy, setSortBy] = useState("recent");
 
   const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
 
@@ -161,18 +157,10 @@ function StaffDashboard() {
       list = list.filter((e) => e.username.toLowerCase().includes(term));
     }
 
-    if (filterType === "monthly") list = list.filter((e) => e.salary_type === "monthly" && e.attendance_enabled);
-    else if (filterType === "daily") list = list.filter((e) => e.salary_type === "daily" && e.attendance_enabled);
-
-    list.sort((a, b) => {
-      if (sortBy === "name") return a.username.localeCompare(b.username);
-      if (sortBy === "salary_high") return (b.cumulativeDue || 0) - (a.cumulativeDue || 0);
-      if (sortBy === "salary_low") return (a.cumulativeDue || 0) - (b.cumulativeDue || 0);
-      return new Date(b.created_at) - new Date(a.created_at);
-    });
+    list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     return list;
-  }, [employeeSalaries, searchTerm, filterType, sortBy]);
+  }, [employeeSalaries, searchTerm]);
 
   const handleQuickAttendance = async (employeeId, status) => {
     if (status === "present") {
@@ -226,44 +214,17 @@ function StaffDashboard() {
             )}
           </div>
 
-          {/* Search + Filter */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 relative">
-              <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
-              </svg>
-              <input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl pl-11 pr-5 py-3 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300 text-sm"
-                placeholder="Search Staff"
-              />
-            </div>
-            <button
-              onClick={() => setShowFilterModal(true)}
-              className="p-3 rounded-2xl border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface)] transition cursor-pointer outline-none"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Filter Chips */}
-          <div className="flex gap-2">
-            {["all", "monthly", "daily"].map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilterType(f)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer outline-none ${
-                  filterType === f
-                    ? "bg-[var(--primary)] text-white"
-                    : "bg-[var(--surface)] border border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--border-hover)]"
-                }`}
-              >
-                {f === "all" ? "All" : f === "monthly" ? "Monthly" : "Daily"}
-              </button>
-            ))}
+          {/* Search */}
+          <div className="relative">
+            <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl pl-11 pr-5 py-3 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300 text-sm"
+              placeholder="Search Staff"
+            />
           </div>
 
           {/* Employee Cards */}
@@ -327,87 +288,6 @@ function StaffDashboard() {
             </div>
           )}
         </div>
-
-        {/* Filter Modal */}
-        {showFilterModal && (
-          <div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-6"
-            onClick={() => setShowFilterModal(false)}
-          >
-            <div
-              className="w-full max-w-sm card rounded-3xl p-6 shadow-2xl animate-scale-in"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="text-lg font-bold text-[var(--text-primary)] mb-4">Filter & Sort</h2>
-
-              <div className="space-y-4">
-                <div>
-                  <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider mb-2">Filter By</p>
-                  <div className="space-y-2">
-                    {["all", "monthly", "daily"].map((f) => (
-                      <label
-                        key={f}
-                        onClick={() => setFilterType(f)}
-                        className={`block p-3 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                          filterType === f
-                            ? "border-[var(--primary)] bg-[var(--primary-light)]"
-                            : "border-[var(--border)] hover:border-[var(--border-hover)]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                            filterType === f ? "border-[var(--primary)]" : "border-[var(--border)]"
-                          }`}>
-                            {filterType === f && <span className="w-2 h-2 rounded-full bg-[var(--primary)]" />}
-                          </span>
-                          <span className="text-sm font-semibold text-[var(--text-primary)] capitalize">{f === "all" ? "All" : f}</span>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider mb-2">Sort By</p>
-                  <div className="space-y-2">
-                    {[
-                      { value: "recent", label: "Recently Added" },
-                      { value: "name", label: "By Name (A-Z)" },
-                      { value: "salary_high", label: "Salary Due (High → Low)" },
-                      { value: "salary_low", label: "Salary Due (Low → High)" },
-                    ].map((s) => (
-                      <label
-                        key={s.value}
-                        onClick={() => setSortBy(s.value)}
-                        className={`block p-3 rounded-2xl border-2 cursor-pointer transition-all duration-200 ${
-                          sortBy === s.value
-                            ? "border-[var(--primary)] bg-[var(--primary-light)]"
-                            : "border-[var(--border)] hover:border-[var(--border-hover)]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                            sortBy === s.value ? "border-[var(--primary)]" : "border-[var(--border)]"
-                          }`}>
-                            {sortBy === s.value && <span className="w-2 h-2 rounded-full bg-[var(--primary)]" />}
-                          </span>
-                          <span className="text-sm font-semibold text-[var(--text-primary)]">{s.label}</span>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowFilterModal(false)}
-                className="w-full mt-5 py-3.5 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs uppercase tracking-widest transition cursor-pointer outline-none active:scale-95 shadow-sm"
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        )}
 
       </div>
 
