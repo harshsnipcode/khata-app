@@ -132,7 +132,7 @@ function CollectionRouteEditor() {
                   </p>
                   {customer.route_position !== null && customer.route_position !== undefined && (
                     <p className="text-[10px] font-medium text-[var(--text-muted)]">
-                      Position #{customer.route_position}
+                      Position #{index + 1}
                     </p>
                   )}
                 </div>

@@ -29,6 +29,7 @@ function CustomerTransactionsReport() {
   const [singleDay, setSingleDay] = useState("");
 
   const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
+  const [paymentFilter, setPaymentFilter] = useState(null);
 
   const params = new URLSearchParams(location.search);
   const customerFilterId = Number(params.get("customerId")) || "";
@@ -155,6 +156,15 @@ function CustomerTransactionsReport() {
     }).reverse();
   }, [filteredTransactions]);
 
+  const displayTransactions = useMemo(() => {
+    if (!paymentFilter) return runningBalance;
+    return runningBalance.filter((t) => {
+      if (paymentFilter === "cash") return t.type === "got" && t.payment_mode === "cash";
+      if (paymentFilter === "online") return t.type === "got" && t.payment_mode === "online";
+      return true;
+    });
+  }, [runningBalance, paymentFilter]);
+
   const handleDurationSelect = (key) => {
     setDurationFilter(key);
     if (key === "single_day") setSingleDay(getDateStr(new Date()));
@@ -258,13 +268,27 @@ function CustomerTransactionsReport() {
           <div className="card rounded-2xl p-4 shadow-sm">
             <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">You Got</p>
             <p className="text-lg font-bold mt-1 text-[#52b788]">₹{formatINR(summary.totalGot)}</p>
-            <p className="text-[9px] font-semibold mt-0.5 whitespace-nowrap">
-              <span className="text-[var(--text-muted)]">Online</span>{' '}
-              <span className="text-[#52b788]">₹{formatINR(summary.onlineGot)}</span>
-              <span className="text-[var(--text-muted)]"> • </span>
-              <span className="text-[var(--text-muted)]">Cash</span>{' '}
-              <span className="text-[#52b788]">₹{formatINR(summary.cashGot)}</span>
-            </p>
+            <div className="flex flex-wrap gap-x-1 items-center text-sm font-semibold mt-1">
+              <span className="whitespace-nowrap">
+                <button
+                  onClick={() => setPaymentFilter(paymentFilter === "cash" ? null : "cash")}
+                  className={`inline transition cursor-pointer outline-none ${paymentFilter === "cash" ? "text-[var(--primary)]" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+                >
+                  Cash
+                </button>{' '}
+                <span className={`${paymentFilter === "cash" ? "text-[var(--primary)]" : "text-[#52b788]"}`}>₹{formatINR(summary.cashGot)}</span>
+                <span className="text-[var(--text-muted)]"> • </span>
+              </span>
+              <span className="whitespace-nowrap">
+                <button
+                  onClick={() => setPaymentFilter(paymentFilter === "online" ? null : "online")}
+                  className={`inline transition cursor-pointer outline-none ${paymentFilter === "online" ? "text-[var(--primary)]" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"}`}
+                >
+                  Online
+                </button>{' '}
+                <span className={`${paymentFilter === "online" ? "text-[var(--primary)]" : "text-[#52b788]"}`}>₹{formatINR(summary.onlineGot)}</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -322,17 +346,28 @@ function CustomerTransactionsReport() {
                 <div key={n} className="h-14 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-full" />
               ))}
             </div>
-          ) : runningBalance.length === 0 ? (
+          ) : displayTransactions.length === 0 ? (
             <div className="rounded-2xl card py-12 text-center text-[var(--text-secondary)]">
               <p className="font-bold text-sm">No transactions found.</p>
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
               {/* Table Header */}
-              <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 px-3 py-3 border-b border-[var(--border)] bg-[var(--background)]">
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Total Entries</p>
-                  <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5">{summary.totalEntries}</p>
+              <div className="grid grid-cols-[1fr_80px_80px] gap-2 px-3 py-3 border-b border-[var(--border)] bg-[var(--background)]">
+                <div className="flex items-center gap-2">
+                  {paymentFilter && (
+                    <button
+                      onClick={() => setPaymentFilter(null)}
+                      className="shrink-0 w-7 h-7 flex items-center justify-center text-base font-bold text-gray-600 hover:text-gray-900 transition cursor-pointer outline-none"
+                      title="Clear filter"
+                    >
+                      ←
+                    </button>
+                  )}
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Total Entries</p>
+                    <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5">{paymentFilter ? displayTransactions.length : summary.totalEntries}</p>
+                  </div>
                 </div>
                 <div className="text-center">
                   <p className="text-[9px] font-black uppercase tracking-wider text-[var(--danger)]">You Gave</p>
@@ -342,17 +377,11 @@ function CustomerTransactionsReport() {
                   <p className="text-[9px] font-black uppercase tracking-wider text-[var(--success)]">You Got</p>
                   <p className="text-sm font-bold text-[var(--success)] mt-0.5">₹{formatINR(summary.totalGot)}</p>
                 </div>
-                <div className="text-right pr-2">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Balance</p>
-                  <p className={`text-sm font-bold mt-0.5 ${summary.netBalance > 0 ? "text-[#e76f51]" : summary.netBalance < 0 ? "text-[#52b788]" : "text-[var(--text-primary)]"}`}>
-                    ₹{formatINR(Math.abs(summary.netBalance))}
-                  </p>
-                </div>
               </div>
 
               {/* Transaction Rows */}
               <div className="divide-y divide-[var(--border)]">
-                {runningBalance.map((t) => {
+                {displayTransactions.map((t) => {
                   const cust = customerMap[t.customer_id];
                   const date = new Date(t.created_at || t.date);
                   const isGave = t.type === "gave";
@@ -366,7 +395,7 @@ function CustomerTransactionsReport() {
                       onClick={() => navigate(`/admin/reports/customer-transactions/${t.id}`)}
                       className="px-3 py-2.5 hover:bg-[var(--surface)] cursor-pointer transition-colors"
                     >
-                      <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 items-start">
+                      <div className="grid grid-cols-[1fr_80px_80px] gap-2 items-start">
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-[var(--text-primary)] flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                             <span className="break-words">{description}</span>
@@ -404,11 +433,6 @@ function CustomerTransactionsReport() {
                             <p className="text-sm font-bold text-[var(--text-muted)]">—</p>
                           )}
                         </div>
-                        <div className="text-right pr-2">
-                          <p className="text-[10px] text-[var(--text-muted)] font-medium">
-                            ₹{formatINR(Math.abs(t.runningBal))}
-                          </p>
-                        </div>
                       </div>
                     </div>
                   );
@@ -421,7 +445,7 @@ function CustomerTransactionsReport() {
         {/* Download PDF */}
         <button
           onClick={handleDownloadPDF}
-          disabled={runningBalance.length === 0}
+          disabled={displayTransactions.length === 0}
           className="w-full py-3.5 rounded-2xl bg-[var(--danger)] hover:bg-[#d45a3d] text-white font-bold text-xs uppercase tracking-widest transition cursor-pointer outline-none active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
         >
           Download PDF
