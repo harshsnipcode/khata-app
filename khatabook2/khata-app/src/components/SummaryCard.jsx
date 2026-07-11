@@ -13,7 +13,7 @@ function SummaryCard({ youGive = 0, youGet = 0 }) {
         <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#636e72" }}>
           YOU WILL GIVE
         </p>
-        <p className="text-lg font-black" style={{ color: "#e76f51" }}>
+        <p className="text-lg font-black" style={{ color: "#52b788" }}>
           ₹{fmt(youGive)}
         </p>
       </div>
@@ -24,7 +24,7 @@ function SummaryCard({ youGive = 0, youGet = 0 }) {
         <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#636e72" }}>
           YOU WILL GET
         </p>
-        <p className="text-lg font-black" style={{ color: "#52b788" }}>
+        <p className="text-lg font-black" style={{ color: "#e76f51" }}>
           ₹{fmt(youGet)}
         </p>
       </div>

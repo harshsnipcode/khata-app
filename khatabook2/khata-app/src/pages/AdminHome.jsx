@@ -89,14 +89,14 @@ function AdminHome() {
   useSwipeNavigation({
     onSwipeLeft: () => {
       if (activeTab === "customers") {
-        setActiveTab("catalogue");
+        navigate(location.pathname, { state: { activeTab: "catalogue" }, replace: true });
       } else if (activeTab === "catalogue") {
         navigate("/admin/staff", { state: { activeTab: "employees" } });
       }
     },
     onSwipeRight: () => {
       if (activeTab === "catalogue") {
-        setActiveTab("customers");
+        navigate(location.pathname, { state: { activeTab: "customers" }, replace: true });
       }
     },
   });
