@@ -20,6 +20,11 @@ function EmployeeRoute({ children }) {
         return;
       }
 
+      if (!navigator.onLine) {
+        setAuthorized(true);
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         localStorage.removeItem("khata_role");

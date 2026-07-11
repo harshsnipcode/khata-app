@@ -5,6 +5,7 @@ import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import ImportStatusBadge from "../components/ImportStatusBadge";
 import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { createGaveTransaction } from "../lib/transactionService";
 import { collectExcelRowItems } from "../lib/excelImportGrouping";
 import { excludeTotalSummaries } from "../lib/excelImportValidation";
@@ -60,7 +61,7 @@ function ExcelImportPage() {
 
   const loadHistory = useCallback(async () => {
     setLoadingHistory(true);
-    const { data, error } = await supabase
+    const { data, error } = await offlineSupabase
       .from("import_history")
       .select("id, filename, uploaded_at, uploader, status, import_statistics, is_reimport")
       .order("uploaded_at", { ascending: false });
@@ -232,6 +233,11 @@ function ExcelImportPage() {
 
     if (!/\.(xlsx|xls)$/i.test(file.name)) {
       setMessage("Please upload an .xlsx or .xls file.");
+      return;
+    }
+    if (!navigator.onLine) {
+      setMessage("Bulk Excel import requires an internet connection.");
+      if (inputRef.current) inputRef.current.value = "";
       return;
     }
     try {

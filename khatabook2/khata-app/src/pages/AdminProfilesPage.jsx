@@ -25,6 +25,11 @@ function AdminProfilesPage() {
 
   const fetchAdmins = async () => {
     setLoading(true);
+    if (!navigator.onLine) {
+      setError("Admin profile management requires an internet connection.");
+      setLoading(false);
+      return;
+    }
     try {
       const { data, error: fetchError } = await supabase
         .from("admin_profiles")
@@ -78,6 +83,11 @@ function AdminProfilesPage() {
     }
 
     setSaving(true);
+    if (!navigator.onLine) {
+      setFormError("Admin profile management requires an internet connection.");
+      setSaving(false);
+      return;
+    }
     try {
       const trimmedUsername = formData.username.trim().toLowerCase();
 
@@ -157,6 +167,10 @@ function AdminProfilesPage() {
     if (!confirmed) return;
 
     try {
+      if (!navigator.onLine) {
+        setError("Admin profile management requires an internet connection.");
+        return;
+      }
       await supabase.from("admin_profiles").delete().eq("id", admin.id);
       setSuccess(`Admin "${admin.profile_name}" deleted.`);
       await fetchAdmins();

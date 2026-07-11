@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 
 function CollectionRouteEditor() {
   const navigate = useNavigate();

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { can } from "../lib/permissions";
 
 function ProductDetails() {

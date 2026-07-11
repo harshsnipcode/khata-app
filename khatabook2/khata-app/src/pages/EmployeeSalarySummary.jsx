@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate();

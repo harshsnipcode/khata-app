@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { moveToRecycleBin } from "../lib/offline/db";
 import { requirePermission, can } from "../lib/permissions";
 
@@ -65,7 +64,7 @@ function TransactionDetailPage() {
 
       const { data: txItems } = await supabase
         .from("transaction_items")
-        .select("transaction_id, product_id, quantity, price, products(name)")
+        .select("id, transaction_id, product_id, quantity, price, products(name)")
         .eq("transaction_id", id);
       setItems(txItems || []);
 

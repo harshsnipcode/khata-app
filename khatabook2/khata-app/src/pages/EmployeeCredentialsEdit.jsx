@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function EmployeeCredentialsEdit() {
   const { id } = useParams();
@@ -17,7 +18,7 @@ function EmployeeCredentialsEdit() {
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from("employees").select("*").eq("id", id).single();
+      const { data } = await offlineSupabase.from("employees").select("*").eq("id", id).single();
       if (data) {
         setEmployee(data);
         setUsername(data.username);
@@ -41,6 +42,11 @@ function EmployeeCredentialsEdit() {
     setSaving(true);
 
     try {
+      if (!navigator.onLine) {
+        setError("Employee credential changes require an internet connection.");
+        setSaving(false);
+        return;
+      }
       if (usernameChanged) {
         const newEmail = `${username.trim()}@example.com`;
         if (employee.auth_id) {

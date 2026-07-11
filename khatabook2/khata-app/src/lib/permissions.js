@@ -1,4 +1,4 @@
-import { showToast } from "./offline/toast";
+import { showToast } from "./toast";
 
 const ACTIONS_BY_LEVEL = {
   1: [

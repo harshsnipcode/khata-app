@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 
 function InventoryReport() {
   const navigate = useNavigate();

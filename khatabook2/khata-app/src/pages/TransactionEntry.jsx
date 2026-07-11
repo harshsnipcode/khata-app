@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
 import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { createGaveTransaction, updateGaveTransaction } from "../lib/transactionService";
@@ -46,7 +45,7 @@ function TransactionEntry() {
       if (!isGot) {
         promises.push(
           supabase.from("products").select("*").order("name"),
-          supabase.from("customer_product_prices").select("product_id, custom_price").eq("customer_id", id),
+          supabase.from("customer_product_prices").select("*").eq("customer_id", id),
         );
       }
 

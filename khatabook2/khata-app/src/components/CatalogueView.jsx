@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import ProductCard from "./ProductCard";
 import SearchBar from "./SearchBar";
 import ProductFilterModal from "./ProductFilterModal";

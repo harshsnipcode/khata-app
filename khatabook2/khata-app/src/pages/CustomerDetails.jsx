@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { can } from "../lib/permissions";
 
@@ -45,7 +45,7 @@ function CustomerDetails() {
       if (transactionsWithItems.length > 0) {
         const itemsResult = await supabase
           .from("transaction_items")
-          .select("transaction_id, product_id, quantity, price, products(name)")
+          .select("id, transaction_id, product_id, quantity, price, products(name)")
           .in("transaction_id", transactionsWithItems.map(t => t.id));
 
         if (!itemsResult.error) {

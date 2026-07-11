@@ -1,503 +1,440 @@
-import Dexie from 'dexie';
+const STORAGE_PREFIX = "khata_offline_v2";
+const CACHE_KEY = `${STORAGE_PREFIX}:cache`;
+const QUEUE_KEY = `${STORAGE_PREFIX}:queue`;
+const META_KEY = `${STORAGE_PREFIX}:meta`;
+const RECYCLE_KEY = `${STORAGE_PREFIX}:recycle_bin`;
 
-const db = new Dexie('myBusinessOfflineDB');
+export const OFFLINE_TABLES = [
+  "customers",
+  "products",
+  "transactions",
+  "transaction_items",
+  "customer_product_prices",
+  "product_transactions",
+  "employees",
+  "employee_attendance",
+  "salary_payments",
+  "business_settings",
+  "import_history",
+  "import_batch_recycle_bin",
+];
 
-db.version(1).stores({
-  customers: '++id,local_uuid,created_at',
-  transactions: '++id,local_uuid,created_at',
-  products: '++id,local_uuid,created_at',
-  product_transactions: '++id,local_uuid,created_at',
-  transaction_items: '++id,local_uuid,created_at',
-  customer_product_prices: '++id,local_uuid,created_at',
-  employees: '++id,local_uuid,created_at',
-  employee_attendance: '++id,local_uuid,created_at',
-  sync_queue: 'local_uuid,table,created_offline,synced'
-});
+const FOREIGN_KEYS = ["customer_id", "transaction_id", "product_id", "employee_id"];
 
-const generateUUID = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+function readJson(key, fallback) {
+  if (typeof localStorage === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
   }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
-
-db.version(2).stores({
-  customers: null,
-  transactions: null,
-  products: null,
-  product_transactions: null,
-  transaction_items: null,
-  customer_product_prices: null,
-  employees: null,
-  employee_attendance: null,
-  sync_queue: 'local_uuid,table,created_offline,synced',
-
-  customers_temp: 'local_uuid, id, customer_id, created_at',
-  transactions_temp: 'local_uuid, id, customer_id, created_at',
-  products_temp: 'local_uuid, id, name, created_at',
-  product_transactions_temp: 'local_uuid, id, product_id, created_at',
-  transaction_items_temp: 'local_uuid, id, transaction_id, product_id, created_at',
-  customer_product_prices_temp: 'local_uuid, id, customer_id, product_id, created_at',
-  employees_temp: 'local_uuid, id, auth_id, created_at',
-  employee_attendance_temp: 'local_uuid, id, employee_id, date, created_at',
-}).upgrade(async tx => {
-  const tables = [
-    'customers',
-    'transactions',
-    'products',
-    'product_transactions',
-    'transaction_items',
-    'customer_product_prices',
-    'employees',
-    'employee_attendance'
-  ];
-  for (const table of tables) {
-    try {
-      const oldRows = await tx.table(table).toArray();
-      const newRows = oldRows.map(row => {
-        const local_uuid = row.local_uuid || generateUUID();
-        const id = (row.id !== undefined && row.id !== null) ? row.id : null;
-        return {
-          ...row,
-          local_uuid,
-          id
-        };
-      });
-      if (newRows.length > 0) {
-        await tx.table(`${table}_temp`).bulkAdd(newRows);
-      }
-    } catch (err) {
-      console.error(`Error migrating table ${table} in v2 upgrade:`, err);
-    }
-  }
-});
-
-db.version(4).stores({
-  recycle_bin: 'local_uuid, entity_type, entity_id, entity_name, deleted_at, deleted_by, original_data, restore_deadline',
-}).upgrade(async tx => {
-  // No data migration needed for new table
-});
-
-db.version(5).stores({
-  customers_temp: null, transactions_temp: null,
-  products_temp: null,
-  product_transactions_temp: null,
-  transaction_items_temp: null,
-  customer_product_prices_temp: null,
-  employees_temp: null,
-  employee_attendance_temp: null,
-
-  customers: 'local_uuid, id, customer_id, created_at',
-  transactions: 'local_uuid, id, customer_id, created_at',
-  products: 'local_uuid, id, name, created_at',
-  product_transactions: 'local_uuid, id, product_id, created_at',
-  transaction_items: 'local_uuid, id, transaction_id, product_id, created_at',
-  customer_product_prices: 'local_uuid, id, customer_id, product_id, created_at',
-  employees: 'local_uuid, id, auth_id, created_at',
-  employee_attendance: 'local_uuid, id, employee_id, date, created_at',
-  sync_queue: 'local_uuid,table,created_offline,synced',
-  recycle_bin: 'local_uuid, entity_type, entity_id, entity_name, deleted_at, deleted_by, original_data, restore_deadline'
-}).upgrade(async tx => {
-  const tables = [
-    'customers',
-    'transactions',
-    'products',
-    'product_transactions',
-    'transaction_items',
-    'customer_product_prices',
-    'employees',
-    'employee_attendance'
-  ];
-  for (const table of tables) {
-    try {
-      const tempRows = await tx.table(`${table}_temp`).toArray();
-      if (tempRows.length > 0) {
-        await tx.table(table).bulkAdd(tempRows);
-      }
-    } catch (err) {
-      console.error(`Error migrating table ${table} in v3 upgrade:`, err);
-    }
-  }
-});
-
-db.version(6).stores({
-  customers: 'local_uuid, id, customer_id, created_at, route_position',
-  transactions: 'local_uuid, id, customer_id, created_at',
-  products: 'local_uuid, id, name, created_at',
-  product_transactions: 'local_uuid, id, product_id, created_at',
-  transaction_items: 'local_uuid, id, transaction_id, product_id, created_at',
-  customer_product_prices: 'local_uuid, id, customer_id, product_id, created_at',
-  employees: 'local_uuid, id, auth_id, created_at',
-  employee_attendance: 'local_uuid, id, employee_id, date, created_at',
-  sync_queue: 'local_uuid,table,created_offline,synced',
-  recycle_bin: 'local_uuid, entity_type, entity_id, entity_name, deleted_at, deleted_by, original_data, restore_deadline',
-  business_settings: 'local_uuid, id',
-});
-
-export async function initDB() {
-  await db.open();
 }
 
-export default db;
+function writeJson(key, value) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+export function isOnline() {
+  return typeof navigator !== "undefined" ? navigator.onLine : true;
+}
+
+export function generateUUID() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const random = Math.random() * 16 | 0;
+    const value = char === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+function readMeta() {
+  return readJson(META_KEY, { nextTempId: -1, idMap: {} });
+}
+
+function writeMeta(meta) {
+  writeJson(META_KEY, meta);
+}
+
+export function createTempId() {
+  const meta = readMeta();
+  const id = meta.nextTempId || -1;
+  meta.nextTempId = id - 1;
+  writeMeta(meta);
+  return id;
+}
+
+export function rememberServerId(table, localId, serverId) {
+  if (localId === undefined || localId === null || serverId === undefined || serverId === null) return;
+  const meta = readMeta();
+  meta.idMap ||= {};
+  meta.idMap[`${table}:${localId}`] = serverId;
+  writeMeta(meta);
+}
+
+export function resolveServerId(table, id) {
+  if (id === undefined || id === null) return id;
+  const meta = readMeta();
+  return meta.idMap?.[`${table}:${id}`] ?? id;
+}
+
+export function getCache() {
+  const cache = readJson(CACHE_KEY, {});
+  for (const table of OFFLINE_TABLES) {
+    if (!Array.isArray(cache[table])) cache[table] = [];
+  }
+  return cache;
+}
+
+function dedupeRows(rows = []) {
+  const byStableKey = new Map();
+  const withoutStableKey = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const stableKey = row.id ?? row.local_uuid;
+    if (stableKey === undefined || stableKey === null || stableKey === "") {
+      withoutStableKey.push(row);
+      continue;
+    }
+    const key = String(stableKey);
+    byStableKey.set(key, { ...(byStableKey.get(key) || {}), ...row });
+  }
+  return [...byStableKey.values(), ...withoutStableKey];
+}
+
+function writeCache(cache) {
+  writeJson(CACHE_KEY, cache);
+}
+
+export async function initDB() {
+  if (typeof indexedDB !== "undefined" && !localStorage.getItem(`${STORAGE_PREFIX}:legacy_cleaned`)) {
+    indexedDB.deleteDatabase("myBusinessOfflineDB");
+    localStorage.setItem(`${STORAGE_PREFIX}:legacy_cleaned`, "true");
+  }
+  getCache();
+  readQueue();
+  readRecycleBinRaw();
+}
 
 export async function saveFetchedData(table, rows) {
-  if (!Array.isArray(rows)) return;
-  const tableObj = db.table(table);
-  try {
-    const ids = rows.map(r => r && r.id).filter(id => id !== null && id !== undefined && id !== '');
-    const existingRecords = ids.length > 0 ? await tableObj.where('id').anyOf(ids).toArray() : [];
-    const idToLocalUuidMap = new Map();
-    for (const rec of existingRecords) {
-      if (rec.id !== null && rec.id !== undefined) {
-        idToLocalUuidMap.set(rec.id, rec.local_uuid);
-      }
-    }
-
-    const toPut = rows.map(r => {
-      if (!r || typeof r !== 'object') return null;
-      const { id, ...rest } = r;
-      const validId = (id !== null && id !== undefined && id !== '') ? id : null;
-
-      let local_uuid = r.local_uuid || (validId !== null ? idToLocalUuidMap.get(validId) : null);
-      if (!local_uuid) {
-        local_uuid = generateUUID();
-      }
-
-      return {
-        ...rest,
-        id: validId,
-        local_uuid,
-        synced: true
-      };
-    }).filter(Boolean);
-
-    if (toPut.length > 0) {
-      await tableObj.bulkPut(toPut);
-    }
-  } catch (e) {
-    console.error('saveFetchedData bulkPut error', table, e);
-    for (const r of rows) {
-      if (!r || typeof r !== 'object') continue;
-      try {
-        const { id, ...rest } = r;
-        const validId = (id !== null && id !== undefined && id !== '') ? id : null;
-
-        let local_uuid = r.local_uuid;
-        if (!local_uuid && validId !== null) {
-          const existing = await tableObj.where('id').equals(validId).first();
-          if (existing) {
-            local_uuid = existing.local_uuid;
-          }
-        }
-        if (!local_uuid) {
-          local_uuid = generateUUID();
-        }
-
-        await tableObj.put({
-          ...rest,
-          id: validId,
-          local_uuid,
-          synced: true
-        });
-      } catch (e2) {
-        console.error('saveFetchedData individual put error', table, e2, 'Row:', r);
-      }
-    }
+  if (!OFFLINE_TABLES.includes(table) || !Array.isArray(rows)) return;
+  const cache = getCache();
+  const existing = new Map(dedupeRows(cache[table] || []).map((row) => [String(row.id ?? row.local_uuid), row]));
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const stableKey = row.id ?? row.local_uuid;
+    if (stableKey === undefined || stableKey === null || stableKey === "") continue;
+    const key = String(stableKey);
+    const previous = existing.get(key) || {};
+    existing.set(key, {
+      ...previous,
+      ...row,
+      local_uuid: previous.local_uuid || row.local_uuid || generateUUID(),
+      synced: true,
+      deleted_locally: false,
+    });
   }
+  cache[table] = Array.from(existing.values());
+  writeCache(cache);
 }
 
 export async function getAll(table) {
-  try {
-    const tableObj = db.table(table);
-    return await tableObj.toArray();
-  } catch (e) {
-    console.error('getAll error', table, e);
-    return [];
+  return dedupeRows(getCache()[table] || []).filter((row) => !row.deleted_locally);
+}
+
+function rowKey(row) {
+  return String(row.id ?? row.local_uuid);
+}
+
+export function upsertLocalRows(table, rows) {
+  const cache = getCache();
+  const byKey = new Map(dedupeRows(cache[table] || []).map((row) => [rowKey(row), row]));
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const prepared = {
+      ...row,
+      local_uuid: row.local_uuid || generateUUID(),
+      __local_updated_at: new Date().toISOString(),
+    };
+    byKey.set(rowKey(prepared), { ...(byKey.get(rowKey(prepared)) || {}), ...prepared });
+  }
+  cache[table] = Array.from(byKey.values());
+  writeCache(cache);
+}
+
+export function deleteLocalRows(table, predicate) {
+  const cache = getCache();
+  cache[table] = (cache[table] || []).map((row) => (
+    predicate(row) ? { ...row, deleted_locally: true, __local_updated_at: new Date().toISOString() } : row
+  ));
+  writeCache(cache);
+}
+
+export function removeLocalRows(table, predicate) {
+  const cache = getCache();
+  cache[table] = (cache[table] || []).filter((row) => !predicate(row));
+  writeCache(cache);
+}
+
+export function readQueue() {
+  return readJson(QUEUE_KEY, []);
+}
+
+function writeQueue(queue) {
+  writeJson(QUEUE_KEY, queue);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("sync-status", {
+      detail: { status: queue.length > 0 ? "pending" : "synced" },
+    }));
   }
 }
 
-export async function addOfflineRecord(table, record, operation = 'INSERT') {
-  const local_uuid = record.local_uuid || generateUUID();
-  const created_offline = true;
-  const synced = false;
-  try {
-    const tableObj = db.table(table);
-    const { id, ...rest } = record;
-
-    if (!record.local_uuid) record.local_uuid = local_uuid;
-    if (record.id === undefined) record.id = null;
-
-    const row = {
-      ...rest,
-      local_uuid,
-      created_offline,
-      synced,
-      id: (id !== undefined && id !== null) ? id : null
-    };
-
-    await tableObj.put(row);
-    await db.table('sync_queue').put({ local_uuid, table, operation, payload: record, created_offline, synced });
-    return { local_uuid };
-  } catch (e) {
-    console.error('addOfflineRecord error', e);
-    throw e;
-  }
+export function enqueueOperation(operation) {
+  const queue = readQueue();
+  const now = new Date().toISOString();
+  const entry = {
+    id: generateUUID(),
+    created_at: now,
+    updated_at: now,
+    ...operation,
+  };
+  queue.push(entry);
+  writeQueue(queue);
+  return entry;
 }
 
 export async function getPendingQueue() {
-  return await db.table('sync_queue').where('synced').equals(false).toArray();
+  return readQueue();
 }
 
-export async function removeQueueItem(local_uuid) {
-  await db.table('sync_queue').delete(local_uuid);
+export async function removeQueueItem(id) {
+  writeQueue(readQueue().filter((item) => item.id !== id));
 }
 
-export async function markRecordSynced(table, local_uuid, serverRecord) {
-  try {
-    const tableObj = db.table(table);
-    const existing = await tableObj.where('local_uuid').equals(local_uuid).first();
-    if (!existing) return;
-    const merged = {
-      ...existing,
-      ...serverRecord,
-      synced: true,
-      created_offline: false
-    };
-    if (serverRecord && serverRecord.id) merged.id = serverRecord.id;
-    await tableObj.put(merged);
-    await db.table('sync_queue').where('local_uuid').equals(local_uuid).delete();
-  } catch (e) {
-    console.error('markRecordSynced error', e);
+export function rewriteLocalId(table, localId, serverRecord) {
+  if (!serverRecord?.id || localId === undefined || localId === null || localId === serverRecord.id) return;
+  rememberServerId(table, localId, serverRecord.id);
+  const cache = getCache();
+
+  cache[table] = (cache[table] || []).map((row) => (
+    String(row.id) === String(localId)
+      ? { ...row, ...serverRecord, local_uuid: row.local_uuid || serverRecord.local_uuid, synced: true }
+      : row
+  ));
+
+  for (const dependentTable of OFFLINE_TABLES) {
+    cache[dependentTable] = (cache[dependentTable] || []).map((row) => {
+      const next = { ...row };
+      if (table === "customers" && String(next.customer_id) === String(localId)) next.customer_id = serverRecord.id;
+      if (table === "transactions" && String(next.transaction_id) === String(localId)) next.transaction_id = serverRecord.id;
+      if (table === "products" && String(next.product_id) === String(localId)) next.product_id = serverRecord.id;
+      if (table === "employees" && String(next.employee_id) === String(localId)) next.employee_id = serverRecord.id;
+      return next;
+    });
   }
+
+  const rewrittenQueue = readQueue().map((item) => ({
+    ...item,
+    payload: rewriteForeignKeys(item.payload),
+    filters: rewriteFilters(item.filters || [], item.table),
+  }));
+
+  writeCache(cache);
+  writeQueue(rewrittenQueue);
 }
 
-// Recycle Bin functions
+export function rewriteForeignKeys(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+  if (Array.isArray(payload)) return payload.map(rewriteForeignKeys);
+  const next = { ...payload };
+  for (const key of FOREIGN_KEYS) {
+    if (next[key] === undefined || next[key] === null) continue;
+    const table = key.replace("_id", "s");
+    next[key] = resolveServerId(table, next[key]);
+  }
+  return next;
+}
+
+export function rewriteFilters(filters = [], ownTable = null) {
+  return filters.map((filter) => {
+    if (!filter?.column?.endsWith("_id") && filter?.column !== "id") return filter;
+    let table = null;
+    if (filter.column === "id") table = ownTable;
+    if (filter.column === "customer_id") table = "customers";
+    if (filter.column === "transaction_id") table = "transactions";
+    if (filter.column === "product_id") table = "products";
+    if (filter.column === "employee_id") table = "employees";
+    if (!table) return filter;
+    return { ...filter, value: resolveServerId(table, filter.value) };
+  });
+}
+
+function readRecycleBinRaw() {
+  return readJson(RECYCLE_KEY, []);
+}
+
+function writeRecycleBinRaw(items) {
+  writeJson(RECYCLE_KEY, items);
+}
+
 export async function moveToRecycleBin(entityType, entityId, entityName, originalData, deletedBy) {
-  const local_uuid = generateUUID();
-  const deleted_at = new Date().toISOString();
-  const restore_deadline = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(); // 90 days
-
-  console.log(`[RecycleBin:moveToRecycleBin] called with:`, {
-    entityType,
-    entityId,
-    entityName,
-    originalDataHasCustomerId: 'customer_id' in (originalData || {}),
-    originalDataCustomerId: originalData?.customer_id,
-    originalDataType: typeof originalData?.customer_id,
-    originalDataKeys: Object.keys(originalData || {}),
-  });
-
-  // ALWAYS use the passed originalData as source of truth (has all fields)
-  // Only extract local_uuid from Dexie to preserve primary key, NEVER replace data
-  let dataToStore = { ...originalData };
-  try {
-    const localRecord = await db.table(entityType).where('id').equals(Number(entityId)).first();
-    if (localRecord && localRecord.local_uuid) {
-      dataToStore.local_uuid = localRecord.local_uuid;
-      console.log(`[RecycleBin:moveToRecycleBin] Preserved local_uuid from Dexie:`, localRecord.local_uuid);
-    } else {
-      console.log(`[RecycleBin:moveToRecycleBin] No local Dexie record found, using originalData's local_uuid`);
-    }
-  } catch (e) {
-    console.error(`[RecycleBin:moveToRecycleBin] Error reading local record:`, e);
-  }
-
-  // Ensure local_uuid exists
-  if (!dataToStore.local_uuid) {
-    dataToStore.local_uuid = local_uuid;
-  }
-
-  console.log(`[RecycleBin:moveToRecycleBin] dataToStore before JSON.stringify:`, {
-    hasCustomerId: 'customer_id' in dataToStore,
-    customerId: dataToStore.customer_id,
-    customerIdType: typeof dataToStore.customer_id,
-    keys: Object.keys(dataToStore),
-  });
-
-  const record = {
-    local_uuid,
+  const now = new Date();
+  const item = {
+    local_uuid: generateUUID(),
     entity_type: entityType,
     entity_id: entityId,
     entity_name: entityName,
-    deleted_at,
-    deleted_by: deletedBy || localStorage.getItem('khata_user') || 'unknown',
-    original_data: JSON.stringify(dataToStore),
-    restore_deadline,
+    deleted_at: now.toISOString(),
+    deleted_by: deletedBy || "system",
+    original_data: JSON.stringify(originalData || {}),
+    restore_deadline: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString(),
   };
-
-  console.log(`[RecycleBin:moveToRecycleBin] Stored in recycle bin, original_data length:`, record.original_data.length);
-
-  await db.table('recycle_bin').put(record);
-  return local_uuid;
+  writeRecycleBinRaw([item, ...readRecycleBinRaw()]);
+  return item;
 }
 
 export async function getRecycleBin() {
-  try {
-    const items = await db.table('recycle_bin').toArray();
-    return items.map(item => ({
+  return readRecycleBinRaw()
+    .map((item) => ({
       ...item,
-      original_data: JSON.parse(item.original_data),
-    }));
-  } catch (e) {
-    console.error('getRecycleBin error', e);
-    return [];
-  }
+      original_data: typeof item.original_data === "string"
+        ? JSON.parse(item.original_data || "{}")
+        : item.original_data,
+    }))
+    .sort((a, b) => new Date(b.deleted_at) - new Date(a.deleted_at));
 }
 
 export async function restoreFromRecycleBin(local_uuid) {
   try {
-    const item = await db.table('recycle_bin').get(local_uuid);
-    if (!item) return { success: false, error: 'Item not found' };
+    const rawItems = readRecycleBinRaw();
+    const item = rawItems.find((entry) => entry.local_uuid === local_uuid);
+    if (!item) return { success: false, error: "Item not found" };
 
-    const originalData = JSON.parse(item.original_data);
+    const originalData = typeof item.original_data === "string"
+      ? JSON.parse(item.original_data || "{}")
+      : item.original_data;
     const entityType = item.entity_type;
+    let data = originalData;
 
-    // Handle new wrapper format: { transaction: {...}, transaction_items: [...] }
-    if (entityType === "transactions" && originalData.transaction) {
-      const transactionData = originalData.transaction;
-      const itemsData = originalData.transaction_items || [];
-
-      console.log(`[RecycleBin] Restoring transaction with ${itemsData.length} item(s):`, {
-        entityType,
-        entityId: item.entity_id,
-        originalDataId: transactionData.id,
-        originalDataCustomerId: transactionData.customer_id,
-        itemCount: itemsData.length,
-      });
-
-      // Ensure local_uuid exists for Dexie primary key
-      if (!transactionData.local_uuid) {
-        transactionData.local_uuid = generateUUID();
+    if (entityType === "transactions" && originalData?.transaction) {
+      data = originalData.transaction;
+      upsertLocalRows("transactions", [data]);
+      if (Array.isArray(originalData.transaction_items)) {
+        upsertLocalRows("transaction_items", originalData.transaction_items);
       }
-
-      // Clear any deleted/recycle-bin flags
-      delete transactionData.deleted;
-      delete transactionData.deleted_at;
-      delete transactionData.in_recycle_bin;
-
-      // Restore transaction to transactions table
-      await db.table("transactions").put(transactionData);
-
-      // Restore each item to transaction_items table
-      for (const itemData of itemsData) {
-        if (!itemData.local_uuid) {
-          itemData.local_uuid = generateUUID();
+    } else if (entityType === "customers" && Array.isArray(originalData?._transactions)) {
+      const { _transactions, ...customer } = originalData;
+      data = customer;
+      upsertLocalRows("customers", [customer]);
+      for (const txnWrapper of _transactions) {
+        if (txnWrapper.transaction) upsertLocalRows("transactions", [txnWrapper.transaction]);
+        if (Array.isArray(txnWrapper.transaction_items)) {
+          upsertLocalRows("transaction_items", txnWrapper.transaction_items);
         }
-        delete itemData.deleted;
-        delete itemData.deleted_at;
-        delete itemData.in_recycle_bin;
-        // Strip any joined data (e.g. from Supabase .select("..., products(name)"))
-        delete itemData.products;
-        await db.table("transaction_items").put(itemData);
       }
-
-      // Remove from recycle bin
-      await db.table('recycle_bin').delete(local_uuid);
-
-      console.log(`[RecycleBin] Restore to Dexie complete (${itemsData.length} items):`, {
-        entityType,
-        restoredId: transactionData.id,
-        local_uuid: transactionData.local_uuid,
-      });
-
-      return { success: true, data: transactionData, entityType, transaction_items: itemsData };
+    } else {
+      upsertLocalRows(entityType, [originalData]);
     }
 
-    // Original format: direct entity object
-    console.log(`[RecycleBin] Restoring from recycle bin:`, {
+    writeRecycleBinRaw(rawItems.filter((entry) => entry.local_uuid !== local_uuid));
+    return {
+      success: true,
       entityType,
-      entityId: item.entity_id,
-      entityName: item.entity_name,
-      originalDataId: originalData.id,
-      originalDataCustomerId: originalData.customer_id,
-    });
-
-    // Ensure local_uuid exists for Dexie primary key
-    if (!originalData.local_uuid) {
-      originalData.local_uuid = generateUUID();
-    }
-
-    // Clear any deleted/recycle-bin flags before restore
-    delete originalData.deleted;
-    delete originalData.deleted_at;
-    delete originalData.in_recycle_bin;
-
-    // Extract and restore embedded transactions before saving customer to Dexie
-    const embeddedTxnList = originalData._transactions;
-    delete originalData._transactions;
-
-    // Restore to original table
-    await db.table(entityType).put(originalData);
-
-    // Restore any embedded transactions (customer cascade restore)
-    const restoredTransactions = [];
-    if (embeddedTxnList && Array.isArray(embeddedTxnList)) {
-      for (const txnWrapper of embeddedTxnList) {
-        const txnData = txnWrapper.transaction;
-        const itemsData = txnWrapper.transaction_items || [];
-
-        if (txnData) {
-          if (!txnData.local_uuid) txnData.local_uuid = generateUUID();
-          delete txnData.deleted;
-          delete txnData.deleted_at;
-          delete txnData.in_recycle_bin;
-          await db.table("transactions").put(txnData);
-        }
-
-        for (const itemData of itemsData) {
-          if (!itemData.local_uuid) itemData.local_uuid = generateUUID();
-          delete itemData.deleted;
-          delete itemData.deleted_at;
-          delete itemData.in_recycle_bin;
-          delete itemData.products;
-          await db.table("transaction_items").put(itemData);
-        }
-
-        restoredTransactions.push(txnWrapper);
-      }
-    }
-
-    // Remove from recycle bin
-    await db.table('recycle_bin').delete(local_uuid);
-
-    console.log(`[RecycleBin] Restore to Dexie complete:`, {
-      entityType,
-      restoredId: originalData.id,
-      local_uuid: originalData.local_uuid,
-      embeddedTransactions: restoredTransactions.length,
-    });
-
-    return { success: true, data: originalData, entityType, _transactions: restoredTransactions };
-  } catch (e) {
-    console.error('[RecycleBin] restoreFromRecycleBin error:', e);
-    return { success: false, error: e.message };
+      data,
+      transaction_items: originalData?.transaction_items || [],
+    };
+  } catch (error) {
+    return { success: false, error: error.message || "Restore failed" };
   }
 }
 
 export async function permanentlyDeleteFromRecycleBin(local_uuid) {
-  try {
-    await db.table('recycle_bin').delete(local_uuid);
-    return { success: true };
-  } catch (e) {
-    console.error('permanentlyDeleteFromRecycleBin error', e);
-    return { success: false, error: e.message };
-  }
+  writeRecycleBinRaw(readRecycleBinRaw().filter((entry) => entry.local_uuid !== local_uuid));
+  return { success: true };
 }
 
 export async function cleanupRecycleBin() {
-  try {
-    const now = new Date().toISOString();
-    const expired = await db.table('recycle_bin').where('restore_deadline').below(now).toArray();
-    if (expired.length > 0) {
-      await db.table('recycle_bin').bulkDelete(expired.map(e => e.local_uuid));
-    }
-    return { success: true, cleaned: expired.length };
-  } catch (e) {
-    console.error('cleanupRecycleBin error', e);
-    return { success: false, error: e.message };
-  }
+  const now = Date.now();
+  writeRecycleBinRaw(readRecycleBinRaw().filter((entry) => new Date(entry.restore_deadline).getTime() >= now));
 }
+
+export async function markRecordSynced(table, localId, serverRecord) {
+  rewriteLocalId(table, localId, serverRecord);
+}
+
+export const db = {
+  async open() {},
+  table(tableName) {
+    return {
+      async get(id) {
+        if (tableName === "recycle_bin") {
+          return readRecycleBinRaw().find((item) => item.local_uuid === id || item.id === id) || null;
+        }
+        return (getCache()[tableName] || []).find((item) => item.local_uuid === id || item.id === id) || null;
+      },
+      async toArray() {
+        return tableName === "recycle_bin" ? readRecycleBinRaw() : (getCache()[tableName] || []);
+      },
+      async put(row) {
+        if (tableName === "recycle_bin") {
+          const items = readRecycleBinRaw().filter((item) => item.local_uuid !== row.local_uuid);
+          writeRecycleBinRaw([row, ...items]);
+          return row.local_uuid;
+        }
+        upsertLocalRows(tableName, [row]);
+        return row.id ?? row.local_uuid;
+      },
+      async delete(id) {
+        if (tableName === "recycle_bin") {
+          writeRecycleBinRaw(readRecycleBinRaw().filter((item) => item.local_uuid !== id && item.id !== id));
+          return;
+        }
+        removeLocalRows(tableName, (row) => row.local_uuid === id || row.id === id);
+      },
+      async bulkDelete(ids) {
+        const idSet = new Set(ids.map(String));
+        if (tableName === "recycle_bin") {
+          writeRecycleBinRaw(readRecycleBinRaw().filter((item) => !idSet.has(String(item.local_uuid)) && !idSet.has(String(item.id))));
+          return;
+        }
+        removeLocalRows(tableName, (row) => idSet.has(String(row.local_uuid)) || idSet.has(String(row.id)));
+      },
+      where(column) {
+        return {
+          equals(value) {
+            return {
+              async first() {
+                const rows = tableName === "recycle_bin" ? readRecycleBinRaw() : (getCache()[tableName] || []);
+                return rows.find((row) => row[column] === value) || null;
+              },
+              async toArray() {
+                const rows = tableName === "recycle_bin" ? readRecycleBinRaw() : (getCache()[tableName] || []);
+                return rows.filter((row) => row[column] === value);
+              },
+              async delete() {
+                if (tableName === "recycle_bin") {
+                  writeRecycleBinRaw(readRecycleBinRaw().filter((row) => row[column] !== value));
+                  return;
+                }
+                removeLocalRows(tableName, (row) => row[column] === value);
+              },
+            };
+          },
+          below(value) {
+            return {
+              async toArray() {
+                const rows = tableName === "recycle_bin" ? readRecycleBinRaw() : (getCache()[tableName] || []);
+                return rows.filter((row) => row[column] < value);
+              },
+            };
+          },
+        };
+      },
+    };
+  },
+};
+
+export default db;

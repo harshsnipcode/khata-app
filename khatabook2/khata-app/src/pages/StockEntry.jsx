@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
 
 function StockEntry() {

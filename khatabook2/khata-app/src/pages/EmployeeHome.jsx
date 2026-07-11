@@ -7,8 +7,7 @@ import CustomerCard from "../components/CustomerCard";
 import SearchBar from "../components/SearchBar";
 import FilterModal from "../components/FilterModal";
 import CatalogueView from "../components/CatalogueView";
-import { supabase } from "../lib/supabase";
-import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { can } from "../lib/permissions";
 
@@ -107,7 +106,7 @@ function EmployeeHome() {
     setLoading(true);
     const [custRes, txnRes] = await Promise.all([
       supabase.from("customers").select("*").order("created_at", { ascending: false }),
-      supabase.from("transactions").select("customer_id, type, amount, created_at").order("created_at", { ascending: false }),
+      supabase.from("transactions").select("*").order("created_at", { ascending: false }),
     ]);
     setCustomers(custRes.data || []);
     setTransactions(txnRes.data || []);

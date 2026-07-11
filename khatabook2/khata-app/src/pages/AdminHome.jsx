@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import SummaryCard from "../components/SummaryCard";
@@ -133,7 +132,7 @@ function AdminHome() {
     setLoading(true);
     const [custRes, txnRes, empRes] = await Promise.all([
       supabase.from("customers").select("*").order("created_at", { ascending: false }),
-      supabase.from("transactions").select("customer_id, type, amount, created_at").order("created_at", { ascending: false }),
+      supabase.from("transactions").select("*").order("created_at", { ascending: false }),
       supabase.from("employees").select("*").order("created_at", { ascending: false }),
     ]);
     setCustomers(custRes.data || []);
@@ -277,13 +276,17 @@ function AdminHome() {
     e.preventDefault();
     setMessage("");
     if (!username || !password) { setMessage("Please enter both username and password."); return; }
-    const pseudoEmail = `${username}@example.com`;
-    const { data: authData, error } = await supabase.auth.signUp({
-      email: pseudoEmail,
-      password,
-      options: { data: { username } },
-    });
-    if (error) { setMessage(error.message || "Unable to create employee."); return; }
+    let authData = null;
+    if (typeof navigator === "undefined" || navigator.onLine) {
+      const pseudoEmail = `${username}@example.com`;
+      const { data, error } = await supabase.auth.signUp({
+        email: pseudoEmail,
+        password,
+        options: { data: { username } },
+      });
+      if (error) { setMessage(error.message || "Unable to create employee."); return; }
+      authData = data;
+    }
 
     const auth_id = authData?.user?.id || null;
 

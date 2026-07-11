@@ -1,10 +1,9 @@
 let toastContainer = null;
-let toastTimeout = null;
 
 function createToastContainer() {
   if (toastContainer) return toastContainer;
-  toastContainer = document.createElement('div');
-  toastContainer.id = 'khata-toast-container';
+  toastContainer = document.createElement("div");
+  toastContainer.id = "khata-toast-container";
   toastContainer.style.cssText = `
     position: fixed;
     bottom: 24px;
@@ -20,9 +19,9 @@ function createToastContainer() {
   return toastContainer;
 }
 
-export function showToast(message, type = 'info', duration = 3000) {
+export function showToast(message, type = "info", duration = 3000) {
   const container = createToastContainer();
-  const toast = document.createElement('div');
+  const toast = document.createElement("div");
   toast.style.cssText = `
     pointer-events: auto;
     padding: 12px 20px;
@@ -35,19 +34,19 @@ export function showToast(message, type = 'info', duration = 3000) {
     max-width: 90vw;
     text-align: center;
   `;
-  
+
   const bgColors = {
-    info: '#5cbdb9',
-    success: '#52b788',
-    error: '#e76f51',
-    warning: '#f4a261'
+    info: "#5cbdb9",
+    success: "#52b788",
+    error: "#e76f51",
+    warning: "#f4a261",
   };
   toast.style.backgroundColor = bgColors[type] || bgColors.info;
   toast.textContent = message;
 
-  if (!document.getElementById('khata-toast-styles')) {
-    const style = document.createElement('style');
-    style.id = 'khata-toast-styles';
+  if (!document.getElementById("khata-toast-styles")) {
+    const style = document.createElement("style");
+    style.id = "khata-toast-styles";
     style.textContent = `
       @keyframes slideUp {
         from { opacity: 0; transform: translateY(20px); }
@@ -63,14 +62,8 @@ export function showToast(message, type = 'info', duration = 3000) {
 
   container.appendChild(toast);
 
-  toastTimeout = setTimeout(() => {
-    toast.style.animation = 'slideDown 0.3s ease-in forwards';
+  setTimeout(() => {
+    toast.style.animation = "slideDown 0.3s ease-in forwards";
     setTimeout(() => toast.remove(), 300);
   }, duration);
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('offline-saved', (e) => {
-    showToast(e.detail?.message || 'Saved offline. Will sync automatically.', 'info', 4000);
-  });
 }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { moveToRecycleBin } from "../lib/offline/db";
 import DeleteCustomerModal from "../components/DeleteCustomerModal";
 import { requirePermission, can } from "../lib/permissions";
@@ -73,7 +72,7 @@ function CustomerProfile() {
 
         const { data: prices } = await supabase
           .from("customer_product_prices")
-          .select("product_id, custom_price")
+          .select("*")
           .eq("customer_id", id);
 
         if (prices) {

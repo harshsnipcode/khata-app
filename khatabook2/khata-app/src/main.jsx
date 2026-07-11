@@ -4,18 +4,12 @@ import './index.css'
 import App from './App.jsx'
 
 import { initDB } from './lib/offline/db';
-import { initFetchInterceptor } from './lib/offline/fetchInterceptor';
-import { syncPendingData } from './lib/offline/sync';
-import './lib/offline/toast';
+import { startAutoSync } from './lib/offline/sync';
 
 initDB();
-initFetchInterceptor();
+startAutoSync();
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => {
-    syncPendingData();
-  });
-
   // Manual service worker registration (only in production, not dev)
   const isDev = import.meta.env.MODE === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   if (!isDev && 'serviceWorker' in navigator) {

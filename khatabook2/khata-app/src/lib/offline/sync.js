@@ -1,74 +1,182 @@
-import { getPendingQueue, markRecordSynced, removeQueueItem } from './db';
-import { supabase } from '../supabase';
+import { supabase } from "../supabase";
+import {
+  OFFLINE_TABLES,
+  getPendingQueue,
+  isOnline,
+  removeQueueItem,
+  rewriteFilters,
+  rewriteForeignKeys,
+  rewriteLocalId,
+  saveFetchedData,
+} from "./db";
 
-function prepareServerPayload(payload, operation) {
-  if (Array.isArray(payload)) {
-    return payload.map(item => prepareServerPayload(item, operation));
+let syncing = false;
+let refreshingSnapshot = false;
+
+function emitStatus(status, detail = {}) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("sync-status", { detail: { status, ...detail } }));
+}
+
+function stripLocalFields(record) {
+  if (!record || typeof record !== "object") return record;
+  const {
+    local_uuid,
+    synced,
+    deleted_locally,
+    ...clean
+  } = record;
+  delete clean.__local_updated_at;
+  return clean;
+}
+
+function stripSchemaUnsafeFields(table, record) {
+  if (!record || typeof record !== "object") return record;
+  const clean = { ...record };
+  if (table === "transactions") {
+    delete clean.updated_at;
   }
-  if (!payload || typeof payload !== 'object') return payload;
-  const copy = { ...payload };
-  delete copy.local_uuid;
-  delete copy.synced;
-  delete copy.created_offline;
-  delete copy.pending_operation;
+  return clean;
+}
 
-  if (operation === 'POST' || operation === 'INSERT') {
-    if (copy.id === null || copy.id === undefined || copy.id === '') {
-      delete copy.id;
+function isTemporaryId(id) {
+  return typeof id === "number" && id < 0;
+}
+
+function preparePayload(table, payload) {
+  const rewritten = rewriteForeignKeys(payload);
+  if (Array.isArray(rewritten)) return rewritten.map((row) => preparePayload(table, row));
+  const clean = stripSchemaUnsafeFields(table, stripLocalFields(rewritten));
+  if (isTemporaryId(clean?.id)) {
+    const { id, ...withoutTempId } = clean;
+    return withoutTempId;
+  }
+  return clean;
+}
+
+async function executeOperation(operation) {
+  const filters = rewriteFilters(operation.filters || [], operation.table);
+  let query;
+
+  if (operation.method === "insert") {
+    const originalRows = Array.isArray(operation.payload) ? operation.payload : [operation.payload];
+    const payload = preparePayload(operation.table, operation.payload);
+    if (operation.table === "transactions") console.log("Sync payload:", payload);
+    query = supabase.from(operation.table).insert(payload).select(operation.selectColumns || "*");
+    const { data, error } = await query;
+    if (error) throw error;
+    const serverRows = Array.isArray(data) ? data : (data ? [data] : []);
+    serverRows.forEach((serverRow, index) => {
+      const localId = originalRows[index]?.id;
+      rewriteLocalId(operation.table, localId, serverRow);
+    });
+    await saveFetchedData(operation.table, serverRows);
+    return;
+  }
+
+  if (operation.method === "upsert") {
+    const originalRows = Array.isArray(operation.payload) ? operation.payload : [operation.payload];
+    const payload = preparePayload(operation.table, operation.payload);
+    if (operation.table === "transactions") console.log("Sync payload:", payload);
+    query = supabase.from(operation.table).upsert(payload, operation.options || {}).select(operation.selectColumns || "*");
+    const { data, error } = await query;
+    if (error) throw error;
+    const serverRows = Array.isArray(data) ? data : (data ? [data] : []);
+    serverRows.forEach((serverRow, index) => {
+      const localId = originalRows[index]?.id;
+      rewriteLocalId(operation.table, localId, serverRow);
+    });
+    await saveFetchedData(operation.table, serverRows);
+    return;
+  }
+
+  if (operation.method === "update") {
+    const payload = stripSchemaUnsafeFields(operation.table, stripLocalFields(rewriteForeignKeys(operation.payload)));
+    if (operation.table === "transactions") console.log("Sync payload:", payload);
+    query = supabase.from(operation.table).update(payload).select(operation.selectColumns || "*");
+    for (const filter of filters) query = query[filter.operator](filter.column, filter.value);
+    const { data, error } = await query;
+    if (error) throw error;
+    await saveFetchedData(operation.table, Array.isArray(data) ? data : (data ? [data] : []));
+    return;
+  }
+
+  if (operation.method === "delete") {
+    query = supabase.from(operation.table).delete();
+    for (const filter of filters) query = query[filter.operator](filter.column, filter.value);
+    const { error } = await query;
+    if (error) throw error;
+  }
+}
+
+async function fetchTableSnapshot(table) {
+  const pageSize = 1000;
+  const rows = [];
+  for (let from = 0; isOnline(); from += pageSize) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .range(from, from + pageSize - 1);
+    if (error) {
+      if (error.code === "42P01" || error.code === "PGRST205") return;
+      throw error;
     }
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
   }
-  return copy;
+  await saveFetchedData(table, rows);
+}
+
+export async function refreshOfflineSnapshot() {
+  if (!isOnline() || refreshingSnapshot) return;
+  refreshingSnapshot = true;
+  try {
+    for (const table of OFFLINE_TABLES) {
+      if (!isOnline()) break;
+      await fetchTableSnapshot(table);
+    }
+  } catch (error) {
+    console.warn("Offline snapshot refresh skipped:", error.message || error);
+  } finally {
+    refreshingSnapshot = false;
+  }
 }
 
 export async function syncPendingData() {
-  if (!navigator.onLine) return;
+  if (!isOnline() || syncing) return;
+
+  syncing = true;
+  emitStatus("pending");
   try {
     const queue = await getPendingQueue();
-    for (const item of queue) {
-      try {
-        const { local_uuid, table, operation, payload } = item;
-
-        if (operation === 'POST' || operation === 'INSERT' || operation === 'UPSERT') {
-          const cleanPayload = prepareServerPayload(payload, operation);
-          const { data, error } = await supabase.from(table).insert(Array.isArray(cleanPayload) ? cleanPayload : [cleanPayload]);
-          if (error) {
-            console.warn('Sync insert failed for', table, error.message);
-            continue;
-          }
-          if (data && data.length) {
-            await markRecordSynced(table, local_uuid, data[0]);
-          } else {
-            await markRecordSynced(table, local_uuid, payload);
-          }
-        } else if (operation === 'PATCH' || operation === 'PUT') {
-          const id = payload.id;
-          if (!id) {
-            await removeQueueItem(local_uuid);
-            continue;
-          }
-          const cleanPayload = prepareServerPayload(payload, operation);
-          const { data, error } = await supabase.from(table).update(cleanPayload).eq('id', id);
-          if (!error) {
-            await markRecordSynced(table, local_uuid, data ? data[0] : payload);
-          }
-        } else if (operation === 'DELETE') {
-          const id = payload.id;
-          if (id) {
-            const { error } = await supabase.from(table).delete().eq('id', id);
-            if (!error) await removeQueueItem(local_uuid);
-          } else {
-            await removeQueueItem(local_uuid);
-          }
-        } else {
-          await removeQueueItem(local_uuid);
-        }
-
-        window.dispatchEvent(new CustomEvent('sync-status', { detail: { local_uuid, table, status: 'synced' } }));
-      } catch (e) {
-        console.error('Error syncing item', e);
-      }
+    for (const operation of queue) {
+      if (!isOnline()) break;
+      await executeOperation(operation);
+      await removeQueueItem(operation.id);
     }
-  } catch (e) {
-    console.error('syncPendingData error', e);
+    const remaining = await getPendingQueue();
+    emitStatus(remaining.length > 0 ? "pending" : "synced");
+    if (remaining.length === 0) {
+      refreshOfflineSnapshot();
+    }
+  } catch (error) {
+    console.error("Offline sync failed:", error);
+    emitStatus("pending", { error: error.message || "Sync failed" });
+  } finally {
+    syncing = false;
+  }
+}
+
+export function startAutoSync() {
+  if (typeof window === "undefined") return;
+  window.addEventListener("online", () => {
+    syncPendingData();
+  });
+  window.addEventListener("khata-sync-request", () => {
+    syncPendingData();
+  });
+  if (isOnline()) {
+    setTimeout(() => syncPendingData(), 0);
+    setTimeout(() => refreshOfflineSnapshot(), 1000);
   }
 }

@@ -4,6 +4,7 @@ import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import ImportStatusBadge from "../components/ImportStatusBadge";
 import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { deleteImportBatch, getImportActor } from "../lib/importReversal";
 
 function ExcelImportDetail() {
@@ -17,7 +18,7 @@ function ExcelImportDetail() {
   const businessName = localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy";
 
   useEffect(() => {
-    supabase.from("import_history").select("*").eq("id", importId).single().then(({ data, error: loadError }) => {
+    offlineSupabase.from("import_history").select("*").eq("id", importId).single().then(({ data, error: loadError }) => {
       if (loadError) setError(loadError.message || "Import record not found.");
       else setRecord(data);
     });
@@ -33,6 +34,9 @@ function ExcelImportDetail() {
     setDeleting(true);
     setDeleteError("");
     try {
+      if (!navigator.onLine) {
+        throw new Error("Deleting an Excel import requires an internet connection.");
+      }
       await deleteImportBatch(importId, getImportActor());
       navigate("/admin/excel", { replace: true });
     } catch (deleteFailure) {

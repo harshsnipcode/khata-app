@@ -53,7 +53,7 @@ function AppShell() {
 
       if (role === "admin") {
         const user = localStorage.getItem("khata_user");
-        if (user) {
+        if (user && navigator.onLine) {
           try {
             const { data } = await supabase
               .from("admin_profiles")
@@ -70,6 +70,10 @@ function AppShell() {
       }
 
       if (role === "employee") {
+        if (!navigator.onLine) {
+          setReady(true);
+          return;
+        }
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session) {

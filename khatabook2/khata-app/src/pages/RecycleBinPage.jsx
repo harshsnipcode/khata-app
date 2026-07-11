@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import db, { getRecycleBin, restoreFromRecycleBin, permanentlyDeleteFromRecycleBin, cleanupRecycleBin } from "../lib/offline/db";
 import { permanentlyDeleteImportBatch, restoreImportBatch, getImportActor } from "../lib/importReversal";
 
@@ -53,7 +53,7 @@ function RecycleBinPage() {
     setLoading(true);
     const [localData, batchResult] = await Promise.all([
       getRecycleBin(),
-      supabase.from("import_batch_recycle_bin").select("*").order("deleted_at", { ascending: false }),
+      offlineSupabase.from("import_batch_recycle_bin").select("*").order("deleted_at", { ascending: false }),
     ]);
     const batchData = batchResult.error ? [] : (batchResult.data || []).map((item) => ({
       local_uuid: `excel-import:${item.id}`,
@@ -86,6 +86,7 @@ function RecycleBinPage() {
     const targetItem = items.find((item) => item.local_uuid === local_uuid);
     if (targetItem?.entity_type === "excel_import") {
       try {
+        if (!navigator.onLine) throw new Error("Restoring an Excel import requires an internet connection.");
         await restoreImportBatch(targetItem.entity_id, getImportActor());
         setActionMsg("Excel import restored successfully!");
         await loadItems();
@@ -159,8 +160,8 @@ function RecycleBinPage() {
         fullObject: JSON.parse(JSON.stringify(dataForServer)),
       });
 
-      // ── STEP 4: Strip Dexie-only fields and build cleanData ──
-      const { local_uuid: _, synced, created_offline, _transactions, id, ...cleanRest } = dataForServer;
+      // ── STEP 4: Strip local-only fields and build cleanData ──
+      const { local_uuid: _, synced, _transactions, id, ...cleanRest } = dataForServer;
       const cleanData = { id, ...cleanRest };
 
       console.log(`[RecycleBin] STEP 4 — cleanData (before upsert):`, {
@@ -176,7 +177,7 @@ function RecycleBinPage() {
       console.log("FINAL UPSERT PAYLOAD");
       console.log(JSON.stringify(cleanData, null, 2));
       console.log(`[RecycleBin] STEP 5 — Calling supabase.from("${entityType}").upsert(..., { onConflict: 'id' })`);
-      const { error: serverError } = await supabase
+      const { error: serverError } = await offlineSupabase
         .from(entityType)
         .upsert(cleanData, { onConflict: 'id' });
 
@@ -195,10 +196,10 @@ function RecycleBinPage() {
         if (transactionItems && transactionItems.length > 0) {
           console.log(`[RecycleBin] STEP 6 — Upserting ${transactionItems.length} transaction_item(s) to Supabase`);
           const cleanItems = transactionItems.map(item => {
-            const { local_uuid: _, synced, created_offline, products, ...rest } = item;
+            const { local_uuid: _, synced, products, ...rest } = item;
             return rest;
           });
-          const { error: itemsError } = await supabase
+          const { error: itemsError } = await offlineSupabase
             .from("transaction_items")
             .upsert(cleanItems, { onConflict: 'id' });
           if (itemsError) {
@@ -217,8 +218,8 @@ function RecycleBinPage() {
           for (const txnWrapper of embeddedTransactions) {
             const txnData = txnWrapper.transaction;
             if (txnData) {
-              const { local_uuid: _, synced, created_offline, ...cleanTxn } = txnData;
-              const { error: txnErr } = await supabase
+              const { local_uuid: _, synced, ...cleanTxn } = txnData;
+              const { error: txnErr } = await offlineSupabase
                 .from("transactions")
                 .upsert(cleanTxn, { onConflict: 'id' });
               if (txnErr) {
@@ -229,10 +230,10 @@ function RecycleBinPage() {
             const itemsData = txnWrapper.transaction_items;
             if (itemsData && itemsData.length > 0) {
               const cleanItems = itemsData.map(item => {
-                const { local_uuid: _, synced, created_offline, products, ...rest } = item;
+                const { local_uuid: _, synced, products, ...rest } = item;
                 return rest;
               });
-              const { error: itemsErr } = await supabase
+              const { error: itemsErr } = await offlineSupabase
                 .from("transaction_items")
                 .upsert(cleanItems, { onConflict: 'id' });
               if (itemsErr) {
@@ -249,7 +250,7 @@ function RecycleBinPage() {
       await loadItems();
       setTimeout(() => setActionMsg(""), 2500);
     } else {
-      console.error(`[RecycleBin] Dexie restore failed:`, result.error);
+      console.error(`[RecycleBin] Local restore failed:`, result.error);
       setActionMsg("Failed to restore: " + (result.error || "Unknown error"));
     }
   };
@@ -258,6 +259,7 @@ function RecycleBinPage() {
     const targetItem = items.find((item) => item.local_uuid === local_uuid);
     if (targetItem?.entity_type === "excel_import") {
       try {
+        if (!navigator.onLine) throw new Error("Permanently deleting an Excel import requires an internet connection.");
         await permanentlyDeleteImportBatch(targetItem.entity_id);
         setActionMsg("Import snapshot permanently deleted.");
         setConfirmDelete(null);

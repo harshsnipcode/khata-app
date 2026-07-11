@@ -50,18 +50,22 @@ function CreateEmployee() {
 
     setSaving(true);
 
-    const pseudoEmail = `${username.trim()}@example.com`;
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: pseudoEmail,
-      password,
-      options: { data: { username: username.trim() } },
-    });
+    let authData = null;
+    if (typeof navigator === "undefined" || navigator.onLine) {
+      const pseudoEmail = `${username.trim()}@example.com`;
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: pseudoEmail,
+        password,
+        options: { data: { username: username.trim() } },
+      });
 
-    if (authError) {
-      setMessage(authError.message || "Unable to create employee.");
-      setMessageType("error");
-      setSaving(false);
-      return;
+      if (authError) {
+        setMessage(authError.message || "Unable to create employee.");
+        setMessageType("error");
+        setSaving(false);
+        return;
+      }
+      authData = data;
     }
 
     const auth_id = authData?.user?.id || null;
