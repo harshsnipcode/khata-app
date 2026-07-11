@@ -9,6 +9,7 @@ import {
   rewriteLocalId,
   saveFetchedData,
 } from "./db";
+import { sanitizeTablePayload } from "./tableSchemas";
 
 let syncing = false;
 let refreshingSnapshot = false;
@@ -18,40 +19,20 @@ function emitStatus(status, detail = {}) {
   window.dispatchEvent(new CustomEvent("sync-status", { detail: { status, ...detail } }));
 }
 
-function stripLocalFields(record) {
-  if (!record || typeof record !== "object") return record;
-  const {
-    local_uuid,
-    synced,
-    deleted_locally,
-    ...clean
-  } = record;
-  delete clean.__local_updated_at;
-  return clean;
-}
-
-function stripSchemaUnsafeFields(table, record) {
-  if (!record || typeof record !== "object") return record;
-  const clean = { ...record };
-  if (table === "transactions") {
-    delete clean.updated_at;
-  }
-  return clean;
-}
-
 function isTemporaryId(id) {
   return typeof id === "number" && id < 0;
 }
 
-function preparePayload(table, payload) {
+export function preparePayload(table, payload) {
   const rewritten = rewriteForeignKeys(payload);
   if (Array.isArray(rewritten)) return rewritten.map((row) => preparePayload(table, row));
-  const clean = stripSchemaUnsafeFields(table, stripLocalFields(rewritten));
-  if (isTemporaryId(clean?.id)) {
-    const { id, ...withoutTempId } = clean;
+  const schemaSafe = sanitizeTablePayload(table, rewritten);
+  if (isTemporaryId(schemaSafe?.id)) {
+    const withoutTempId = { ...schemaSafe };
+    delete withoutTempId.id;
     return withoutTempId;
   }
-  return clean;
+  return schemaSafe;
 }
 
 async function executeOperation(operation) {
@@ -61,9 +42,12 @@ async function executeOperation(operation) {
   if (operation.method === "insert") {
     const originalRows = Array.isArray(operation.payload) ? operation.payload : [operation.payload];
     const payload = preparePayload(operation.table, operation.payload);
-    if (operation.table === "transactions") console.log("Sync payload:", payload);
+    console.log("PAYLOAD", payload);
     query = supabase.from(operation.table).insert(payload).select(operation.selectColumns || "*");
-    const { data, error } = await query;
+    const response = await query;
+    const { data, error } = response;
+    console.log("SUPABASE RESPONSE", response);
+    console.log("SUPABASE ERROR", error);
     if (error) throw error;
     const serverRows = Array.isArray(data) ? data : (data ? [data] : []);
     serverRows.forEach((serverRow, index) => {
@@ -77,9 +61,12 @@ async function executeOperation(operation) {
   if (operation.method === "upsert") {
     const originalRows = Array.isArray(operation.payload) ? operation.payload : [operation.payload];
     const payload = preparePayload(operation.table, operation.payload);
-    if (operation.table === "transactions") console.log("Sync payload:", payload);
+    console.log("PAYLOAD", payload);
     query = supabase.from(operation.table).upsert(payload, operation.options || {}).select(operation.selectColumns || "*");
-    const { data, error } = await query;
+    const response = await query;
+    const { data, error } = response;
+    console.log("SUPABASE RESPONSE", response);
+    console.log("SUPABASE ERROR", error);
     if (error) throw error;
     const serverRows = Array.isArray(data) ? data : (data ? [data] : []);
     serverRows.forEach((serverRow, index) => {
@@ -91,20 +78,27 @@ async function executeOperation(operation) {
   }
 
   if (operation.method === "update") {
-    const payload = stripSchemaUnsafeFields(operation.table, stripLocalFields(rewriteForeignKeys(operation.payload)));
-    if (operation.table === "transactions") console.log("Sync payload:", payload);
+    const payload = preparePayload(operation.table, operation.payload);
+    console.log("PAYLOAD", payload);
     query = supabase.from(operation.table).update(payload).select(operation.selectColumns || "*");
     for (const filter of filters) query = query[filter.operator](filter.column, filter.value);
-    const { data, error } = await query;
+    const response = await query;
+    const { data, error } = response;
+    console.log("SUPABASE RESPONSE", response);
+    console.log("SUPABASE ERROR", error);
     if (error) throw error;
     await saveFetchedData(operation.table, Array.isArray(data) ? data : (data ? [data] : []));
     return;
   }
 
   if (operation.method === "delete") {
+    console.log("PAYLOAD", { filters });
     query = supabase.from(operation.table).delete();
     for (const filter of filters) query = query[filter.operator](filter.column, filter.value);
-    const { error } = await query;
+    const response = await query;
+    const { error } = response;
+    console.log("SUPABASE RESPONSE", response);
+    console.log("SUPABASE ERROR", error);
     if (error) throw error;
   }
 }
@@ -151,8 +145,28 @@ export async function syncPendingData() {
     const queue = await getPendingQueue();
     for (const operation of queue) {
       if (!isOnline()) break;
-      await executeOperation(operation);
-      await removeQueueItem(operation.id);
+      console.log("SYNC START", operation);
+      console.log("QUEUE BEFORE", await getPendingQueue());
+      try {
+        await executeOperation(operation);
+        await removeQueueItem(operation.id);
+        console.log("QUEUE AFTER", await getPendingQueue());
+        console.info("[OfflineSync] Operation succeeded", {
+          queueId: operation.id,
+          table: operation.table,
+          method: operation.method,
+        });
+      } catch (error) {
+        console.error("[OfflineSync] Operation failed; retained in queue", {
+          queueId: operation.id,
+          table: operation.table,
+          method: operation.method,
+          message: error.message || String(error),
+          code: error.code,
+          details: error.details,
+        });
+        throw error;
+      }
     }
     const remaining = await getPendingQueue();
     emitStatus(remaining.length > 0 ? "pending" : "synced");

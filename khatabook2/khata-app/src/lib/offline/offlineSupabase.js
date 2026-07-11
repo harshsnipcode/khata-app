@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import { sanitizeTablePayload } from "./tableSchemas";
 import {
   OFFLINE_TABLES,
   createTempId,
@@ -95,6 +96,11 @@ function emitOfflineSaved(table) {
   window.dispatchEvent(new CustomEvent("offline-saved", {
     detail: { message: "Saved offline. Will sync automatically.", table },
   }));
+}
+
+function payloadHasTemporaryId(payload) {
+  const rows = Array.isArray(payload) ? payload : [payload];
+  return rows.some((row) => typeof row?.id === "number" && row.id < 0);
 }
 
 function scheduleSyncIfOnline() {
@@ -203,12 +209,16 @@ function createQueryBuilder(table, method, payload, options = {}) {
         if (!isOnline()) return onlineOnlyError(table);
         return executeOnline(ops);
       }
+      const isMutation = ops.method !== "select" && ops.method !== "delete";
+      if (isOnline() && isMutation && payloadHasTemporaryId(ops.payload)) {
+        return executeOffline(ops);
+      }
       if (isOnline()) {
         try {
           const result = await executeOnline(ops);
           if (!result.error) await refreshCacheAfterOnlineResult(ops, result.data);
           return result;
-        } catch (error) {
+        } catch {
           return executeOffline(ops);
         }
       }
@@ -220,7 +230,11 @@ function createQueryBuilder(table, method, payload, options = {}) {
 }
 
 async function executeOnline(ops) {
-  let query = supabase.from(ops.table)[ops.method](ops.payload, ops.options);
+  const isMutation = ops.method === "insert" || ops.method === "upsert" || ops.method === "update";
+  const payload = isMutation && OFFLINE_TABLES.includes(ops.table)
+    ? sanitizeTablePayload(ops.table, rewriteForeignKeys(ops.payload))
+    : ops.payload;
+  let query = supabase.from(ops.table)[ops.method](payload, ops.options);
   if (ops.selectColumns && ops.method !== "select") query = query.select(ops.selectColumns);
   if (ops.method === "select") query = supabase.from(ops.table).select(ops.selectColumns || "*");
   for (const filter of ops.filters) {
