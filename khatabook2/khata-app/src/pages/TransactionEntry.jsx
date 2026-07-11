@@ -6,6 +6,13 @@ import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { createGaveTransaction, updateGaveTransaction } from "../lib/transactionService";
 import { moveCustomerToCollectionQueueEnd } from "../lib/collectionQueue";
 
+function getLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function TransactionEntry() {
   const { id } = useParams();
   const location = useLocation();
@@ -26,8 +33,7 @@ function TransactionEntry() {
   const [loading, setLoading] = useState(true);
   const [customerPrices, setCustomerPrices] = useState({});
   const [paymentMode, setPaymentMode] = useState("cash");
-  const todayStr = new Date().toISOString().split("T")[0];
-  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateInputValue);
 
   const getEffectivePrice = (product) => {
     return customerPrices[product.id] ?? product.sale_price;
