@@ -72,12 +72,21 @@ export async function createGaveTransaction({
   if (transactionError) throw transactionError;
 
   if (normalizedItems.length > 0) {
-    const transactionItems = normalizedItems.map((item) => ({
-      transaction_id: transaction.id,
-      product_id: item.product.id,
-      quantity: item.quantity,
-      price: item.price,
-    }));
+    const transactionItems = normalizedItems.map((item) => {
+      const row = {
+        transaction_id: transaction.id ?? null,
+        product_id: item.product.id,
+        quantity: item.quantity,
+        price: item.price,
+      };
+      // Offline inserts have no server id yet. Record the parent's local_uuid
+      // so the sync engine can resolve the real transaction_id after the
+      // parent transaction syncs. (Stripped before hitting Supabase.)
+      if ((transaction.id === null || transaction.id === undefined) && transaction.local_uuid) {
+        row.transaction_local_uuid = transaction.local_uuid;
+      }
+      return row;
+    });
 
     const { error: itemError } = await offlineSupabase
       .from("transaction_items")

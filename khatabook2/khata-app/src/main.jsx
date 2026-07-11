@@ -16,6 +16,13 @@ if (typeof window !== 'undefined') {
     syncPendingData();
   });
 
+  // The 'online' event only fires on a connectivity TRANSITION. If the app is
+  // refreshed/opened while already online, pending offline work was never
+  // synced. Flush the queue on startup too (initDB opens the DB first).
+  if (navigator.onLine) {
+    setTimeout(() => syncPendingData(), 2000);
+  }
+
   // Manual service worker registration (only in production, not dev)
   const isDev = import.meta.env.MODE === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   if (!isDev && 'serviceWorker' in navigator) {

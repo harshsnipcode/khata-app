@@ -140,6 +140,30 @@ db.version(6).stores({
 
 export async function initDB() {
   await db.open();
+  // Clean up cache-polluted duplicates accumulated by the old saveFetchedData
+  // behaviour (rows without a server id that were NOT created offline).
+  purgeCachedRowsWithoutId();
+}
+
+export async function purgeCachedRowsWithoutId() {
+  const tables = [
+    'customers', 'transactions', 'products', 'product_transactions',
+    'transaction_items', 'customer_product_prices', 'employees', 'employee_attendance'
+  ];
+  for (const table of tables) {
+    try {
+      const rows = await db.table(table).toArray();
+      const polluted = rows.filter(r =>
+        (r.id === null || r.id === undefined) && r.created_offline !== true
+      );
+      if (polluted.length > 0) {
+        console.log(`[Offline] Purging ${polluted.length} duplicate cached row(s) without id from "${table}"`);
+        await db.table(table).bulkDelete(polluted.map(r => r.local_uuid));
+      }
+    } catch (e) {
+      console.error('purgeCachedRowsWithoutId error', table, e);
+    }
+  }
 }
 
 export default db;
@@ -147,6 +171,14 @@ export default db;
 export async function saveFetchedData(table, rows) {
   if (!Array.isArray(rows)) return;
   const tableObj = db.table(table);
+
+  // Only cache rows that carry a server id. Partial-column queries (e.g.
+  // select("customer_id, type, amount") or transaction_items selected without
+  // id) have no id, so every save generated a brand-new local_uuid and
+  // permanently DUPLICATED the row in IndexedDB — one extra copy per fetch.
+  rows = rows.filter(r => r && typeof r === 'object' && r.id !== null && r.id !== undefined && r.id !== '');
+  if (rows.length === 0) return;
+
   try {
     const ids = rows.map(r => r && r.id).filter(id => id !== null && id !== undefined && id !== '');
     const existingRecords = ids.length > 0 ? await tableObj.where('id').anyOf(ids).toArray() : [];
@@ -240,7 +272,7 @@ export async function addOfflineRecord(table, record, operation = 'INSERT') {
     };
 
     await tableObj.put(row);
-    await db.table('sync_queue').put({ local_uuid, table, operation, payload: record, created_offline, synced });
+    await db.table('sync_queue').put({ local_uuid, table, operation, payload: record, created_offline, synced, queued_at: Date.now() });
     return { local_uuid };
   } catch (e) {
     console.error('addOfflineRecord error', e);
@@ -249,7 +281,15 @@ export async function addOfflineRecord(table, record, operation = 'INSERT') {
 }
 
 export async function getPendingQueue() {
-  return await db.table('sync_queue').where('synced').equals(false).toArray();
+  // NOTE: IndexedDB cannot index boolean keys, so `where('synced').equals(false)`
+  // throws a DataError and the sync queue was NEVER read. Scan + filter instead.
+  try {
+    const all = await db.table('sync_queue').toArray();
+    return all.filter(item => item.synced !== true);
+  } catch (e) {
+    console.error('getPendingQueue error', e);
+    return [];
+  }
 }
 
 export async function removeQueueItem(local_uuid) {

@@ -102,8 +102,10 @@ function RecycleBinPage() {
     let rawOriginalData = null;
     let entityType = "transactions";
     let rawItemDebug = {};
+    let fullRawItem = null;
     try {
       const rawItem = await db.table('recycle_bin').get(local_uuid);
+      fullRawItem = rawItem || null;
       console.log("RAW RECYCLE ITEM");
       console.log(rawItem);
       if (rawItem) {
@@ -187,6 +189,20 @@ function RecycleBinPage() {
           code: serverError.code,
           hint: serverError.hint,
         });
+        // The bin entry was already deleted by restoreFromRecycleBin. Put it
+        // back so the item is NOT silently lost, and report the real failure.
+        if (navigator.onLine) {
+          if (fullRawItem) {
+            await db.table('recycle_bin').put(fullRawItem);
+            console.log(`[RecycleBin] STEP 5 — Re-added item to recycle bin after failed server restore`);
+          }
+          setActionMsg("Failed to restore on server: " + (serverError.message || "Unknown error"));
+          await loadItems();
+          setTimeout(() => setActionMsg(""), 4000);
+          return;
+        }
+        // Offline: the upsert was intercepted and queued — it will sync later.
+        console.log(`[RecycleBin] STEP 5 — Offline: restore queued for sync`);
       } else {
         console.log(`[RecycleBin] STEP 5 — Supabase upsert SUCCEEDED for ${entityType} id=${cleanData.id}`);
 

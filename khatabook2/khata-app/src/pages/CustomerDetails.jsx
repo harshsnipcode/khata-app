@@ -64,8 +64,23 @@ function CustomerDetails() {
         }
       }
 
+      // Guard: render exactly one card per transaction id. Log ids so any
+      // duplication source is immediately visible in the console.
+      console.log("[v0] ledger transaction ids:", transactionsWithItems.map((t) => t.id));
+      const seenIds = new Set();
+      const deduped = transactionsWithItems.filter((t) => {
+        const key = t.id ?? t.local_uuid;
+        if (key === null || key === undefined) return true;
+        if (seenIds.has(key)) {
+          console.warn("[v0] DUPLICATE transaction id detected and skipped:", key, t);
+          return false;
+        }
+        seenIds.add(key);
+        return true;
+      });
+
       setCustomer(customerResult.data || null);
-      setTransactions(transactionsWithItems);
+      setTransactions(deduped);
       setLoading(false);
     };
 

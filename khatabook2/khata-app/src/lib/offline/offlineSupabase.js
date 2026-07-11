@@ -104,12 +104,14 @@ function createQueryBuilder(table, method, payload) {
         const results = [];
         for (const row of rows) {
           const { local_uuid } = await addOfflineRecord(table, row, 'POST');
-          results.push({ ...row, local_uuid });
+          results.push({ ...row, local_uuid, id: row.id ?? null });
         }
         window.dispatchEvent(new CustomEvent('offline-saved', {
           detail: { message: 'Saved offline. Will sync automatically.', table }
         }));
-        return { data: results, error: null };
+        // Honor .single() like supabase-js does — callers such as
+        // createGaveTransaction read `data.id` / `data.local_uuid` directly.
+        return { data: ops.single ? (results[0] ?? null) : results, error: null };
       }
 
       if (method === 'update') {
@@ -153,7 +155,7 @@ function createQueryBuilder(table, method, payload) {
         window.dispatchEvent(new CustomEvent('offline-saved', {
           detail: { message: 'Saved offline. Will sync automatically.', table }
         }));
-        return { data: results, error: null };
+        return { data: ops.single ? (results[0] ?? null) : results, error: null };
       }
 
       return { data: null, error: { message: `Unsupported method: ${method}` } };
