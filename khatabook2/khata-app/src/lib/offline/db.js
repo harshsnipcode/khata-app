@@ -89,17 +89,25 @@ export function getCache() {
   return cache;
 }
 
-function dedupeRows(rows = []) {
+function normalizedRowKey(table, row) {
+  if (!row || typeof row !== "object") return null;
+  const rawId = row.id;
+  if (rawId !== undefined && rawId !== null && rawId !== "") {
+    return `id:${String(resolveServerId(table, rawId))}`;
+  }
+  return row.local_uuid ? `local:${String(row.local_uuid)}` : null;
+}
+
+function dedupeRows(table, rows = []) {
   const byStableKey = new Map();
   const withoutStableKey = [];
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
-    const stableKey = row.id ?? row.local_uuid;
-    if (stableKey === undefined || stableKey === null || stableKey === "") {
-      withoutStableKey.push(row);
+    const key = normalizedRowKey(table, row);
+    if (!key) {
+      withoutStableKey.push({ ...row });
       continue;
     }
-    const key = String(stableKey);
     byStableKey.set(key, { ...(byStableKey.get(key) || {}), ...row });
   }
   return [...byStableKey.values(), ...withoutStableKey];
@@ -121,15 +129,16 @@ export async function initDB() {
 
 export async function saveFetchedData(table, rows) {
   if (!OFFLINE_TABLES.includes(table) || !Array.isArray(rows)) return;
-  const cache = getCache();
-  const existing = new Map(dedupeRows(cache[table] || []).map((row) => [String(row.id ?? row.local_uuid), row]));
+  const currentCache = getCache();
+  const byKey = new Map(
+    dedupeRows(table, currentCache[table] || []).map((row) => [normalizedRowKey(table, row), { ...row }]),
+  );
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
-    const stableKey = row.id ?? row.local_uuid;
-    if (stableKey === undefined || stableKey === null || stableKey === "") continue;
-    const key = String(stableKey);
-    const previous = existing.get(key) || {};
-    existing.set(key, {
+    const key = normalizedRowKey(table, row);
+    if (!key) continue;
+    const previous = byKey.get(key) || {};
+    byKey.set(key, {
       ...previous,
       ...row,
       local_uuid: previous.local_uuid || row.local_uuid || generateUUID(),
@@ -137,32 +146,31 @@ export async function saveFetchedData(table, rows) {
       deleted_locally: false,
     });
   }
-  cache[table] = Array.from(existing.values());
-  writeCache(cache);
+  writeCache({ ...currentCache, [table]: Array.from(byKey.values()) });
 }
 
 export async function getAll(table) {
-  return dedupeRows(getCache()[table] || []).filter((row) => !row.deleted_locally);
-}
-
-function rowKey(row) {
-  return String(row.id ?? row.local_uuid);
+  return dedupeRows(table, getCache()[table] || []).filter((row) => !row.deleted_locally);
 }
 
 export function upsertLocalRows(table, rows) {
-  const cache = getCache();
-  const byKey = new Map(dedupeRows(cache[table] || []).map((row) => [rowKey(row), row]));
+  const currentCache = getCache();
+  const byKey = new Map(
+    dedupeRows(table, currentCache[table] || []).map((row) => [normalizedRowKey(table, row), { ...row }]),
+  );
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const prepared = {
       ...row,
       local_uuid: row.local_uuid || generateUUID(),
+      deleted_locally: row.deleted_locally ?? false,
       __local_updated_at: new Date().toISOString(),
     };
-    byKey.set(rowKey(prepared), { ...(byKey.get(rowKey(prepared)) || {}), ...prepared });
+    const key = normalizedRowKey(table, prepared);
+    if (!key) continue;
+    byKey.set(key, { ...(byKey.get(key) || {}), ...prepared });
   }
-  cache[table] = Array.from(byKey.values());
-  writeCache(cache);
+  writeCache({ ...currentCache, [table]: Array.from(byKey.values()) });
 }
 
 export function deleteLocalRows(table, predicate) {
@@ -194,6 +202,30 @@ function writeQueue(queue) {
 
 export function enqueueOperation(operation) {
   const queue = readQueue();
+  const payloadRow = Array.isArray(operation.payload) ? operation.payload[0] : operation.payload;
+  const temporaryId = typeof payloadRow?.id === "number" && payloadRow.id < 0;
+
+  if (temporaryId && (operation.method === "upsert" || operation.method === "update")) {
+    const pendingInsertIndex = queue.findIndex((item) => {
+      const queuedRow = Array.isArray(item.payload) ? item.payload[0] : item.payload;
+      return item.table === operation.table
+        && item.method === "insert"
+        && String(queuedRow?.id) === String(payloadRow.id);
+    });
+    if (pendingInsertIndex >= 0) {
+      const pendingInsert = queue[pendingInsertIndex];
+      const queuedRow = Array.isArray(pendingInsert.payload) ? pendingInsert.payload[0] : pendingInsert.payload;
+      const mergedRow = { ...queuedRow, ...payloadRow };
+      queue[pendingInsertIndex] = {
+        ...pendingInsert,
+        payload: Array.isArray(pendingInsert.payload) ? [mergedRow] : mergedRow,
+        updated_at: new Date().toISOString(),
+      };
+      writeQueue(queue);
+      return queue[pendingInsertIndex];
+    }
+  }
+
   const now = new Date().toISOString();
   const entry = {
     id: generateUUID(),
@@ -201,8 +233,7 @@ export function enqueueOperation(operation) {
     updated_at: now,
     ...operation,
   };
-  queue.push(entry);
-  writeQueue(queue);
+  writeQueue([...queue, entry]);
   return entry;
 }
 
@@ -214,26 +245,45 @@ export async function removeQueueItem(id) {
   writeQueue(readQueue().filter((item) => item.id !== id));
 }
 
-export function rewriteLocalId(table, localId, serverRecord) {
-  if (!serverRecord?.id || localId === undefined || localId === null || localId === serverRecord.id) return;
-  rememberServerId(table, localId, serverRecord.id);
-  const cache = getCache();
+export function cancelQueuedDeletes(table, entityId) {
+  const targetId = String(entityId);
+  writeQueue(readQueue().filter((item) => {
+    if (item.table !== table || item.method !== "delete") return true;
+    return !(item.filters || []).some((filter) => (
+      filter.column === "id" && String(filter.value) === targetId
+    ));
+  }));
+}
 
-  cache[table] = (cache[table] || []).map((row) => (
-    String(row.id) === String(localId)
-      ? { ...row, ...serverRecord, local_uuid: row.local_uuid || serverRecord.local_uuid, synced: true }
-      : row
+export function rewriteLocalId(table, localId, serverRecord) {
+  if (!serverRecord?.id || localId === undefined || localId === null || String(localId) === String(serverRecord.id)) return;
+  rememberServerId(table, localId, serverRecord.id);
+  const currentCache = getCache();
+  const nextCache = { ...currentCache };
+  const localRow = (currentCache[table] || []).find((row) => String(row.id) === String(localId));
+  const serverRow = (currentCache[table] || []).find((row) => String(row.id) === String(serverRecord.id));
+  const mergedRecord = {
+    ...(localRow || {}),
+    ...(serverRow || {}),
+    ...serverRecord,
+    local_uuid: localRow?.local_uuid || serverRow?.local_uuid || serverRecord.local_uuid,
+    synced: true,
+    deleted_locally: false,
+  };
+  const withoutAliases = (currentCache[table] || []).filter((row) => (
+    String(row.id) !== String(localId) && String(row.id) !== String(serverRecord.id)
   ));
+  nextCache[table] = dedupeRows(table, [...withoutAliases, mergedRecord]);
 
   for (const dependentTable of OFFLINE_TABLES) {
-    cache[dependentTable] = (cache[dependentTable] || []).map((row) => {
+    nextCache[dependentTable] = dedupeRows(dependentTable, (nextCache[dependentTable] || []).map((row) => {
       const next = { ...row };
       if (table === "customers" && String(next.customer_id) === String(localId)) next.customer_id = serverRecord.id;
       if (table === "transactions" && String(next.transaction_id) === String(localId)) next.transaction_id = serverRecord.id;
       if (table === "products" && String(next.product_id) === String(localId)) next.product_id = serverRecord.id;
       if (table === "employees" && String(next.employee_id) === String(localId)) next.employee_id = serverRecord.id;
       return next;
-    });
+    }));
   }
 
   const rewrittenQueue = readQueue().map((item) => ({
@@ -242,7 +292,7 @@ export function rewriteLocalId(table, localId, serverRecord) {
     filters: rewriteFilters(item.filters || [], item.table),
   }));
 
-  writeCache(cache);
+  writeCache(nextCache);
   writeQueue(rewrittenQueue);
 }
 
@@ -320,10 +370,14 @@ export async function restoreFromRecycleBin(local_uuid) {
     let data = originalData;
 
     if (entityType === "transactions" && originalData?.transaction) {
-      data = originalData.transaction;
+      data = { ...originalData.transaction, deleted_locally: false };
+      cancelQueuedDeletes("transactions", data.id);
       upsertLocalRows("transactions", [data]);
       if (Array.isArray(originalData.transaction_items)) {
-        upsertLocalRows("transaction_items", originalData.transaction_items);
+        upsertLocalRows("transaction_items", originalData.transaction_items.map((row) => ({
+          ...row,
+          deleted_locally: false,
+        })));
       }
     } else if (entityType === "customers" && Array.isArray(originalData?._transactions)) {
       const { _transactions, ...customer } = originalData;
