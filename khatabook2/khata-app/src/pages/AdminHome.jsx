@@ -86,6 +86,13 @@ function AdminHome() {
 
   const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
 
+  useEffect(() => {
+    const routeTab = location.state?.activeTab;
+    if (routeTab && routeTab !== activeTab) {
+      setActiveTab(routeTab);
+    }
+  }, [location.state?.activeTab, activeTab]);
+
   useSwipeNavigation({
     onSwipeLeft: () => {
       if (activeTab === "customers") {
