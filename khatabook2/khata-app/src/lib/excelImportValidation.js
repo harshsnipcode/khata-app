@@ -1,4 +1,4 @@
-import { normalizeImportName } from "./excelImport.js";
+import { isCustomerSectionHeader, normalizeImportName } from "./excelImport.js";
 
 export function isTotalSummaryLabel(value) {
   return normalizeImportName(value) === "total";
@@ -17,11 +17,10 @@ export function excludeTotalSummaries(parsed) {
   return {
     productHeaders: includedColumnIndexes.map(({ header }) => header),
     rows: parsed.rows
-      .filter((row) => !isTotalSummaryLabel(row.customerName))
+      .filter((row) => !isTotalSummaryLabel(row.customerName) && !isCustomerSectionHeader(row.customerName))
       .map((row) => ({
         ...row,
         values: includedColumnIndexes.map(({ index }) => row.values[index]),
       })),
   };
 }
-

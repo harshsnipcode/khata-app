@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as XLSX from "xlsx";
-import { normalizeImportName, parseExcelWorkbook, parseImportMatrix, quantityFromCell } from "../src/lib/excelImport.js";
+import {
+  isCustomerSectionHeader,
+  normalizeImportName,
+  parseExcelWorkbook,
+  parseImportMatrix,
+  quantityFromCell,
+} from "../src/lib/excelImport.js";
 
 test("parses the documented customer/product matrix", () => {
   const parsed = parseImportMatrix([
@@ -29,10 +35,26 @@ test("positive numeric cells become quantities and invalid cells are rejected", 
 
 test("validates headers without making matching case-sensitive", () => {
   assert.equal(normalizeImportName("  Rahul   Dairy "), "rahul dairy");
+  for (const value of ["CUSTOMER", "Customer", "customer", "CUSTOMERS", "Customers", "customers", "  customers  "]) {
+    assert.equal(isCustomerSectionHeader(value), true);
+  }
   assert.throws(() => parseImportMatrix([]), /Header row missing/);
   assert.throws(() => parseImportMatrix([["Party", "P-1"]]), /First column/);
   assert.throws(() => parseImportMatrix([["Customer"]]), /product column/);
   assert.throws(() => parseImportMatrix([["Customer", "P-1", " p-1 "]]), /unique/);
+});
+
+test("accepts CUSTOMER and CUSTOMERS as section headers", () => {
+  for (const header of ["Customer", "Customers", "  CUSTOMERS  "]) {
+    const parsed = parseImportMatrix([
+      [header, "P-1"],
+      ["Cust-1", 12],
+    ]);
+
+    assert.equal(parsed.headers[0], header.trim());
+    assert.equal(parsed.rows[0].customerName, "Cust-1");
+    assert.equal(parsed.rows[0].values[0], 12);
+  }
 });
 
 test("detects a catalogue-backed header and crops preview to the table bounds", () => {
@@ -55,6 +77,16 @@ test("detects a catalogue-backed header and crops preview to the table bounds", 
     ["Harsh Sharma", 2, null, 3],
     ["TOTAL", 2, 1, 3],
   ]);
+});
+
+test("detects a catalogue-backed plural customer header", () => {
+  const parsed = parseImportMatrix([
+    [null, "  CUSTOMERS  ", "Aamras", "Paneer", "TOTAL"],
+    [null, "Harsh Sharma", 2, null, 2],
+  ], "Transactions", ["Aamras", "Paneer"]);
+
+  assert.deepEqual(parsed.headers, ["CUSTOMERS", "Aamras", "Paneer", "TOTAL"]);
+  assert.equal(parsed.rows[0].customerName, "Harsh Sharma");
 });
 
 test("requires Customer and two known catalogue products on the same row", () => {

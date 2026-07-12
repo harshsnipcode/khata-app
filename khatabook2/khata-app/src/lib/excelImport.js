@@ -2,6 +2,11 @@ export function normalizeImportName(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }
 
+export function isCustomerSectionHeader(value) {
+  const normalized = normalizeImportName(value);
+  return normalized === "customer" || normalized === "customers";
+}
+
 function isEmpty(value) {
   return value === null || value === undefined || String(value).trim() === "";
 }
@@ -29,7 +34,7 @@ export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", cataloguePr
     for (let rowIndex = 0; rowIndex < matrix.length && !detected; rowIndex += 1) {
       const row = matrix[rowIndex];
       for (let columnIndex = 0; columnIndex < row.length; columnIndex += 1) {
-        if (normalizeImportName(row[columnIndex]) !== "customer") continue;
+        if (!isCustomerSectionHeader(row[columnIndex])) continue;
         let matchingProducts = 0;
         for (let scanIndex = 0; scanIndex < row.length; scanIndex += 1) {
           if (scanIndex !== columnIndex && catalogueNames.has(normalizeImportName(row[scanIndex]))) {
@@ -58,7 +63,7 @@ export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", cataloguePr
     .slice(customerColumnIndex, lastHeaderIndex + 1)
     .map((value) => String(value ?? "").trim());
 
-  if (normalizeImportName(headers[0]) !== "customer") {
+  if (!isCustomerSectionHeader(headers[0])) {
     throw new Error('First column must contain customer names and be headed "Customer".');
   }
   if (headers.length < 2) {
