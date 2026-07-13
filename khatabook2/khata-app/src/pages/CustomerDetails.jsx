@@ -346,6 +346,11 @@ function CustomerDetails() {
                           <p className="text-[10px] text-[var(--text-muted)] font-medium mt-0.5">
                             {new Date(txn.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                           </p>
+                          {txn.description && (
+                            <p className="text-[10px] text-[var(--text-secondary)] font-medium mt-0.5 break-words">
+                              {txn.description}
+                            </p>
+                          )}
                         </div>
                         <div className="text-center">
                           {isGave && (

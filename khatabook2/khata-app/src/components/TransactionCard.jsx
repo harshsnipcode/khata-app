@@ -1,4 +1,4 @@
-function TransactionCard({ date, type, amount, balance }) {
+function TransactionCard({ date, type, amount, balance, description }) {
   const isGot = type === "got";
   const label = isGot ? "Got" : "Gave";
   const badgeBg = isGot ? "#d8f3e3" : "#fde8e2";
@@ -31,6 +31,11 @@ function TransactionCard({ date, type, amount, balance }) {
           <p className="text-sm mt-0.5" style={{ color: "#b2bec3" }}>
             {label} amount
           </p>
+          {description && (
+            <p className="text-xs mt-2" style={{ color: "#636e72" }}>
+              {description}
+            </p>
+          )}
         </div>
         <div className="text-right">
           <p className="text-xs font-medium" style={{ color: "#636e72" }}>Balance</p>

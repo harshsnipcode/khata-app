@@ -34,6 +34,7 @@ function TransactionEntry() {
   const [customerPrices, setCustomerPrices] = useState({});
   const [paymentMode, setPaymentMode] = useState("cash");
   const [selectedDate, setSelectedDate] = useState(getLocalDateInputValue);
+  const [transactionNote, setTransactionNote] = useState("");
 
   const getEffectivePrice = (product) => {
     return customerPrices[product.id] ?? product.sale_price;
@@ -76,6 +77,7 @@ function TransactionEntry() {
   useEffect(() => {
     if (isEditing) {
       setPaymentMode(stateData.paymentMode || "cash");
+      setTransactionNote(stateData.description || "");
       if (stateData.date) setSelectedDate(stateData.date.split("T")[0]);
       // Only restore manual amount for manual entries (no products).
       // Product-based transactions derive amount dynamically from calculatedAmount.
@@ -160,6 +162,7 @@ function TransactionEntry() {
       const created_by = user?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
 
       let createdAt;
+      const description = transactionNote.trim() || null;
       if (isEditing && stateData.date) {
         const origDateStr = stateData.date.split("T")[0];
         if (selectedDate === origDateStr) {
@@ -183,16 +186,15 @@ function TransactionEntry() {
         if (isGot) {
           const { error: uErr } = await offlineSupabase
             .from("transactions")
-            .update({ amount: finalAmount, payment_mode: paymentMode, created_at: createdAt })
+            .update({ amount: finalAmount, description, payment_mode: paymentMode, created_at: createdAt })
             .eq("id", editTransactionId);
           if (uErr) throw uErr;
         } else {
           await updateGaveTransaction({
             transactionId: editTransactionId,
-            customerId: id,
             amount: finalAmount,
-            createdBy: created_by,
             createdAt,
+            description,
             items: Object.values(selectedProducts).map((item) => ({
               product: item.product,
               quantity: item.quantity,
@@ -209,6 +211,7 @@ function TransactionEntry() {
             customer_id: Number(id),
             type,
             amount: finalAmount,
+            description,
             created_by,
             payment_mode: paymentMode,
             created_at: createdAt,
@@ -222,6 +225,7 @@ function TransactionEntry() {
           amount: finalAmount,
           createdBy: created_by,
           createdAt,
+          description,
           items: Object.values(selectedProducts).map((item) => ({
             product: item.product,
             quantity: item.quantity,
@@ -409,6 +413,20 @@ function TransactionEntry() {
         </div>
 
         {/* Save Button (only for "gave" — sticky while scrolling products) */}
+        <div className="card rounded-2xl p-4 shadow-sm">
+          <label htmlFor="txn-note-input" className="block text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">
+            Note
+          </label>
+          <textarea
+            id="txn-note-input"
+            value={transactionNote}
+            onChange={(e) => setTransactionNote(e.target.value)}
+            rows={3}
+            placeholder={isGot ? "Optional note for this payment" : "Optional note for this transaction"}
+            className="w-full resize-none bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300"
+          />
+        </div>
+
         {!isGot && (
           <div className="sticky top-0 z-50 bg-[var(--background)] py-3 -mx-4 px-4">
             <button

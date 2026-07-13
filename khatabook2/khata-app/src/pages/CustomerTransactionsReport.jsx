@@ -412,6 +412,11 @@ function CustomerTransactionsReport() {
                           <p className="text-[10px] text-[var(--text-muted)] font-medium mt-0.5">
                             {date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                           </p>
+                          {t.description && (
+                            <p className="text-[10px] text-[var(--text-secondary)] font-medium mt-0.5 break-words">
+                              {t.description}
+                            </p>
+                          )}
                         </div>
                         <div className="text-center">
                           {isGave && (

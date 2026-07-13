@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { excludeTotalSummaries, isTotalSummaryLabel } from "../src/lib/excelImportValidation.js";
+import { buildPreviewSections, excludeTotalSummaries, isTotalSummaryLabel } from "../src/lib/excelImportValidation.js";
 
 test("recognizes TOTAL labels case-insensitively", () => {
   for (const value of ["TOTAL", "Total", "total", "  ToTaL  "]) {
@@ -9,7 +9,7 @@ test("recognizes TOTAL labels case-insensitively", () => {
   assert.equal(isTotalSummaryLabel("Grand Total"), false);
 });
 
-test("excludes TOTAL rows and columns only from the processing view", () => {
+test("excludes the first block first data row and TOTAL rows only from the processing view", () => {
   const parsed = {
     headers: ["CUSTOMER", "Aamras", "Paneer", "TOTAL"],
     rows: [
@@ -28,7 +28,6 @@ test("excludes TOTAL rows and columns only from the processing view", () => {
   const processing = excludeTotalSummaries(parsed);
   assert.deepEqual(processing.productHeaders, ["Aamras", "Paneer"]);
   assert.deepEqual(processing.rows.map((row) => [row.customerName, ...row.values]), [
-    ["Harsh Sharma", 2, 1],
     ["Rahul Sharma", 5, 2],
   ]);
 
@@ -67,11 +66,31 @@ test("excludes repeated customer section header rows from the processing view", 
   const processing = excludeTotalSummaries(parsed);
   assert.deepEqual(processing.productHeaders, ["Aamras", "Paneer"]);
   assert.deepEqual(processing.rows.map((row) => [row.customerName, ...row.values]), [
-    ["Harsh Sharma", 2, 1],
     ["Rahul Sharma", 5, 2],
     ["Priya Shah", 1, ""],
   ]);
 
   assert.deepEqual(parsed.preview[4], ["CUSTOMER", "Aamras", "Paneer", "TOTAL"]);
   assert.deepEqual(parsed.preview[8], ["customers", "Aamras", "Paneer", "TOTAL"]);
+});
+
+test("builds clean preview sections without completely empty rows", () => {
+  const sections = buildPreviewSections([
+    ["CUSTOMERS", "Aamras", "Paneer"],
+    ["Display Only", 1, 2],
+    [null, null, null],
+    ["CUSTOMER", "Aamras", "Paneer"],
+    ["Rahul Sharma", null, null],
+    ["", "", ""],
+  ]);
+
+  assert.equal(sections.length, 2);
+  assert.deepEqual(sections[0].rows, [
+    ["CUSTOMERS", "Aamras", "Paneer"],
+    ["Display Only", 1, 2],
+  ]);
+  assert.deepEqual(sections[1].rows, [
+    ["CUSTOMER", "Aamras", "Paneer"],
+    ["Rahul Sharma", null, null],
+  ]);
 });

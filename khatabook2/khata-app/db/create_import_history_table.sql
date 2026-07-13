@@ -28,7 +28,8 @@ CREATE OR REPLACE FUNCTION public.create_gave_transaction(
   p_items jsonb,
   p_amount numeric,
   p_created_by text,
-  p_created_at timestamptz
+  p_created_at timestamptz,
+  p_description text DEFAULT NULL
 )
 RETURNS public.transactions
 LANGUAGE plpgsql
@@ -37,8 +38,8 @@ DECLARE
   created_transaction public.transactions;
   item_record record;
 BEGIN
-  INSERT INTO public.transactions (customer_id, type, amount, created_by, created_at)
-  VALUES (p_customer_id, 'gave', p_amount, p_created_by, p_created_at)
+  INSERT INTO public.transactions (customer_id, type, amount, description, created_by, created_at)
+  VALUES (p_customer_id, 'gave', p_amount, NULLIF(BTRIM(p_description), ''), p_created_by, p_created_at)
   RETURNING * INTO created_transaction;
 
   FOR item_record IN

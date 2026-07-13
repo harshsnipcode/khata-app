@@ -49,7 +49,8 @@ CREATE OR REPLACE FUNCTION public.create_gave_transaction(
   p_amount numeric,
   p_created_by text,
   p_created_at timestamptz,
-  p_import_history_id uuid
+  p_import_history_id uuid,
+  p_description text DEFAULT NULL
 )
 RETURNS public.transactions
 LANGUAGE plpgsql
@@ -63,10 +64,10 @@ BEGIN
   END IF;
 
   INSERT INTO public.transactions (
-    customer_id, type, amount, created_by, created_at, import_history_id
+    customer_id, type, amount, description, created_by, created_at, import_history_id
   )
   VALUES (
-    p_customer_id, 'gave', p_amount, p_created_by, p_created_at, p_import_history_id
+    p_customer_id, 'gave', p_amount, NULLIF(BTRIM(p_description), ''), p_created_by, p_created_at, p_import_history_id
   )
   RETURNING * INTO created_transaction;
 

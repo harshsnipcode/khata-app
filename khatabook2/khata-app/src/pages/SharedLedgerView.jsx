@@ -206,6 +206,11 @@ function SharedLedgerView() {
                         ) : (
                           <p className="text-[var(--text-primary)] font-semibold text-sm mt-1.5">{itemCount > 0 ? `${itemCount} items` : "Entry"}</p>
                         )}
+                        {txn.description && (
+                          <p className="text-[10px] text-[var(--text-secondary)] font-medium mt-1 break-words">
+                            {txn.description}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right shrink-0 ml-4">
                         <span className={`inline-block font-black text-sm ${isGot ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>

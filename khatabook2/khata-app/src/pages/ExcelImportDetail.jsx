@@ -6,6 +6,7 @@ import ImportStatusBadge from "../components/ImportStatusBadge";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { deleteImportBatch, getImportActor } from "../lib/importReversal";
+import { buildPreviewSections } from "../lib/excelImportValidation";
 
 function ExcelImportDetail() {
   const { importId } = useParams();
@@ -27,6 +28,11 @@ function ExcelImportDetail() {
   const stats = record?.import_statistics || {};
   const report = record?.validation_report || {};
   const preview = Array.isArray(record?.parsed_preview) ? record.parsed_preview : [];
+  const previewSections = buildPreviewSections(preview);
+  const previewRows = previewSections.flatMap((section, sectionIndex) => [
+    { kind: "section", label: `Section ${sectionIndex + 1}`, columns: section.rows[0]?.length || 1 },
+    ...section.rows.map((row, rowIndex) => ({ kind: "row", row, isHeader: rowIndex === 0 })),
+  ]);
   const isDeleted = record?.status === "deleted";
   const canDelete = ["imported", "restored", "completed", "completed_with_errors"].includes(record?.status);
 
@@ -90,14 +96,22 @@ function ExcelImportDetail() {
               <div className="overflow-auto border border-[var(--border)] rounded-2xl max-h-[65vh]">
                 <table className="min-w-full text-sm border-collapse">
                   <tbody>
-                    {preview.map((row, rowIndex) => (
-                      <tr key={rowIndex} className={rowIndex === 0 ? "bg-[var(--primary-light)] sticky top-0" : "bg-[var(--surface)]"}>
-                        {(row || []).map((cell, cellIndex) => (
+                    {previewRows.map((entry, rowIndex) => (
+                      entry.kind === "section" ? (
+                        <tr key={`${entry.label}-${rowIndex}`} className="bg-[var(--background)]">
+                          <td colSpan={entry.columns} className="px-4 py-3 border-b border-[var(--border)] text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
+                            {entry.label}
+                          </td>
+                        </tr>
+                      ) : (
+                      <tr key={rowIndex} className={entry.isHeader ? "bg-[var(--primary-light)]" : "bg-[var(--surface)]"}>
+                        {(entry.row || []).map((cell, cellIndex) => (
                           <td key={cellIndex} className="px-4 py-2.5 border-b border-r border-[var(--border)] whitespace-nowrap">
                             {cell === null || cell === "" ? <span className="text-[var(--text-muted)]">—</span> : String(cell)}
                           </td>
                         ))}
                       </tr>
+                      )
                     ))}
                   </tbody>
                 </table>

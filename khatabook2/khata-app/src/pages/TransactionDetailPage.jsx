@@ -335,6 +335,7 @@ Balance After Transaction:
                     type: transaction.type,
                     editTransactionId: transaction.id,
                     amount: transaction.amount,
+                    description: transaction.description,
                     date: transaction.created_at,
                     paymentMode: transaction.payment_mode,
                     items: items.map(item => ({

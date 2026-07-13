@@ -13,6 +13,7 @@ export async function createGaveTransaction({
   createdBy,
   createdAt,
   importHistoryId,
+  description,
 }) {
   const normalizedItems = (items || []).map((item) => ({
     product: item.product,
@@ -25,6 +26,7 @@ export async function createGaveTransaction({
     0,
   );
   const transactionAmount = amount === undefined ? calculatedAmount : Number(amount);
+  const transactionDescription = String(description ?? "").trim() || null;
 
   // The migration provides an atomic server-side implementation. It keeps the
   // exact same tables and payload shape while reducing a transaction from
@@ -43,6 +45,7 @@ export async function createGaveTransaction({
       p_created_at: createdAt || new Date().toISOString(),
     };
     if (importHistoryId) rpcPayload.p_import_history_id = importHistoryId;
+    if (transactionDescription) rpcPayload.p_description = transactionDescription;
     const { data, error } = await supabase.rpc("create_gave_transaction", rpcPayload);
     const missingFunction = error && (error.code === "PGRST202" || error.code === "42883");
     if (!error) {
@@ -63,6 +66,7 @@ export async function createGaveTransaction({
       customer_id: Number(customerId),
       type: "gave",
       amount: transactionAmount,
+      description: transactionDescription,
       created_by: createdBy,
       created_at: createdAt || new Date().toISOString(),
     }])
@@ -103,12 +107,11 @@ export async function createGaveTransaction({
 
 export async function updateGaveTransaction({
   transactionId,
-  customerId,
   items,
   amount,
-  createdBy,
   createdAt,
   originalItems,
+  description,
 }) {
   const normalizedItems = (items || []).map((item) => ({
     product: item.product,
@@ -121,6 +124,7 @@ export async function updateGaveTransaction({
     0,
   );
   const transactionAmount = amount === undefined ? calculatedAmount : Number(amount);
+  const transactionDescription = String(description ?? "").trim() || null;
 
   // Calculate stock deltas: +original items (restore) and -new items (deduct)
   const stockDeltas = {};
@@ -174,6 +178,7 @@ export async function updateGaveTransaction({
     .from("transactions")
     .update({
       amount: transactionAmount,
+      description: transactionDescription,
       created_at: createdAt || new Date().toISOString(),
     })
     .eq("id", transactionId);
