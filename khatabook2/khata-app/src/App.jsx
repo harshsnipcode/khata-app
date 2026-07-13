@@ -18,6 +18,7 @@ import CreateEmployee from "./pages/CreateEmployee";
 import SalaryPayment from "./pages/SalaryPayment";
 import EmployeeSalarySummary from "./pages/EmployeeSalarySummary";
 import CustomerTransactionsReport from "./pages/CustomerTransactionsReport";
+import ProfitReport from "./pages/ProfitReport";
 import TransactionDetails from "./pages/TransactionDetails";
 import TransactionDetailPage from "./pages/TransactionDetailPage";
 import CustomerListPage from "./pages/CustomerListPage";
@@ -128,11 +129,13 @@ function AppShell() {
       <Route path="/admin/excel/:importId" element={<ExcelRoute><ExcelImportDetail /></ExcelRoute>} />
       <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
       <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetails />} />
+      <Route path="/admin/reports/profit" element={<ProfitReport />} />
       <Route path="/customers/add" element={<CustomerListPage />} />
       <Route path="/party/new" element={<ErrorBoundary><CustomerForm /></ErrorBoundary>} />
       <Route path="/customer/:id" element={<CustomerDetails />} />
       <Route path="/customer/:id/profile" element={<CustomerProfile />} />
       <Route path="/customer/:id/transaction" element={<TransactionEntry />} />
+      <Route path="/customer/:id/payment" element={<TransactionEntry />} />
       <Route path="/customer/:id/transaction/success" element={<TransactionSuccess />} />
       <Route path="/transaction/:id" element={<TransactionDetailPage />} />
 

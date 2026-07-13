@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import ReportTabs from "../components/ReportTabs";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -245,9 +246,13 @@ function CustomerTransactionsReport() {
           Home
         </button>
 
-        <h1 className="text-xl font-bold text-[var(--text-primary)]">
-          {customerFilterName ? `Report of ${customerFilterName}` : "Customer Transactions Report"}
-        </h1>
+        <ReportTabs active="transactions" />
+
+        {customerFilterName && (
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">
+            Report of {customerFilterName}
+          </h1>
+        )}
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -18,7 +18,7 @@ function TransactionEntry() {
   const location = useLocation();
   const navigate = useNavigate();
   const stateData = location.state || {};
-  const type = stateData.type === "got" ? "got" : "gave";
+  const type = location.pathname.endsWith("/payment") || stateData.type === "got" ? "got" : "gave";
   const isGot = type === "got";
   const editTransactionId = stateData.editTransactionId;
   const isEditing = !!editTransactionId;
@@ -316,7 +316,7 @@ function TransactionEntry() {
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 relative select-none animate-fade-in">
       <div className="max-w-3xl mx-auto space-y-4 relative z-10">
         {/* Header */}
-        <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
           <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-1.5 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95"
@@ -327,10 +327,9 @@ function TransactionEntry() {
             </svg>
             <span>Back</span>
           </button>
-          <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${headerClass} text-glow-${type}`}>
-            {isGot ? "You Got" : "You Gave"}
-          </p>
-          <h1 className={`text-xl font-black ${headerClass}`}>{headerLabel}</h1>
+          <h1 className={`text-sm sm:text-base font-black ${headerClass} text-right leading-tight min-w-0`}>
+            {headerLabel}
+          </h1>
         </div>
 
         {/* Amount Display - Editable */}
@@ -421,7 +420,7 @@ function TransactionEntry() {
             id="txn-note-input"
             value={transactionNote}
             onChange={(e) => setTransactionNote(e.target.value)}
-            rows={3}
+            rows={1}
             placeholder={isGot ? "Optional note for this payment" : "Optional note for this transaction"}
             className="w-full resize-none bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300"
           />
