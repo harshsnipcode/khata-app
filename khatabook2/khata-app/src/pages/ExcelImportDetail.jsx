@@ -14,7 +14,9 @@ function ExcelImportDetail() {
   const [record, setRecord] = useState(null);
   const [error, setError] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteFromListConfirm, setShowDeleteFromListConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletingFromList, setDeletingFromList] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const businessName = localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy";
 
@@ -44,6 +46,26 @@ function ExcelImportDetail() {
     } catch (deleteFailure) {
       setDeleteError(deleteFailure.message || "Unable to delete this import.");
       setDeleting(false);
+    }
+  };
+
+  const handleDeleteFromList = async () => {
+    setDeletingFromList(true);
+    setDeleteError("");
+    try {
+      if (!navigator.onLine) {
+        throw new Error("Deleting an import from the list requires an internet connection.");
+      }
+      const { error: deleteHistoryError } = await supabase
+        .from("import_history")
+        .delete()
+        .eq("id", importId)
+        .eq("status", "deleted");
+      if (deleteHistoryError) throw deleteHistoryError;
+      navigate("/admin/excel", { replace: true });
+    } catch (deleteFailure) {
+      setDeleteError(deleteFailure.message || "Unable to delete this import from the list.");
+      setDeletingFromList(false);
     }
   };
 
@@ -119,7 +141,12 @@ function ExcelImportDetail() {
               <h2 className="font-black text-rose-600">Delete This Import</h2>
               <p className="text-sm text-[var(--text-secondary)] mt-1">Remove every transaction created by this Excel import as one reversible batch.</p>
               {isDeleted ? (
-                <p className="mt-4 text-sm font-bold text-[var(--text-secondary)]">This import has already been deleted.</p>
+                <>
+                  <p className="mt-4 text-sm font-bold text-[var(--text-secondary)]">This import has already been deleted.</p>
+                  <button onClick={() => setShowDeleteFromListConfirm(true)} className="mt-4 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wide cursor-pointer active:scale-95 transition">
+                    Delete from List
+                  </button>
+                </>
               ) : canDelete ? (
                 <button onClick={() => setShowDeleteConfirm(true)} className="mt-4 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wide cursor-pointer active:scale-95 transition">
                   Delete This Import
@@ -142,6 +169,21 @@ function ExcelImportDetail() {
               <button disabled={deleting} onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2.5 rounded-xl border border-[var(--border)] text-xs font-bold cursor-pointer disabled:opacity-50">Cancel</button>
               <button disabled={deleting} onClick={handleDeleteImport} className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-black cursor-pointer disabled:opacity-50">
                 {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteFromListConfirm && (
+        <div className="fixed inset-0 z-[100] bg-black/50 p-4 flex items-center justify-center">
+          <div className="w-full max-w-md rounded-3xl bg-[var(--surface)] border border-[var(--border)] p-6 shadow-2xl">
+            <h2 className="text-lg font-black">Delete this import from the list?</h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-2">This will permanently remove only this deleted import history record.</p>
+            <div className="flex justify-end gap-2 mt-6">
+              <button disabled={deletingFromList} onClick={() => setShowDeleteFromListConfirm(false)} className="px-4 py-2.5 rounded-xl border border-[var(--border)] text-xs font-bold cursor-pointer disabled:opacity-50">Cancel</button>
+              <button disabled={deletingFromList} onClick={handleDeleteFromList} className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-black cursor-pointer disabled:opacity-50">
+                {deletingFromList ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
