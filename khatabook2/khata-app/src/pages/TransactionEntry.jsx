@@ -35,7 +35,6 @@ function TransactionEntry() {
   const [paymentMode, setPaymentMode] = useState("cash");
   const [selectedDate, setSelectedDate] = useState(getLocalDateInputValue);
   const [transactionNote, setTransactionNote] = useState("");
-  const [visualViewportInset, setVisualViewportInset] = useState(0);
 
   const getEffectivePrice = (product) => {
     return customerPrices[product.id] ?? product.sale_price;
@@ -101,39 +100,6 @@ function TransactionEntry() {
       setSelectedProducts(selected);
     }
   }, [products]);
-
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return undefined;
-
-    const updateInset = () => {
-      const isMobile = window.matchMedia("(max-width: 768px)").matches;
-      if (!isMobile) {
-        setVisualViewportInset(0);
-        return;
-      }
-      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      setVisualViewportInset(inset > 80 ? Math.round(inset) : 0);
-    };
-
-    updateInset();
-    viewport.addEventListener("resize", updateInset);
-    viewport.addEventListener("scroll", updateInset);
-    window.addEventListener("orientationchange", updateInset);
-    return () => {
-      viewport.removeEventListener("resize", updateInset);
-      viewport.removeEventListener("scroll", updateInset);
-      window.removeEventListener("orientationchange", updateInset);
-    };
-  }, []);
-
-  const handleFocusCapture = (event) => {
-    const target = event.target;
-    if (!target?.matches?.("input, textarea")) return;
-    window.setTimeout(() => {
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
-    }, 120);
-  };
 
   // Calculate total amount from selected products using effective price
   const calculatedAmount = useMemo(() => {
@@ -346,15 +312,8 @@ function TransactionEntry() {
 
   const headerClass = isGot ? "text-emerald-400" : "text-rose-400";
 
-  const keyboardOpen = visualViewportInset > 0;
-  const mobileSaveStyle = keyboardOpen ? { bottom: `${visualViewportInset + 8}px` } : undefined;
-
   return (
-    <div
-      className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 relative select-none animate-fade-in"
-      onFocusCapture={handleFocusCapture}
-      style={keyboardOpen ? { paddingBottom: `${visualViewportInset + 112}px` } : undefined}
-    >
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 relative select-none animate-fade-in">
       <div className="max-w-3xl mx-auto space-y-4 relative z-10">
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
@@ -401,21 +360,12 @@ function TransactionEntry() {
                 step="1"
                 value={manualAmount}
                 onChange={(e) => setManualAmount(e.target.value)}
-                placeholder={calculatedAmount > 0 ? String(calculatedAmount) : "0"}
+                placeholder={calculatedAmount > 0 ? String(calculatedAmount) : "Amount"}
                 className="text-4xl font-black bg-transparent border-none text-[var(--text-primary)] focus:outline-none w-full min-w-0 placeholder-[var(--text-muted)]"
               />
             </div>
 
           </div>
-          <p className="text-[var(--text-secondary)] text-xs font-semibold mt-1.5 pl-1">
-            {isGot
-              ? "Enter the payment amount received"
-              : manualAmount
-              ? `Manual entry: ₹${formattedAmount}`
-              : calculatedAmount > 0
-              ? `From product total: ₹${formattedAmount}`
-              : "Type manual amount or select products from catalogue below"}
-          </p>
         </div>
 
         {/* Date Selector */}
@@ -452,28 +402,18 @@ function TransactionEntry() {
           />
         </div>
 
-        {/* Save Button (only for "gave" — sticky while scrolling products) */}
-        <div className="card rounded-2xl p-4 shadow-sm">
-          <label htmlFor="txn-note-input" className="block text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">
-            Note
-          </label>
-          <textarea
-            id="txn-note-input"
-            value={transactionNote}
-            onChange={(e) => setTransactionNote(e.target.value)}
-            rows={1}
-            placeholder={isGot ? "Optional note for this payment" : "Optional note for this transaction"}
-            className="w-full resize-none bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300"
-          />
-        </div>
+        {/* Note */}
+        <textarea
+          id="txn-note-input"
+          value={transactionNote}
+          onChange={(e) => setTransactionNote(e.target.value)}
+          rows={1}
+          placeholder="Optional note (optional)"
+          className="w-full resize-none bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300"
+        />
 
         {!isGot && (
-          <div
-            className={keyboardOpen
-              ? "fixed left-0 right-0 z-50 bg-[var(--background)] py-2 px-4"
-              : "sticky top-0 z-50 bg-[var(--background)] py-3 -mx-4 px-4"}
-            style={mobileSaveStyle}
-          >
+          <div className="sticky top-0 z-50 bg-[var(--background)] py-3 -mx-4 px-4">
             <button
               onClick={handleSave}
               disabled={saving || finalAmount <= 0}
@@ -486,11 +426,7 @@ function TransactionEntry() {
 
         {/* Save Button (only for "got") */}
         {isGot && (
-          <form
-            onSubmit={handleSave}
-            className={keyboardOpen ? "fixed left-0 right-0 z-50 bg-[var(--background)] py-2 px-4" : ""}
-            style={mobileSaveStyle}
-          >
+          <form onSubmit={handleSave}>
             <button
               type="submit"
               disabled={saving || finalAmount <= 0}
