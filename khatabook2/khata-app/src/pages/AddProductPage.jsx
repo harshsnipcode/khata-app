@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
@@ -11,9 +11,16 @@ function AddProductPage() {
   const [purchasePrice, setPurchasePrice] = useState("");
   const [openingStock, setOpeningStock] = useState("");
   const [lowStockLimit, setLowStockLimit] = useState("");
-  const [unit, setUnit] = useState("PCS");
+  const [groupId, setGroupId] = useState("");
+  const [groups, setGroups] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    offlineSupabase.from("product_groups").select("id, name").order("name", { ascending: true }).then(({ data }) => {
+      if (data) setGroups(data);
+    });
+  }, []);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -42,7 +49,8 @@ function AddProductPage() {
           purchase_price: Number(purchasePrice),
           stock_quantity: Number(openingStock || 0),
           low_stock_limit: Number(lowStockLimit || 0),
-          unit,
+          unit: "PCS",
+          group_id: groupId ? Number(groupId) : null,
           created_by
         }
       ]).select().single();
@@ -164,14 +172,15 @@ function AddProductPage() {
             </div>
 
             <div className="space-y-2 relative">
-              <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider pl-1">Measurement Unit</label>
+              <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider pl-1">Product Group</label>
               <div className="relative">
                 <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
+                  value={groupId}
+                  onChange={(e) => setGroupId(e.target.value)}
                   className="w-full bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-2xl px-5 py-3.5 text-white focus:outline-none focus:border-emerald-500/50 transition-all duration-300 text-sm appearance-none cursor-pointer pr-10"
                 >
-                  {['PCS', 'KG', 'LTR', 'BOX', 'BAG', 'PKT'].map(u => <option key={u} value={u} className="bg-slate-900 text-white">{u}</option>)}
+                  <option value="" className="bg-slate-900 text-white">None</option>
+                  {groups.map(g => <option key={g.id} value={g.id} className="bg-slate-900 text-white">{g.name}</option>)}
                 </select>
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

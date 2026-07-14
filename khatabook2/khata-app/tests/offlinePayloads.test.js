@@ -51,6 +51,7 @@ test("all offline sync tables have explicit checked-in schema allowlists", () =>
   const expectedTables = [
     "customers",
     "products",
+    "product_groups",
     "transactions",
     "transaction_items",
     "customer_product_prices",

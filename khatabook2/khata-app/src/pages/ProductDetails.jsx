@@ -7,6 +7,7 @@ function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
+  const [groupName, setGroupName] = useState(null);
 
   const getHomePath = () => {
     const role = localStorage.getItem("khata_role");
@@ -23,7 +24,15 @@ function ProductDetails() {
       supabase.from("products").select("*").eq("id", id).single(),
       supabase.from("product_transactions").select("*").eq("product_id", id).order("created_at", { ascending: false })
     ]);
-    if (!pRes.error) setProduct(pRes.data);
+    if (!pRes.error) {
+      setProduct(pRes.data);
+      if (pRes.data?.group_id) {
+        const { data: gData } = await supabase.from("product_groups").select("name").eq("id", pRes.data.group_id).single();
+        setGroupName(gData?.name || null);
+      } else {
+        setGroupName(null);
+      }
+    }
     if (!tRes.error) setTransactions(tRes.data || []);
     setLoading(false);
   };
@@ -73,7 +82,7 @@ function ProductDetails() {
           </div>
           <div>
             <h1 className="text-3xl font-black uppercase tracking-tight text-[var(--text-primary)]">{product.name}</h1>
-            <p className="text-[var(--text-secondary)] font-bold mt-1">Product ID #{product.id}</p>
+            <p className="text-[var(--text-secondary)] font-bold mt-1">Group: {groupName || "No Group"}</p>
             <div className="flex gap-2 mt-2">
               <span className="bg-[var(--primary-light)] text-[var(--primary)] text-[10px] font-black px-2 py-1 rounded border border-[var(--primary)]/20 uppercase tracking-widest">Active</span>
             </div>

@@ -13,7 +13,8 @@ function EditProductPage() {
   const [purchasePrice, setPurchasePrice] = useState("");
   const [openingStock, setOpeningStock] = useState("");
   const [lowStockLimit, setLowStockLimit] = useState("");
-  const [unit, setUnit] = useState("PCS");
+  const [groupId, setGroupId] = useState("");
+  const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -30,18 +31,22 @@ function EditProductPage() {
 
   useEffect(() => {
     const loadProduct = async () => {
-      const { data, error } = await supabase.from("products").select("*").eq("id", id).single();
-      if (error) {
+      const [pRes, gRes] = await Promise.all([
+        supabase.from("products").select("*").eq("id", id).single(),
+        offlineSupabase.from("product_groups").select("id, name").order("name", { ascending: true })
+      ]);
+      if (gRes.data) setGroups(gRes.data);
+      if (pRes.error) {
         setError("Failed to load product.");
         setLoading(false);
         return;
       }
-      setName(data.name);
-      setSalePrice(String(data.sale_price));
-      setPurchasePrice(String(data.purchase_price));
-      setOpeningStock(String(data.stock_quantity || 0));
-      setLowStockLimit(String(data.low_stock_limit || 0));
-      setUnit(data.unit || "PCS");
+      setName(pRes.data.name);
+      setSalePrice(String(pRes.data.sale_price));
+      setPurchasePrice(String(pRes.data.purchase_price));
+      setOpeningStock(String(pRes.data.stock_quantity || 0));
+      setLowStockLimit(String(pRes.data.low_stock_limit || 0));
+      setGroupId(pRes.data.group_id ? String(pRes.data.group_id) : "");
       setLoading(false);
     };
     loadProduct();
@@ -71,7 +76,7 @@ function EditProductPage() {
         purchase_price: Number(purchasePrice),
         stock_quantity: Number(openingStock || 0),
         low_stock_limit: Number(lowStockLimit || 0),
-        unit,
+        group_id: groupId ? Number(groupId) : null,
       }).eq("id", id);
 
       if (uError) throw uError;
@@ -96,7 +101,7 @@ function EditProductPage() {
       const productToStore = fullProduct || {
         id: Number(id), name,
         sale_price: Number(salePrice), purchase_price: Number(purchasePrice),
-        stock_quantity: Number(openingStock || 0), unit,
+        stock_quantity: Number(openingStock || 0), unit: "PCS",
       };
       console.log("[RecycleBin] Full product being stored:", productToStore);
 
@@ -208,14 +213,15 @@ function EditProductPage() {
             </div>
 
             <div className="space-y-2 relative">
-              <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider pl-1">Measurement Unit</label>
+              <label className="block text-slate-400 text-[10px] font-bold uppercase tracking-wider pl-1">Product Group</label>
               <div className="relative">
                 <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
+                  value={groupId}
+                  onChange={(e) => setGroupId(e.target.value)}
                   className="w-full bg-slate-950/40 border border-white/8 hover:border-white/12 rounded-2xl px-5 py-3.5 text-white focus:outline-none focus:border-emerald-500/50 transition-all duration-300 text-sm appearance-none cursor-pointer pr-10"
                 >
-                  {['PCS', 'KG', 'LTR', 'BOX', 'BAG', 'PKT'].map(u => <option key={u} value={u} className="bg-slate-900 text-white">{u}</option>)}
+                  <option value="" className="bg-slate-900 text-white">None</option>
+                  {groups.map(g => <option key={g.id} value={g.id} className="bg-slate-900 text-white">{g.name}</option>)}
                 </select>
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

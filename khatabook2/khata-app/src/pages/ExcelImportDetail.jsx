@@ -29,10 +29,6 @@ function ExcelImportDetail() {
   const report = record?.validation_report || {};
   const preview = Array.isArray(record?.parsed_preview) ? record.parsed_preview : [];
   const previewSections = buildPreviewSections(preview);
-  const previewRows = previewSections.flatMap((section, sectionIndex) => [
-    { kind: "section", label: `Section ${sectionIndex + 1}`, columns: section.rows[0]?.length || 1 },
-    ...section.rows.map((row, rowIndex) => ({ kind: "row", row, isHeader: rowIndex === 0 })),
-  ]);
   const isDeleted = record?.status === "deleted";
   const canDelete = ["imported", "restored", "completed", "completed_with_errors"].includes(record?.status);
 
@@ -91,32 +87,33 @@ function ExcelImportDetail() {
               </div>
             </section>
 
-            <section className="card rounded-3xl p-5">
-              <div className="mb-4"><h2 className="font-black">Uploaded Spreadsheet Preview</h2><p className="text-xs text-[var(--text-secondary)] mt-1">Stored parsed copy of the original worksheet.</p></div>
-              <div className="overflow-auto border border-[var(--border)] rounded-2xl max-h-[65vh]">
-                <table className="min-w-full text-sm border-collapse">
-                  <tbody>
-                    {previewRows.map((entry, rowIndex) => (
-                      entry.kind === "section" ? (
-                        <tr key={`${entry.label}-${rowIndex}`} className="bg-[var(--background)]">
-                          <td colSpan={entry.columns} className="px-4 py-3 border-b border-[var(--border)] text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
-                            {entry.label}
-                          </td>
-                        </tr>
-                      ) : (
-                      <tr key={rowIndex} className={entry.isHeader ? "bg-[var(--primary-light)]" : "bg-[var(--surface)]"}>
-                        {(entry.row || []).map((cell, cellIndex) => (
-                          <td key={cellIndex} className="px-4 py-2.5 border-b border-r border-[var(--border)] whitespace-nowrap">
-                            {cell === null || cell === "" ? <span className="text-[var(--text-muted)]">—</span> : String(cell)}
-                          </td>
-                        ))}
-                      </tr>
-                      )
-                    ))}
-                  </tbody>
-                </table>
+            {previewSections.length > 0 && (
+              <div className="space-y-4">
+                <div>
+                  <div className="mb-2"><h2 className="font-black">Uploaded Spreadsheet Preview</h2><p className="text-xs text-[var(--text-secondary)] mt-1">Stored parsed copy of the original worksheet.</p></div>
+                </div>
+                {previewSections.map((section, sectionIndex) => (
+                  <section key={sectionIndex} className="card rounded-3xl p-5">
+                    <div className="mb-4"><h3 className="font-black text-sm uppercase tracking-widest text-[var(--text-secondary)]">Section {sectionIndex + 1} Preview</h3></div>
+                    <div className="overflow-auto border border-[var(--border)] rounded-2xl max-h-[65vh]">
+                      <table className="min-w-full text-sm border-collapse">
+                        <tbody>
+                          {section.rows.map((row, rowIndex) => (
+                            <tr key={rowIndex} className={rowIndex === 0 ? "bg-[var(--primary-light)]" : "bg-[var(--surface)]"}>
+                              {(row || []).map((cell, cellIndex) => (
+                                <td key={cellIndex} className="px-4 py-2.5 border-b border-r border-[var(--border)] whitespace-nowrap">
+                                  {cell === null || cell === "" ? <span className="text-[var(--text-muted)]">—</span> : String(cell)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                ))}
               </div>
-            </section>
+            )}
 
             <section className="rounded-3xl border border-rose-500/20 bg-rose-500/5 p-5">
               <h2 className="font-black text-rose-600">Delete This Import</h2>

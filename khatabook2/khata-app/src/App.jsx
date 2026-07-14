@@ -35,6 +35,7 @@ import StockSuccess from "./pages/StockSuccess";
 import InventoryReport from "./pages/InventoryReport";
 import SharedLedgerView from "./pages/SharedLedgerView";
 import SettingsPage from "./pages/SettingsPage";
+import ProductGroupsPage from "./pages/ProductGroupsPage";
 import AdminProfilesPage from "./pages/AdminProfilesPage";
 import RecycleBinPage from "./pages/RecycleBinPage";
 import ReminderMessageEditor from "./pages/ReminderMessageEditor";
@@ -130,6 +131,7 @@ function AppShell() {
       <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
       <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetails />} />
       <Route path="/admin/reports/profit" element={<ProfitReport />} />
+      <Route path="/admin/reports/profit/group/:groupId" element={<ProfitReport />} />
       <Route path="/customers/add" element={<CustomerListPage />} />
       <Route path="/party/new" element={<ErrorBoundary><CustomerForm /></ErrorBoundary>} />
       <Route path="/customer/:id" element={<CustomerDetails />} />
@@ -150,6 +152,7 @@ function AppShell() {
       <Route path="/catalogue/reports" element={<InventoryReport />} />
       <Route path="/share/customer/:id" element={<SharedLedgerView />} />
       <Route path="/settings" element={<SettingsPage />} />
+      <Route path="/settings/product-groups" element={<ProductGroupsPage />} />
       <Route path="/settings/admins" element={<AdminRoute><AdminProfilesPage /></AdminRoute>} />
       <Route path="/settings/recycle-bin" element={<RecycleBinPage />} />
       <Route path="/settings/reminder-message" element={<ReminderMessageEditor />} />

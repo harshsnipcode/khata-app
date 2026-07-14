@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import ReportTabs from "../components/ReportTabs";
 
@@ -17,12 +17,17 @@ function formatProfitPercent(value) {
   return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(2)}%`;
 }
 
+const REPORT_ROW_GRID = "grid grid-cols-[1fr_90px_90px] sm:grid-cols-[1fr_120px_120px] gap-2";
+
 function ProfitReport() {
   const navigate = useNavigate();
+  const { groupId } = useParams();
+  const activeGroupId = groupId ? String(groupId) : "";
   const today = useMemo(() => getDateStr(new Date()), []);
   const [transactions, setTransactions] = useState([]);
   const [items, setItems] = useState([]);
   const [products, setProducts] = useState([]);
+  const [productGroups, setProductGroups] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -33,15 +38,17 @@ function ProfitReport() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [txnRes, itemRes, productRes, customerRes] = await Promise.all([
+    const [txnRes, itemRes, productRes, groupRes, customerRes] = await Promise.all([
       supabase.from("transactions").select("id, customer_id, type, created_at, date").order("created_at", { ascending: false }),
       supabase.from("transaction_items").select("*"),
-      supabase.from("products").select("id, name, sale_price, purchase_price, unit"),
+      supabase.from("products").select("id, name, group_id, sale_price, purchase_price, unit"),
+      supabase.from("product_groups").select("id, name").order("name", { ascending: true }),
       supabase.from("customers").select("id, name"),
     ]);
     if (!txnRes.error) setTransactions(txnRes.data || []);
     if (!itemRes.error) setItems(itemRes.data || []);
     if (!productRes.error) setProducts(productRes.data || []);
+    if (!groupRes.error) setProductGroups(groupRes.data || []);
     if (!customerRes.error) setCustomers(customerRes.data || []);
     setLoading(false);
   }, []);
@@ -54,6 +61,7 @@ function ProfitReport() {
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => loadData())
       .on("postgres_changes", { event: "*", schema: "public", table: "transaction_items" }, () => loadData())
       .on("postgres_changes", { event: "*", schema: "public", table: "products" }, () => loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "product_groups" }, () => loadData())
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [loadData]);
@@ -69,6 +77,12 @@ function ProfitReport() {
     customers.forEach((customer) => { map[String(customer.id)] = customer; });
     return map;
   }, [customers]);
+
+  const productGroupMap = useMemo(() => {
+    const map = {};
+    productGroups.forEach((group) => { map[String(group.id)] = group; });
+    return map;
+  }, [productGroups]);
 
   const soldTransactionMap = useMemo(() => {
     const map = new Map();
@@ -87,23 +101,92 @@ function ProfitReport() {
   const breakdownRows = useMemo(() => {
     const totals = new Map();
 
+    if (groupBy === "customers") {
+      customers.forEach((customer) => {
+        const id = String(customer.id);
+        totals.set(id, {
+          id,
+          name: customer.name || `Customer #${customer.id}`,
+          quantity: 0,
+          revenue: 0,
+          profit: 0,
+        });
+      });
+    } else if (activeGroupId) {
+      products
+        .filter((product) => String(product.group_id || "") === activeGroupId)
+        .forEach((product) => {
+          const id = String(product.id);
+          totals.set(id, {
+            id,
+            type: "product",
+            name: product.name || "Product",
+            unit: product.unit || "",
+            quantity: 0,
+            revenue: 0,
+            profit: 0,
+          });
+        });
+    } else {
+      productGroups.forEach((group) => {
+        const id = `group-${group.id}`;
+        totals.set(id, {
+          id,
+          groupId: String(group.id),
+          type: "group",
+          name: group.name || "Product Group",
+          quantity: 0,
+          revenue: 0,
+          profit: 0,
+        });
+      });
+
+      products
+        .filter((product) => !product.group_id)
+        .forEach((product) => {
+          const id = String(product.id);
+          totals.set(id, {
+            id,
+            type: "product",
+            name: product.name || "Product",
+            unit: product.unit || "",
+            quantity: 0,
+            revenue: 0,
+            profit: 0,
+          });
+        });
+    }
+
     items.forEach((item) => {
       const transaction = soldTransactionMap.get(String(item.transaction_id));
       if (!transaction) return;
       const productId = String(item.product_id);
       const product = productMap[productId];
       if (!product) return;
+      if (groupBy === "products" && activeGroupId && String(product.group_id || "") !== activeGroupId) return;
 
       const quantity = Number(item.quantity) || 0;
       const sellingPrice = Number(item.price ?? product.sale_price) || 0;
       const purchasePrice = Number(product.purchase_price) || 0;
       const revenue = sellingPrice * quantity;
       const profit = (sellingPrice - purchasePrice) * quantity;
-      const groupId = groupBy === "customers" ? String(transaction.customer_id) : productId;
+      const groupId = groupBy === "customers"
+        ? String(transaction.customer_id)
+        : activeGroupId
+          ? productId
+          : product.group_id
+            ? `group-${product.group_id}`
+            : productId;
       const customer = customerMap[String(transaction.customer_id)];
       const existing = totals.get(groupId) || {
         id: groupId,
-        name: groupBy === "customers" ? (customer?.name || `Customer #${transaction.customer_id}`) : (product.name || "Product"),
+        groupId: groupBy === "products" && !activeGroupId && product.group_id ? String(product.group_id) : undefined,
+        type: groupBy === "products" && !activeGroupId && product.group_id ? "group" : "product",
+        name: groupBy === "customers"
+          ? (customer?.name || `Customer #${transaction.customer_id}`)
+          : !activeGroupId && product.group_id
+            ? (productGroupMap[String(product.group_id)]?.name || "Product Group")
+            : (product.name || "Product"),
         unit: product.unit || "",
         quantity: 0,
         revenue: 0,
@@ -117,7 +200,7 @@ function ProfitReport() {
     });
 
     return Array.from(totals.values()).sort((a, b) => b.profit - a.profit);
-  }, [items, productMap, customerMap, soldTransactionMap, groupBy]);
+  }, [items, products, productGroups, productMap, productGroupMap, customerMap, customers, soldTransactionMap, groupBy, activeGroupId]);
 
   const filteredRows = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -131,6 +214,14 @@ function ProfitReport() {
     const profitPercent = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
     return { totalProfit, totalRevenue, profitPercent };
   }, [breakdownRows]);
+
+  const visibleSummary = useMemo(() => {
+    const totalProfit = filteredRows.reduce((sum, row) => sum + row.profit, 0);
+    const totalRevenue = filteredRows.reduce((sum, row) => sum + row.revenue, 0);
+    return { totalEntries: filteredRows.length, totalProfit, totalRevenue };
+  }, [filteredRows]);
+
+  const activeGroupName = activeGroupId ? productGroupMap[activeGroupId]?.name : "";
 
   const handleDurationSelect = (key) => {
     const now = new Date();
@@ -189,7 +280,7 @@ function ProfitReport() {
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl pl-11 pr-4 py-3 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition"
-              placeholder={groupBy === "products" ? "Search Products" : "Search Customers"}
+              placeholder={groupBy === "products" ? (activeGroupId ? "Search Products" : "Search Products or Groups") : "Search Customers"}
             />
           </div>
           <div className="grid grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1 shrink-0">
@@ -200,7 +291,10 @@ function ProfitReport() {
               <button
                 key={key}
                 type="button"
-                onClick={() => setGroupBy(key)}
+                onClick={() => {
+                  setGroupBy(key);
+                  if (key === "customers" && activeGroupId) navigate("/admin/reports/profit");
+                }}
                 className={`rounded-xl px-2 sm:px-3 py-2 text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
                   groupBy === key
                     ? "bg-[var(--primary)] text-white"
@@ -256,19 +350,49 @@ function ProfitReport() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[1fr_90px_90px] sm:grid-cols-[1fr_120px_120px] gap-2 px-3 py-3 border border-[var(--border)] bg-[var(--background)] rounded-2xl">
-                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">
-                  {groupBy === "products" ? "Product" : "Customer"}
-                </p>
-                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)] text-right">Revenue</p>
-                <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)] text-right">Profit</p>
+              {activeGroupId && groupBy === "products" && (
+                <button
+                  onClick={() => navigate("/admin/reports/profit")}
+                  className="flex items-center gap-2 text-[var(--text-secondary)] text-xs font-bold hover:text-[var(--text-primary)] transition cursor-pointer outline-none"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 12H5" /><path d="M12 19l-7-7 7-7" />
+                  </svg>
+                  {activeGroupName || "Product Group"}
+                </button>
+              )}
+              <div className={`${REPORT_ROW_GRID} px-3 py-3 border border-[var(--border)] bg-[var(--background)] rounded-2xl`}>
+                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Total Entries</p>
+                    <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5">{visibleSummary.totalEntries}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">Revenue</p>
+                  <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5">₹{formatINR(visibleSummary.totalRevenue)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-[#52b788]">Profit</p>
+                  <p className="text-sm font-bold text-[#52b788] mt-0.5">₹{formatINR(visibleSummary.totalProfit)}</p>
+                </div>
               </div>
               {filteredRows.map((row) => (
-                <div key={row.id} className="card rounded-2xl p-4 shadow-sm hover:card-hover transition-all">
-                  <div className="grid grid-cols-[1fr_90px_90px] sm:grid-cols-[1fr_120px_120px] gap-2 items-center">
+                <div
+                  key={row.id}
+                  onClick={() => {
+                    if (groupBy === "products" && row.type === "group" && row.groupId) {
+                      navigate(`/admin/reports/profit/group/${row.groupId}`);
+                    }
+                  }}
+                  className={`card rounded-2xl p-4 shadow-sm hover:card-hover transition-all ${
+                    groupBy === "products" && row.type === "group" ? "cursor-pointer" : ""
+                  }`}
+                >
+                  <div className={`${REPORT_ROW_GRID} items-center`}>
                     <div className="min-w-0">
                       <h2 className="font-black text-[var(--text-primary)] truncate">{row.name}</h2>
-                      {groupBy === "products" && (
+                      {groupBy === "products" && row.type !== "group" && (
                         <p className="text-[10px] text-[var(--text-muted)] font-medium mt-0.5">
                           {row.quantity} {row.unit}
                         </p>

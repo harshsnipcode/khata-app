@@ -6,6 +6,7 @@ const RECYCLE_KEY = `${STORAGE_PREFIX}:recycle_bin`;
 
 export const OFFLINE_TABLES = [
   "customers",
+  "product_groups",
   "products",
   "transactions",
   "transaction_items",
@@ -19,7 +20,7 @@ export const OFFLINE_TABLES = [
   "import_batch_recycle_bin",
 ];
 
-const FOREIGN_KEYS = ["customer_id", "transaction_id", "product_id", "employee_id"];
+const FOREIGN_KEYS = ["customer_id", "transaction_id", "product_id", "employee_id", "group_id"];
 
 function readJson(key, fallback) {
   if (typeof localStorage === "undefined") return fallback;
@@ -302,7 +303,7 @@ export function rewriteForeignKeys(payload) {
   const next = { ...payload };
   for (const key of FOREIGN_KEYS) {
     if (next[key] === undefined || next[key] === null) continue;
-    const table = key.replace("_id", "s");
+    const table = key === "group_id" ? "product_groups" : key.replace("_id", "s");
     next[key] = resolveServerId(table, next[key]);
   }
   return next;
@@ -317,6 +318,7 @@ export function rewriteFilters(filters = [], ownTable = null) {
     if (filter.column === "transaction_id") table = "transactions";
     if (filter.column === "product_id") table = "products";
     if (filter.column === "employee_id") table = "employees";
+    if (filter.column === "group_id") table = "product_groups";
     if (!table) return filter;
     return { ...filter, value: resolveServerId(table, filter.value) };
   });

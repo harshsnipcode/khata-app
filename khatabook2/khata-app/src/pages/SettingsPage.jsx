@@ -243,6 +243,27 @@ function SettingsPage() {
 
         {/* Section: Download all entries */}
         <button
+          onClick={() => navigate("/settings/product-groups")}
+          className="w-full card rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 cursor-pointer outline-none active:scale-95 transition-all"
+        >
+          <div className="w-8 h-8 rounded-full bg-[var(--primary-light)] border border-[var(--primary)]/20 flex items-center justify-center shrink-0">
+            <svg className="w-4 h-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <path d="M3.3 7 12 12l8.7-5" />
+              <path d="M12 22V12" />
+            </svg>
+          </div>
+          <div className="flex-1 text-left">
+            <p className="text-sm font-bold text-[var(--text-primary)]">Create / Edit Product Groups</p>
+            <p className="text-[10px] font-medium text-[var(--text-secondary)]">Organize catalogue products</p>
+          </div>
+          <svg className="w-4 h-4 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
+        {/* Section: Download all entries */}
+        <button
           onClick={() => navigate("/settings/downloadexcel")}
           className="w-full card rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 cursor-pointer outline-none active:scale-95 transition-all"
         >
