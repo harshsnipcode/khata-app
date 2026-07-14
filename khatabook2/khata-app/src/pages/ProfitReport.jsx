@@ -391,7 +391,7 @@ function ProfitReport() {
                 >
                   <div className={`${REPORT_ROW_GRID} items-center`}>
                     <div className="min-w-0">
-                      <h2 className="font-black text-[var(--text-primary)] truncate">{row.name}</h2>
+                      <h3 className="font-semibold text-sm truncate" style={{ color: "#2d3436" }}>{row.name}</h3>
                       {groupBy === "products" && row.type !== "group" && (
                         <p className="text-[10px] text-[var(--text-muted)] font-medium mt-0.5">
                           {row.quantity} {row.unit}
