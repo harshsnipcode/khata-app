@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { collectExcelRowItems } from "../src/lib/excelImportGrouping.js";
+import { normalizeProductName } from "../src/lib/excelImport.js";
 
 const products = [
   { id: 1, name: "Aamras", sale_price: 100 },
   { id: 2, name: "Falooda", sale_price: 80 },
   { id: 3, name: "Buttermilk", sale_price: 20 },
+  { id: 4, name: "SP 1⁄2", sale_price: 40 },
+  { id: 5, name: "G 1/2", sale_price: 30 },
 ];
-const productMap = new Map(products.map((product) => [product.name.toLowerCase(), product]));
+const productMap = new Map(products.map((product) => [normalizeProductName(product.name), product]));
 
 test("one Excel row produces one multi-item transaction payload", () => {
   const grouped = collectExcelRowItems({
@@ -60,4 +63,23 @@ test("unknown and invalid product cells are skipped without blocking valid row i
   assert.equal(grouped.items[0].product.name, "Buttermilk");
   assert.equal(grouped.skipped, 2);
   assert.match(grouped.errors[0], /Quantity must be a number/);
+});
+
+test("half-character product headers match catalogue variants", () => {
+  const grouped = collectExcelRowItems({
+    row: { rowNumber: 5, customerName: "Harsh Sharma", values: [2, 3] },
+    customer: { id: 7, name: "Harsh Sharma" },
+    productHeaders: ["SP ½", "G .½"],
+    productMap,
+    priceMap: new Map(),
+  });
+
+  assert.deepEqual(grouped.items.map(({ product, quantity }) => ({
+    product: product.name,
+    quantity,
+  })), [
+    { product: "SP 1⁄2", quantity: 2 },
+    { product: "G 1/2", quantity: 3 },
+  ]);
+  assert.equal(grouped.skipped, 0);
 });

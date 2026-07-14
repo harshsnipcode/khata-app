@@ -12,6 +12,7 @@ import { excludeTotalSummaries } from "../lib/excelImportValidation";
 import {
   hashFile,
   normalizeImportName,
+  normalizeProductName,
   parseExcelWorkbook,
 } from "../lib/excelImport";
 
@@ -126,14 +127,20 @@ function ExcelImportPage() {
       if (priceResult.error) throw priceResult.error;
 
       const customerMap = new Map((customerResult.data || []).map((item) => [normalizeImportName(item.name), item]));
-      const productMap = new Map((productResult.data || []).map((item) => [normalizeImportName(item.name), item]));
+      const productMap = new Map((productResult.data || []).map((item) => [normalizeProductName(item.name), item]));
       const priceMap = new Map((priceResult.data || []).map((item) => [
         `${item.customer_id}:${item.product_id}`,
         Number(item.custom_price),
       ]));
       const processingView = excludeTotalSummaries(prepared.parsed);
       const productHeaders = processingView.productHeaders;
-      const unknownProducts = [...new Set(productHeaders.filter((name) => !productMap.has(normalizeImportName(name))))];
+      productHeaders.forEach((header) => {
+        console.log(`Excel header:\nOriginal: ${header}\nNormalized: ${normalizeProductName(header)}`);
+      });
+      (productResult.data || []).forEach((product) => {
+        console.log(`Catalogue product:\nOriginal: ${product.name}\nNormalized: ${normalizeProductName(product.name)}`);
+      });
+      const unknownProducts = [...new Set(productHeaders.filter((name) => !productMap.has(normalizeProductName(name))))];
       const unknownCustomers = [...new Set(
         processingView.rows
           .map((row) => row.customerName)

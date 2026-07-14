@@ -1,10 +1,10 @@
-import { normalizeImportName } from "./excelImport.js";
+import { normalizeImportName, normalizeProductName } from "./excelImport.js";
 
 function assertUniqueNames(records, label) {
   const seen = new Set();
   const duplicates = new Set();
   for (const record of records) {
-    const name = normalizeImportName(record.name);
+    const name = label === "product" ? normalizeProductName(record.name) : normalizeImportName(record.name);
     if (!name) throw new Error(`A ${label} has a blank name and cannot be exported for re-import.`);
     if (seen.has(name)) duplicates.add(record.name);
     seen.add(name);

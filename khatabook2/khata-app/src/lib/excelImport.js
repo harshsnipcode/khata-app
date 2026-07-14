@@ -1,5 +1,23 @@
 export function normalizeImportName(value) {
-  return String(value ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/[\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/g, " ")
+    .replace(/[\u200b-\u200d\ufeff]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
+}
+
+export function normalizeProductName(value) {
+  return normalizeImportName(value)
+    .replace(/\u2044/g, "/")
+    .replace(/½/g, "1/2")
+    .replace(/\b1\s*\/\s*2\b/g, "1/2")
+    .replace(/\s*\.\s*(?=1\s*\/\s*2\b)/g, " ")
+    .replace(/([a-z])(?=1\/2\b)/g, "$1 ")
+    .replace(/\b1\s*\/\s*2\b/g, "1/2")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 export function isCustomerSectionHeader(value) {
@@ -28,7 +46,7 @@ export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", cataloguePr
   let customerColumnIndex = 0;
 
   if (Array.isArray(catalogueProductNames)) {
-    const catalogueNames = new Set(catalogueProductNames.map(normalizeImportName).filter(Boolean));
+    const catalogueNames = new Set(catalogueProductNames.map(normalizeProductName).filter(Boolean));
     let detected = null;
 
     for (let rowIndex = 0; rowIndex < matrix.length && !detected; rowIndex += 1) {
@@ -37,7 +55,7 @@ export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", cataloguePr
         if (!isCustomerSectionHeader(row[columnIndex])) continue;
         let matchingProducts = 0;
         for (let scanIndex = 0; scanIndex < row.length; scanIndex += 1) {
-          if (scanIndex !== columnIndex && catalogueNames.has(normalizeImportName(row[scanIndex]))) {
+          if (scanIndex !== columnIndex && catalogueNames.has(normalizeProductName(row[scanIndex]))) {
             matchingProducts += 1;
             if (matchingProducts >= 2) break;
           }
@@ -73,7 +91,7 @@ export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", cataloguePr
     throw new Error("Product column names cannot be blank.");
   }
 
-  const normalizedHeaders = headers.slice(1).map(normalizeImportName);
+  const normalizedHeaders = headers.slice(1).map(normalizeProductName);
   if (new Set(normalizedHeaders).size !== normalizedHeaders.length) {
     throw new Error("Product column names must be unique.");
   }

@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import {
   isCustomerSectionHeader,
   normalizeImportName,
+  normalizeProductName,
   parseExcelWorkbook,
   parseImportMatrix,
   quantityFromCell,
@@ -42,6 +43,26 @@ test("validates headers without making matching case-sensitive", () => {
   assert.throws(() => parseImportMatrix([["Party", "P-1"]]), /First column/);
   assert.throws(() => parseImportMatrix([["Customer"]]), /product column/);
   assert.throws(() => parseImportMatrix([["Customer", "P-1", " p-1 "]]), /unique/);
+});
+
+test("normalizes half-character product name variants", () => {
+  const expected = "sp 1/2";
+  for (const value of ["SP ½", "SP 1/2", "SP 1⁄2", "SP  1 / 2", "SP\u00a01⁄2"]) {
+    assert.equal(normalizeProductName(value), expected);
+  }
+
+  for (const value of ["G .½", "G.½", "G . ½", "G 1/2"]) {
+    assert.equal(normalizeProductName(value), "g 1/2");
+  }
+});
+
+test("detects catalogue-backed headers with half-character variants", () => {
+  const parsed = parseImportMatrix([
+    ["Customer", "SP ½", "T 1⁄2", "D 1 / 2", "G .½"],
+    ["Cust-1", 1, 2, 3, 4],
+  ], "Transactions", ["SP 1/2", "T ½", "D ½", "G 1/2"]);
+
+  assert.deepEqual(parsed.headers, ["Customer", "SP ½", "T 1⁄2", "D 1 / 2", "G .½"]);
 });
 
 test("accepts CUSTOMER and CUSTOMERS as section headers", () => {

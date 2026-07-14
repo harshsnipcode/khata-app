@@ -1,4 +1,4 @@
-import { normalizeImportName, quantityFromCell } from "./excelImport.js";
+import { normalizeProductName, quantityFromCell } from "./excelImport.js";
 
 /**
  * Collect all valid product cells from one parsed Excel row. This deliberately
@@ -15,7 +15,7 @@ export function collectExcelRowItems({ row, customer, productHeaders, productMap
     if (quantityResult.kind === "empty") continue;
 
     const productName = productHeaders[columnIndex];
-    const product = productMap.get(normalizeImportName(productName));
+    const product = productMap.get(normalizeProductName(productName));
     if (quantityResult.kind === "invalid") {
       skipped += 1;
       errors.push(`Row ${row.rowNumber}, ${productName}: ${quantityResult.message}`);
@@ -37,4 +37,3 @@ export function collectExcelRowItems({ row, customer, productHeaders, productMap
 
   return { items, errors, skipped };
 }
-
