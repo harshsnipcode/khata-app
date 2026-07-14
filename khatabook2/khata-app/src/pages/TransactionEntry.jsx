@@ -35,6 +35,7 @@ function TransactionEntry() {
   const [paymentMode, setPaymentMode] = useState("cash");
   const [selectedDate, setSelectedDate] = useState(getLocalDateInputValue);
   const [transactionNote, setTransactionNote] = useState("");
+  const [visualViewportInset, setVisualViewportInset] = useState(0);
 
   const getEffectivePrice = (product) => {
     return customerPrices[product.id] ?? product.sale_price;
@@ -100,6 +101,39 @@ function TransactionEntry() {
       setSelectedProducts(selected);
     }
   }, [products]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+
+    const updateInset = () => {
+      const isMobile = window.matchMedia("(max-width: 768px)").matches;
+      if (!isMobile) {
+        setVisualViewportInset(0);
+        return;
+      }
+      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setVisualViewportInset(inset > 80 ? Math.round(inset) : 0);
+    };
+
+    updateInset();
+    viewport.addEventListener("resize", updateInset);
+    viewport.addEventListener("scroll", updateInset);
+    window.addEventListener("orientationchange", updateInset);
+    return () => {
+      viewport.removeEventListener("resize", updateInset);
+      viewport.removeEventListener("scroll", updateInset);
+      window.removeEventListener("orientationchange", updateInset);
+    };
+  }, []);
+
+  const handleFocusCapture = (event) => {
+    const target = event.target;
+    if (!target?.matches?.("input, textarea")) return;
+    window.setTimeout(() => {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 120);
+  };
 
   // Calculate total amount from selected products using effective price
   const calculatedAmount = useMemo(() => {
@@ -312,8 +346,15 @@ function TransactionEntry() {
 
   const headerClass = isGot ? "text-emerald-400" : "text-rose-400";
 
+  const keyboardOpen = visualViewportInset > 0;
+  const mobileSaveStyle = keyboardOpen ? { bottom: `${visualViewportInset + 8}px` } : undefined;
+
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 relative select-none animate-fade-in">
+    <div
+      className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 relative select-none animate-fade-in"
+      onFocusCapture={handleFocusCapture}
+      style={keyboardOpen ? { paddingBottom: `${visualViewportInset + 112}px` } : undefined}
+    >
       <div className="max-w-3xl mx-auto space-y-4 relative z-10">
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
@@ -427,7 +468,12 @@ function TransactionEntry() {
         </div>
 
         {!isGot && (
-          <div className="sticky top-0 z-50 bg-[var(--background)] py-3 -mx-4 px-4">
+          <div
+            className={keyboardOpen
+              ? "fixed left-0 right-0 z-50 bg-[var(--background)] py-2 px-4"
+              : "sticky top-0 z-50 bg-[var(--background)] py-3 -mx-4 px-4"}
+            style={mobileSaveStyle}
+          >
             <button
               onClick={handleSave}
               disabled={saving || finalAmount <= 0}
@@ -440,7 +486,11 @@ function TransactionEntry() {
 
         {/* Save Button (only for "got") */}
         {isGot && (
-          <form onSubmit={handleSave}>
+          <form
+            onSubmit={handleSave}
+            className={keyboardOpen ? "fixed left-0 right-0 z-50 bg-[var(--background)] py-2 px-4" : ""}
+            style={mobileSaveStyle}
+          >
             <button
               type="submit"
               disabled={saving || finalAmount <= 0}
