@@ -20,6 +20,16 @@ export const OFFLINE_TABLES = [
   "import_batch_recycle_bin",
 ];
 
+export const SERVER_SNAPSHOT_REPLACE_TABLES = new Set([
+  "transactions",
+  "transaction_items",
+  "employees",
+  "employee_attendance",
+  "salary_payments",
+  "import_history",
+  "import_batch_recycle_bin",
+]);
+
 const FOREIGN_KEYS = ["customer_id", "transaction_id", "product_id", "employee_id", "group_id"];
 
 function readJson(key, fallback) {
@@ -148,6 +158,32 @@ export async function saveFetchedData(table, rows) {
     });
   }
   writeCache({ ...currentCache, [table]: Array.from(byKey.values()) });
+}
+
+export async function replaceFetchedData(table, rows) {
+  if (!OFFLINE_TABLES.includes(table) || !Array.isArray(rows)) return;
+  const currentCache = getCache();
+  const previousRows = dedupeRows(table, currentCache[table] || []);
+  const previousByKey = new Map(previousRows.map((row) => [normalizedRowKey(table, row), row]));
+  const serverRows = rows
+    .filter((row) => row && typeof row === "object")
+    .map((row) => {
+      const previous = previousByKey.get(normalizedRowKey(table, row)) || {};
+      return {
+        ...row,
+        local_uuid: previous.local_uuid || row.local_uuid || generateUUID(),
+        synced: true,
+        deleted_locally: false,
+      };
+    });
+  const serverKeys = new Set(serverRows.map((row) => normalizedRowKey(table, row)).filter(Boolean));
+  const unsyncedLocalRows = previousRows.filter((row) => (
+    row?.synced !== true && !serverKeys.has(normalizedRowKey(table, row))
+  ));
+  writeCache({ ...currentCache, [table]: dedupeRows(table, [...serverRows, ...unsyncedLocalRows]) });
+  if (table === "import_batch_recycle_bin" && rows.length === 0) {
+    clearRecycleBinCache();
+  }
 }
 
 export async function getAll(table) {
@@ -330,6 +366,10 @@ function readRecycleBinRaw() {
 
 function writeRecycleBinRaw(items) {
   writeJson(RECYCLE_KEY, items);
+}
+
+export function clearRecycleBinCache() {
+  writeRecycleBinRaw([]);
 }
 
 export async function moveToRecycleBin(entityType, entityId, entityName, originalData, deletedBy) {

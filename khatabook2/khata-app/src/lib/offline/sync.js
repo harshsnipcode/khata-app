@@ -1,9 +1,11 @@
 import { supabase } from "../supabase";
 import {
   OFFLINE_TABLES,
+  SERVER_SNAPSHOT_REPLACE_TABLES,
   getPendingQueue,
   isOnline,
   removeQueueItem,
+  replaceFetchedData,
   rewriteFilters,
   rewriteForeignKeys,
   rewriteLocalId,
@@ -117,6 +119,10 @@ async function fetchTableSnapshot(table) {
     }
     rows.push(...(data || []));
     if (!data || data.length < pageSize) break;
+  }
+  if (SERVER_SNAPSHOT_REPLACE_TABLES.has(table)) {
+    await replaceFetchedData(table, rows);
+    return;
   }
   await saveFetchedData(table, rows);
 }

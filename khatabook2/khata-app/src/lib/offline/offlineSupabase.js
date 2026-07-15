@@ -2,12 +2,14 @@ import { supabase } from "../supabase";
 import { sanitizeTablePayload } from "./tableSchemas";
 import {
   OFFLINE_TABLES,
+  SERVER_SNAPSHOT_REPLACE_TABLES,
   createTempId,
   deleteLocalRows,
   enqueueOperation,
   getAll,
   isOnline,
   rewriteForeignKeys,
+  replaceFetchedData,
   saveFetchedData,
   upsertLocalRows,
   getCache,
@@ -250,6 +252,13 @@ async function executeOnline(ops) {
 async function refreshCacheAfterOnlineResult(ops, data) {
   if (ops.method === "select") {
     const rows = Array.isArray(data) ? data : (data ? [data] : []);
+    const canSafelyReplace = SERVER_SNAPSHOT_REPLACE_TABLES.has(ops.table)
+      && ops.filters.length === 0
+      && (rows.length === 0 || !ops.selectColumns || ops.selectColumns === "*");
+    if (canSafelyReplace) {
+      await replaceFetchedData(ops.table, rows);
+      return;
+    }
     await saveFetchedData(ops.table, rows);
     return;
   }
