@@ -132,6 +132,33 @@ test("server-empty staff and excel snapshots clear stale synced cache", async ()
   assert.deepEqual(await getAll("import_batch_recycle_bin"), []);
 });
 
+test("server-empty catalogue snapshots clear stale synced catalogue cache", async () => {
+  installLocalStorageMock();
+  upsertLocalRows("product_groups", [
+    { id: 1, name: "Testing Group", synced: true },
+  ]);
+  upsertLocalRows("products", [
+    { id: 1, name: "Testing Product", synced: true },
+    { id: -1, name: "Offline Product" },
+  ]);
+  upsertLocalRows("customer_product_prices", [
+    { id: 1, customer_id: 2, product_id: 1, custom_price: 99, synced: true },
+  ]);
+  upsertLocalRows("product_transactions", [
+    { id: 1, product_id: 1, type: "stock_in", quantity: 10, synced: true },
+  ]);
+
+  await replaceFetchedData("product_groups", []);
+  await replaceFetchedData("products", []);
+  await replaceFetchedData("customer_product_prices", []);
+  await replaceFetchedData("product_transactions", []);
+
+  assert.deepEqual(await getAll("product_groups"), []);
+  assert.deepEqual((await getAll("products")).map((row) => row.id), [-1]);
+  assert.deepEqual(await getAll("customer_product_prices"), []);
+  assert.deepEqual(await getAll("product_transactions"), []);
+});
+
 test("server-empty import recycle snapshot clears local recycle bin cache", async () => {
   installLocalStorageMock();
   await moveToRecycleBin("transactions", 1, "Testing transaction", { id: 1 }, "admin");

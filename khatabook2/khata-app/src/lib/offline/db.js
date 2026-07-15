@@ -21,6 +21,10 @@ export const OFFLINE_TABLES = [
 ];
 
 export const SERVER_SNAPSHOT_REPLACE_TABLES = new Set([
+  "product_groups",
+  "products",
+  "customer_product_prices",
+  "product_transactions",
   "transactions",
   "transaction_items",
   "employees",
