@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { sanitizeTablePayload, TABLE_COLUMNS } from "../src/lib/offline/tableSchemas.js";
-import { getAll, getRecycleBin, moveToRecycleBin, replaceFetchedData, upsertLocalRows } from "../src/lib/offline/db.js";
+import { getAll, getRecycleBin, moveToRecycleBin, replaceFetchedData, saveFetchedData, upsertLocalRows } from "../src/lib/offline/db.js";
 
 function installLocalStorageMock() {
   const store = new Map();
@@ -166,4 +166,46 @@ test("server-empty import recycle snapshot clears local recycle bin cache", asyn
   await replaceFetchedData("import_batch_recycle_bin", []);
 
   assert.deepEqual(await getRecycleBin(), []);
+});
+
+test("protected saveFetchedData never overwrites a pending offline edit with stale server data", async () => {
+  installLocalStorageMock();
+  // Server row cached from an earlier fetch.
+  await saveFetchedData("customers", [{ id: 5, name: "Old Name", balance: 100 }]);
+  // User edits the customer while offline (synced:false marks it pending).
+  upsertLocalRows("customers", [{ id: 5, name: "New Offline Name", balance: 250, synced: false }]);
+
+  // A background/online READ returns the STALE server row. With protection on,
+  // the pending local edit must win until it has been synced.
+  await saveFetchedData("customers", [{ id: 5, name: "Old Name", balance: 100 }], { protectUnsynced: true });
+
+  const [row] = await getAll("customers");
+  assert.equal(row.name, "New Offline Name");
+  assert.equal(row.balance, 250);
+  assert.equal(row.synced, false);
+});
+
+test("protected replaceFetchedData never overwrites a pending offline edit with stale server data", async () => {
+  installLocalStorageMock();
+  await saveFetchedData("customers", [{ id: 7, name: "Server Name", balance: 0 }]);
+  upsertLocalRows("customers", [{ id: 7, name: "Edited Offline", balance: 500, synced: false }]);
+
+  await replaceFetchedData("customers", [{ id: 7, name: "Server Name", balance: 0 }], { protectUnsynced: true });
+
+  const [row] = await getAll("customers");
+  assert.equal(row.name, "Edited Offline");
+  assert.equal(row.balance, 500);
+  assert.equal(row.synced, false);
+});
+
+test("a confirmed write overwrites the local copy and clears the pending flag", async () => {
+  installLocalStorageMock();
+  upsertLocalRows("customers", [{ id: 9, name: "Pending Edit", balance: 300, synced: false }]);
+
+  // Confirmed Supabase write (no protection): server response is authoritative.
+  await saveFetchedData("customers", [{ id: 9, name: "Pending Edit", balance: 300 }]);
+
+  const [row] = await getAll("customers");
+  assert.equal(row.name, "Pending Edit");
+  assert.equal(row.synced, true);
 });

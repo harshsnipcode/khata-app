@@ -142,7 +142,7 @@ export async function initDB() {
   readRecycleBinRaw();
 }
 
-export async function saveFetchedData(table, rows) {
+export async function saveFetchedData(table, rows, { protectUnsynced = false } = {}) {
   if (!OFFLINE_TABLES.includes(table) || !Array.isArray(rows)) return;
   const currentCache = getCache();
   const byKey = new Map(
@@ -153,6 +153,10 @@ export async function saveFetchedData(table, rows) {
     const key = normalizedRowKey(table, row);
     if (!key) continue;
     const previous = byKey.get(key) || {};
+    // Never let a background server fetch clobber a local edit that has not
+    // been confirmed as persisted to the server yet. The pending queue
+    // operation is the source of truth until it succeeds.
+    if (protectUnsynced && previous.synced === false) continue;
     byKey.set(key, {
       ...previous,
       ...row,
@@ -164,7 +168,7 @@ export async function saveFetchedData(table, rows) {
   writeCache({ ...currentCache, [table]: Array.from(byKey.values()) });
 }
 
-export async function replaceFetchedData(table, rows) {
+export async function replaceFetchedData(table, rows, { protectUnsynced = false } = {}) {
   if (!OFFLINE_TABLES.includes(table) || !Array.isArray(rows)) return;
   const currentCache = getCache();
   const previousRows = dedupeRows(table, currentCache[table] || []);
@@ -173,6 +177,11 @@ export async function replaceFetchedData(table, rows) {
     .filter((row) => row && typeof row === "object")
     .map((row) => {
       const previous = previousByKey.get(normalizedRowKey(table, row)) || {};
+      // If a matching local row still has unsynced changes, keep the local
+      // version verbatim so the pending edit survives the snapshot replace.
+      if (protectUnsynced && previous.synced === false) {
+        return { ...previous };
+      }
       return {
         ...row,
         local_uuid: previous.local_uuid || row.local_uuid || generateUUID(),
@@ -181,6 +190,8 @@ export async function replaceFetchedData(table, rows) {
       };
     });
   const serverKeys = new Set(serverRows.map((row) => normalizedRowKey(table, row)).filter(Boolean));
+  // Preserve local rows that have not synced yet and are not present in the
+  // server payload (e.g. offline inserts that have not uploaded).
   const unsyncedLocalRows = previousRows.filter((row) => (
     row?.synced !== true && !serverKeys.has(normalizedRowKey(table, row))
   ));
@@ -214,10 +225,19 @@ export function upsertLocalRows(table, rows) {
   writeCache({ ...currentCache, [table]: Array.from(byKey.values()) });
 }
 
-export function deleteLocalRows(table, predicate) {
+export function deleteLocalRows(table, predicate, { markUnsynced = false } = {}) {
   const cache = getCache();
   cache[table] = (cache[table] || []).map((row) => (
-    predicate(row) ? { ...row, deleted_locally: true, __local_updated_at: new Date().toISOString() } : row
+    predicate(row)
+      ? {
+          ...row,
+          deleted_locally: true,
+          // An offline delete is a pending mutation: flag it so background
+          // server fetches cannot resurrect the row before the delete syncs.
+          ...(markUnsynced ? { synced: false } : {}),
+          __local_updated_at: new Date().toISOString(),
+        }
+      : row
   ));
   writeCache(cache);
 }
