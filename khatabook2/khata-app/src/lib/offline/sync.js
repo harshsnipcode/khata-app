@@ -52,8 +52,9 @@ async function executeOperation(operation) {
       const localId = originalRows[index]?.id;
       rewriteLocalId(operation.table, localId, serverRow);
     });
-    // Confirmed by Supabase: authoritative write, clear the pending flag.
-    await saveFetchedData(operation.table, serverRows, { force: true });
+  // Confirmed by Supabase: authoritative write that overwrites the local
+  // copy and clears the pending (synced:false) flag.
+  await saveFetchedData(operation.table, serverRows);
     return;
   }
 
@@ -68,8 +69,9 @@ async function executeOperation(operation) {
       const localId = originalRows[index]?.id;
       rewriteLocalId(operation.table, localId, serverRow);
     });
-    // Confirmed by Supabase: authoritative write, clear the pending flag.
-    await saveFetchedData(operation.table, serverRows, { force: true });
+    // Confirmed by Supabase: authoritative write that overwrites the local
+    // copy and clears the pending (synced:false) flag.
+    await saveFetchedData(operation.table, serverRows);
     return;
   }
 
@@ -79,8 +81,9 @@ async function executeOperation(operation) {
     for (const filter of filters) query = query[filter.operator](filter.column, filter.value);
     const { data, error } = await query;
     if (error) throw error;
-    // Confirmed by Supabase: authoritative write, clear the pending flag.
-    await saveFetchedData(operation.table, Array.isArray(data) ? data : (data ? [data] : []), { force: true });
+    // Confirmed by Supabase: authoritative write that overwrites the local
+    // copy and clears the pending (synced:false) flag.
+    await saveFetchedData(operation.table, Array.isArray(data) ? data : (data ? [data] : []));
     return;
   }
 
@@ -108,10 +111,10 @@ async function fetchTableSnapshot(table) {
     if (!data || data.length < pageSize) break;
   }
   if (SERVER_SNAPSHOT_REPLACE_TABLES.has(table)) {
-    await replaceFetchedData(table, rows);
+    await replaceFetchedData(table, rows, { protectUnsynced: true });
     return;
   }
-  await saveFetchedData(table, rows);
+  await saveFetchedData(table, rows, { protectUnsynced: true });
 }
 
 export async function refreshOfflineSnapshot() {
@@ -142,6 +145,7 @@ export async function syncPendingData() {
 
   syncing = true;
   emitStatus("pending");
+  let queueDrained = false;
   try {
     const queue = await getPendingQueue();
     const startCount = queue.length;
@@ -179,6 +183,7 @@ export async function syncPendingData() {
     }
 
     const remaining = await getPendingQueue();
+    queueDrained = remaining.length === 0;
     console.info("[OfflineSync] Sync finished", {
       startCount,
       succeeded,
@@ -186,14 +191,19 @@ export async function syncPendingData() {
       remaining: remaining.length,
     });
     emitStatus(remaining.length > 0 ? "pending" : "synced", firstError ? { error: firstError.message || "Some operations failed" } : {});
-    if (remaining.length === 0) {
-      refreshOfflineSnapshot();
-    }
   } catch (error) {
     console.error("Offline sync failed:", error);
     emitStatus("pending", { error: error.message || "Sync failed" });
   } finally {
     syncing = false;
+  }
+
+  // Refresh the server snapshot only AFTER the sync mutex is released and only
+  // when the queue is fully drained. Running it here (rather than inside the
+  // try block) prevents the refresh from being a no-op due to its own
+  // `syncing` guard, and guarantees it never races the queue upload.
+  if (queueDrained && isOnline()) {
+    await refreshOfflineSnapshot();
   }
 }
 
@@ -206,7 +216,11 @@ export function startAutoSync() {
     syncPendingData();
   });
   if (isOnline()) {
+    // syncPendingData() drains the queue first and then triggers a snapshot
+    // refresh itself once the queue is empty. We intentionally do NOT kick off
+    // an independent refresh here: an unconditional startup refresh previously
+    // ran concurrently with the initial sync and overwrote not-yet-uploaded
+    // local edits with a stale server snapshot.
     setTimeout(() => syncPendingData(), 0);
-    setTimeout(() => refreshOfflineSnapshot(), 1000);
   }
 }

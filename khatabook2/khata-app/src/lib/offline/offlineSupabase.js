@@ -119,6 +119,9 @@ function buildMutationRows(table, payload) {
     ...row,
     id: row?.id ?? createTempId(),
     created_at: row?.created_at || now,
+    // Mark as an unsynced local edit so background server reads/snapshots
+    // cannot overwrite it until the queued operation is confirmed.
+    synced: false,
   }));
 }
 
@@ -251,15 +254,17 @@ async function executeOnline(ops) {
 
 async function refreshCacheAfterOnlineResult(ops, data) {
   if (ops.method === "select") {
+    // This is a server READ refreshing the cache, not a confirmed write, so it
+    // must never overwrite a local edit that is still pending in the queue.
     const rows = Array.isArray(data) ? data : (data ? [data] : []);
     const canSafelyReplace = SERVER_SNAPSHOT_REPLACE_TABLES.has(ops.table)
       && ops.filters.length === 0
       && (rows.length === 0 || !ops.selectColumns || ops.selectColumns === "*");
     if (canSafelyReplace) {
-      await replaceFetchedData(ops.table, rows);
+      await replaceFetchedData(ops.table, rows, { protectUnsynced: true });
       return;
     }
-    await saveFetchedData(ops.table, rows);
+    await saveFetchedData(ops.table, rows, { protectUnsynced: true });
     return;
   }
 
@@ -268,6 +273,8 @@ async function refreshCacheAfterOnlineResult(ops, data) {
     return;
   }
 
+  // Confirmed online mutation: Supabase already persisted this write, so its
+  // response is authoritative and should overwrite the local copy.
   const rows = Array.isArray(data) ? data : (data ? [data] : []);
   if (rows.length > 0) {
     await saveFetchedData(ops.table, rows);
@@ -328,6 +335,9 @@ async function executeOffline(ops) {
     const rows = applyFilters(await getAll(ops.table), ops.filters).map((row) => ({
       ...row,
       ...ops.payload,
+      // Mark as an unsynced local edit so background server reads/snapshots
+      // cannot overwrite it until the queued operation is confirmed.
+      synced: false,
       __local_updated_at: new Date().toISOString(),
     }));
     upsertLocalRows(ops.table, rows);
@@ -347,7 +357,7 @@ async function executeOffline(ops) {
 
   if (ops.method === "delete") {
     const targets = applyFilters(await getAll(ops.table), ops.filters);
-    deleteLocalRows(ops.table, (row) => ops.filters.every((filter) => matchesFilter(row, filter)));
+    deleteLocalRows(ops.table, (row) => ops.filters.every((filter) => matchesFilter(row, filter)), { markUnsynced: true });
     enqueueOperation({
       table: ops.table,
       method: "delete",
