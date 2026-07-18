@@ -142,7 +142,7 @@ export async function initDB() {
   readRecycleBinRaw();
 }
 
-export async function saveFetchedData(table, rows) {
+export async function saveFetchedData(table, rows, { protectUnsynced = false } = {}) {
   if (!OFFLINE_TABLES.includes(table) || !Array.isArray(rows)) return;
   const currentCache = getCache();
   const byKey = new Map(
@@ -153,6 +153,10 @@ export async function saveFetchedData(table, rows) {
     const key = normalizedRowKey(table, row);
     if (!key) continue;
     const previous = byKey.get(key) || {};
+    // Never let a background server fetch clobber a local edit that has not
+    // been confirmed as persisted to the server yet. The pending queue
+    // operation is the source of truth until it succeeds.
+    if (protectUnsynced && previous.synced === false) continue;
     byKey.set(key, {
       ...previous,
       ...row,
