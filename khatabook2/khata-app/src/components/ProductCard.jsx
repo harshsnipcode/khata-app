@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { can } from "../lib/permissions";
 
-function ProductCard({ product, isAdmin }) {
+function ProductCard({ product, isAdmin, groupName }) {
   const canStock = isAdmin || can("stock_entry");
   const navigate = useNavigate();
   const isLowStock = product.stock_quantity <= product.low_stock_limit;
@@ -22,7 +22,7 @@ function ProductCard({ product, isAdmin }) {
 
         <div className="flex-1 min-w-0">
           <h3 className="text-[var(--text-primary)] font-bold text-base truncate group-hover:text-[var(--primary)] transition-colors duration-200">{product.name}</h3>
-          <p className="text-[var(--text-secondary)] text-xs font-medium mt-0.5">Sale: ₹{new Intl.NumberFormat("en-IN").format(product.sale_price)}</p>
+          <p className="text-[var(--text-secondary)] text-xs font-medium mt-0.5">{groupName ? groupName : 'No Group'}</p>
           <div className="mt-1.5 flex items-center gap-2">
             <span className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${
               isLowStock 

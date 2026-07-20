@@ -11,6 +11,7 @@ function CatalogueView({ isAdmin }) {
   const canViewReport = isAdmin || can("view_reports");
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
@@ -21,8 +22,12 @@ function CatalogueView({ isAdmin }) {
 
   const loadProducts = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
-    if (!error) setProducts(data || []);
+    const [prodRes, groupRes] = await Promise.all([
+      supabase.from("products").select("*").order("created_at", { ascending: false }),
+      supabase.from("product_groups").select("id, name"),
+    ]);
+    if (!prodRes.error) setProducts(prodRes.data || []);
+    if (!groupRes.error) setGroups(groupRes.data || []);
     setLoading(false);
   };
 
@@ -32,6 +37,7 @@ function CatalogueView({ isAdmin }) {
     const channel = supabase
       .channel("catalogue-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "products" }, () => loadProducts())
+      .on("postgres_changes", { event: "*", schema: "public", table: "product_groups" }, () => loadProducts())
       .subscribe();
 
     return () => {
@@ -49,7 +55,13 @@ function CatalogueView({ isAdmin }) {
     return { totalValue, lowStockCount };
   }, [products]);
 
-  const displayedProducts = useMemo(() => {
+  const groupMap = useMemo(() => {
+    const map = {};
+    groups.forEach((g) => { map[g.id] = g.name; });
+    return map;
+  }, [groups]);
+
+  const groupedProducts = useMemo(() => {
     let list = products.filter((p) => {
       if (searchTerm && !p.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       if (filterType === "low" && Number(p.stock_quantity) > Number(p.low_stock_limit)) return false;
@@ -65,8 +77,33 @@ function CatalogueView({ isAdmin }) {
       return 0;
     });
 
-    return list;
-  }, [products, searchTerm, filterType, sortType]);
+    const groupOrder = [...groups].sort((a, b) => a.name.localeCompare(b.name));
+    const buckets = {};
+    groupOrder.forEach((g) => { buckets[g.id] = []; });
+    buckets["_ungrouped"] = [];
+
+    list.forEach((p) => {
+      if (p.group_id && buckets[p.group_id]) {
+        buckets[p.group_id].push(p);
+      } else {
+        buckets["_ungrouped"].push(p);
+      }
+    });
+
+    const result = [];
+    groupOrder.forEach((g) => {
+      if (buckets[g.id].length > 0) {
+        result.push({ type: "header", groupId: g.id, name: g.name });
+        buckets[g.id].forEach((p) => result.push({ type: "product", product: p }));
+      }
+    });
+    if (buckets["_ungrouped"].length > 0) {
+      result.push({ type: "header", groupId: "_ungrouped", name: "Ungrouped" });
+      buckets["_ungrouped"].forEach((p) => result.push({ type: "product", product: p }));
+    }
+
+    return result;
+  }, [products, groups, searchTerm, filterType, sortType]);
 
   const activeFilterCount = (filterType !== "all" ? 1 : 0) + (sortType !== "recent" ? 1 : 0);
 
@@ -121,13 +158,24 @@ function CatalogueView({ isAdmin }) {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {loading ? (
           <div className="col-span-full py-12 text-center text-[var(--text-secondary)] font-bold animate-pulse uppercase tracking-widest">Loading Catalogue...</div>
-        ) : displayedProducts.length === 0 ? (
+        ) : groupedProducts.length === 0 ? (
           <div className="col-span-full py-12 text-center text-[var(--text-secondary)] card border-dashed rounded-3xl">
             <p className="font-bold uppercase tracking-widest">No Products Found</p>
             <p className="text-sm mt-1">Try a different search or filter</p>
           </div>
         ) : (
-          displayedProducts.map(p => <ProductCard key={p.id} product={p} isAdmin={isAdmin} />)
+          groupedProducts.map((item, idx) =>
+            item.type === "header" ? (
+              <div key={`group-${item.groupId}`} className="col-span-full mt-2 first:mt-0">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-[var(--text-primary)] font-black text-sm uppercase tracking-widest">{item.name}</h3>
+                  <div className="flex-1 h-px bg-[var(--border)]"></div>
+                </div>
+              </div>
+            ) : (
+              <ProductCard key={item.product.id} product={item.product} isAdmin={isAdmin} groupName={groupMap[item.product.group_id] || null} />
+            )
+          )
         )}
       </div>
 
