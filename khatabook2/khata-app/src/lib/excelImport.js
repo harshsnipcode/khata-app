@@ -35,6 +35,27 @@ function serializableCell(value) {
   return String(value ?? "");
 }
 
+function findStockInTableCoordinates(matrix) {
+  for (let rowIndex = 0; rowIndex < matrix.length; rowIndex += 1) {
+    const row = matrix[rowIndex] || [];
+    for (let columnIndex = 0; columnIndex < row.length; columnIndex += 1) {
+      if (!isStockInSectionHeader(row[columnIndex])) continue;
+
+      for (let qtyColumnIndex = columnIndex + 1; qtyColumnIndex < row.length; qtyColumnIndex += 1) {
+        const cell = row[qtyColumnIndex];
+        if (isEmpty(cell)) continue;
+        const normalized = normalizeImportName(cell);
+        if (normalized === "qty" || normalized === "quantity") {
+          return { headerRowIndex: rowIndex, stockInColumnIndex: columnIndex, qtyColumnIndex };
+        }
+        break;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", catalogueProductNames = null) {
   const matrix = (inputMatrix || []).map((row) => (row || []).map(serializableCell));
 
@@ -73,10 +94,17 @@ export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", cataloguePr
   }
 
   const headerRow = matrix[headerRowIndex] || [];
-  const lastHeaderIndex = headerRow.reduce(
-    (last, value, index) => (isEmpty(value) ? last : index),
-    -1,
-  );
+  const stockInCoordinates = findStockInTableCoordinates(matrix);
+  const customerBoundary = stockInCoordinates?.headerRowIndex === headerRowIndex
+    && stockInCoordinates.stockInColumnIndex > customerColumnIndex
+    ? stockInCoordinates.stockInColumnIndex
+    : headerRow.length;
+  const lastHeaderIndex = headerRow
+    .slice(customerColumnIndex, customerBoundary)
+    .reduce(
+      (last, value, index) => (isEmpty(value) ? last : customerColumnIndex + index),
+      -1,
+    );
   const headers = headerRow
     .slice(customerColumnIndex, lastHeaderIndex + 1)
     .map((value) => String(value ?? "").trim());
@@ -181,40 +209,10 @@ export function isStockInSectionHeader(value) {
 export function parseStockInTable(matrix) {
   if (!Array.isArray(matrix) || matrix.length === 0) return null;
 
-  // Find the STOCK IN header cell
-  let headerRowIndex = -1;
-  let stockInColumnIndex = -1;
-  let qtyColumnIndex = -1;
+  const coordinates = findStockInTableCoordinates(matrix);
+  if (!coordinates) return null;
 
-  for (let rowIndex = 0; rowIndex < matrix.length; rowIndex += 1) {
-    const row = matrix[rowIndex] || [];
-    for (let columnIndex = 0; columnIndex < row.length; columnIndex += 1) {
-      if (!isStockInSectionHeader(row[columnIndex])) continue;
-      
-      // Found STOCK IN header, now find the adjacent QTY header
-      let qtyFound = false;
-      for (let qtySearchIndex = columnIndex + 1; qtySearchIndex < row.length; qtySearchIndex += 1) {
-        const cell = row[qtySearchIndex];
-        if (isEmpty(cell)) continue;
-        if (normalizeImportName(cell) === "qty" || normalizeImportName(cell) === "quantity") {
-          headerRowIndex = rowIndex;
-          stockInColumnIndex = columnIndex;
-          qtyColumnIndex = qtySearchIndex;
-          qtyFound = true;
-          break;
-        }
-        // Stop searching if we hit a non-empty, non-qty header
-        break;
-      }
-      
-      if (qtyFound) break;
-    }
-    if (qtyColumnIndex !== -1) break;
-  }
-
-  if (headerRowIndex === -1 || stockInColumnIndex === -1 || qtyColumnIndex === -1) {
-    return null;
-  }
+  const { headerRowIndex, stockInColumnIndex, qtyColumnIndex } = coordinates;
 
   // Parse rows: product name in stockInColumn, quantity in qtyColumn
   const items = [];
