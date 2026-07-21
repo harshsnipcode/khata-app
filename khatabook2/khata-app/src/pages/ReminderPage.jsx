@@ -26,6 +26,8 @@ export default function ReminderPage() {
   const [balanceFilter, setBalanceFilter] = useState("pending");
   const [searchQuery, setSearchQuery] = useState("");
 
+  useEffect(() => { window.scrollTo(0, 0); }, []);
+
   const [session, setSession] = useState(null);
   const [sessionIndex, setSessionIndex] = useState(0);
   const [sessionDone, setSessionDone] = useState(false);
