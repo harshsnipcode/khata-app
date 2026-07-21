@@ -186,3 +186,52 @@ export async function updateGaveTransaction({
 
   return { id: transactionId };
 }
+
+/**
+ * Create a Stock In product transaction. Reuses the existing inventory update
+ * logic without creating a customer ledger transaction.
+ */
+export async function createStockInAdjustment({
+  product,
+  quantity,
+  createdBy,
+  createdAt,
+  notes,
+  importHistoryId,
+}) {
+  const qtyNum = Number(quantity);
+  if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
+    throw new Error("Quantity must be a positive number.");
+  }
+
+  // Create a product transaction record
+  const { error: txnError } = await offlineSupabase
+    .from("product_transactions")
+    .insert([{
+      product_id: Number(product.id),
+      type: "stock_in",
+      quantity: qtyNum,
+      price: product.purchase_price || 0,
+      notes: String(notes ?? "").trim() || `Excel import${importHistoryId ? ` (batch ${importHistoryId})` : ""}`,
+      created_by: createdBy,
+      created_at: createdAt || new Date().toISOString(),
+    }])
+    .select()
+    .single();
+
+  if (txnError) throw txnError;
+
+  // Update product stock
+  const newStock = Number(product.stock_quantity) + qtyNum;
+  const { error: stockError } = await offlineSupabase
+    .from("products")
+    .update({ stock_quantity: newStock, updated_at: new Date().toISOString() })
+    .eq("id", product.id);
+
+  if (stockError) throw stockError;
+
+  // Update the product object for bulk import loop reuse
+  product.stock_quantity = newStock;
+
+  return { success: true, newStock };
+}

@@ -7,7 +7,7 @@ import ImportStatusBadge from "../components/ImportStatusBadge";
 import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import { createGaveTransaction } from "../lib/transactionService";
-import { collectExcelRowItems } from "../lib/excelImportGrouping";
+import { collectExcelRowItems, collectStockInItems } from "../lib/excelImportGrouping";
 import { excludeTotalSummaries } from "../lib/excelImportValidation";
 import {
   hashFile,
@@ -15,6 +15,7 @@ import {
   normalizeProductName,
   parseExcelWorkbook,
 } from "../lib/excelImport";
+import { createStockInAdjustment } from "../lib/transactionService";
 
 const EMPTY_REPORT = { unknownCustomers: [], unknownProducts: [], errors: [] };
 const CATALOGUE_PAGE_SIZE = 1000;
@@ -106,6 +107,7 @@ function ExcelImportPage() {
           file_hash: prepared.fileHash,
           sheet_name: prepared.parsed.sheetName,
           parsed_preview: prepared.parsed.preview,
+          stock_in_preview: prepared.parsed.stockInData?.preview || null,
           status: "processing",
           is_reimport: forceReimport,
           source_import_id: forceReimport ? prepared.duplicate?.id : null,
@@ -146,13 +148,32 @@ function ExcelImportPage() {
           .map((row) => row.customerName)
           .filter((name) => name && !customerMap.has(normalizeImportName(name))),
       )];
-      const errors = [];
+      
+      // Process optional Stock In data
+      const stockInResult = collectStockInItems({
+        stockInData: prepared.parsed.stockInData,
+        productMap,
+      });
+      const stockUnknownProducts = stockInResult.unknownProducts || [];
+      
+      // Merge unknown products from both customer transactions and stock in
+      const allUnknownProducts = [...new Set([...unknownProducts, ...stockUnknownProducts])];
+      
+      const errors = [...(stockInResult.errors || [])];
       const processedCustomers = new Set();
       const processedProducts = new Set();
       let transactionsCreated = 0;
+      let stockInAdjustmentsCreated = 0;
       let rowsSkipped = 0;
       let totalQuantity = 0;
+      let stockInTotalQuantity = 0;
 
+      // Validate: check if any unknown products exist before proceeding
+      if (allUnknownProducts.length > 0) {
+        throw new Error(`Unknown products detected. Please check the validation report.`);
+      }
+
+      // Process customer transactions
       for (const row of processingView.rows) {
         const customer = customerMap.get(normalizeImportName(row.customerName));
         const groupedRow = collectExcelRowItems({
@@ -186,17 +207,37 @@ function ExcelImportPage() {
         }
       }
 
+      // Process Stock In adjustments
+      for (const stockItem of (stockInResult.items || [])) {
+        try {
+          await createStockInAdjustment({
+            product: stockItem.product,
+            quantity: stockItem.quantity,
+            createdBy: uploader,
+            notes: `Imported from Excel`,
+            importHistoryId: historyId,
+          });
+          stockInAdjustmentsCreated += 1;
+          stockInTotalQuantity += stockItem.quantity;
+          processedProducts.add(stockItem.product.id);
+        } catch (error) {
+          errors.push(`Row ${stockItem.rowNumber}, ${stockItem.product.name}: ${error.message || "stock adjustment failed"}`);
+        }
+      }
+
       const statistics = {
         customersProcessed: processedCustomers.size,
         productsProcessed: processedProducts.size,
         transactionsCreated,
+        stockInAdjustmentsCreated,
         rowsSkipped,
         unknownCustomers: unknownCustomers.length,
-        unknownProducts: unknownProducts.length,
+        unknownProducts: allUnknownProducts.length,
         totalQuantityImported: totalQuantity,
+        totalStockInQuantity: stockInTotalQuantity,
         processingTimeMs: Math.round(performance.now() - startedAt),
       };
-      const validationReport = { unknownCustomers, unknownProducts, errors };
+      const validationReport = { unknownCustomers, unknownProducts: allUnknownProducts, errors };
       const { error: updateError } = await supabase
         .from("import_history")
         .update({
@@ -328,10 +369,11 @@ function ExcelImportPage() {
                 ["Customers processed", summary.customersProcessed],
                 ["Products processed", summary.productsProcessed],
                 ["Transactions created", summary.transactionsCreated],
+                ["Stock adjustments", summary.stockInAdjustmentsCreated || 0],
                 ["Rows skipped", summary.rowsSkipped],
                 ["Unknown customers", summary.unknownCustomers],
                 ["Unknown products", summary.unknownProducts],
-                ["Total quantity imported", summary.totalQuantityImported],
+                ["Total quantity", summary.totalQuantityImported + (summary.totalStockInQuantity || 0)],
                 ["Processing time", `${(summary.processingTimeMs / 1000).toFixed(2)}s`],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-2xl bg-[var(--background)] border border-[var(--border)] p-3">
