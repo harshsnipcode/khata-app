@@ -98,7 +98,7 @@ function StaffDashboard() {
       navigate("/settings");
     },
     onSwipeRight: () => {
-      navigate("/admin/reminder", { state: { activeTab: "reminder" } });
+      navigate("/admin/excel", { state: { activeTab: "excel" } });
     },
   });
 

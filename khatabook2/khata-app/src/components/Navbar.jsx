@@ -5,7 +5,6 @@ const ROUTES = {
   catalogue: "/admin/home",
   employees: "/admin/staff",
   excel: "/admin/excel",
-  reminder: "/admin/reminder",
 };
 
 function isEmployeesRoute(pathname) {
@@ -23,16 +22,12 @@ function isExcelRoute(pathname) {
   return pathname.startsWith("/admin/excel");
 }
 
-function isReminderRoute(pathname) {
-  return pathname.startsWith("/admin/reminder");
-}
-
 function Navbar({ activeTab, setActiveTab, isAdmin }) {
   const navigate = useNavigate();
   const location = useLocation();
   const tabs = ["customers", "catalogue"];
   if (isAdmin) {
-    tabs.push("excel", "reminder", "employees");
+    tabs.push("excel", "employees");
   } else {
     const level = Number(localStorage.getItem("khata_permission_level")) || 1;
     if (level >= 2) tabs.push("excel");
@@ -44,7 +39,6 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
     catalogue: "Catalogue",
     employees: "Employees",
     excel: "Excel",
-    reminder: "Reminder",
     settings: "Settings",
   };
 
@@ -55,8 +49,6 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
     }
     if (tab === "excel") {
       navigate("/admin/excel", { state: { activeTab: "excel" } });
-    } else if (tab === "reminder") {
-      navigate("/admin/reminder", { state: { activeTab: "reminder" } });
     } else if (isAdmin) {
       navigate(ROUTES[tab], { state: { activeTab: tab } });
     } else {
@@ -69,9 +61,8 @@ function Navbar({ activeTab, setActiveTab, isAdmin }) {
     if (tab === "settings") return isSettingsRoute(location.pathname);
     if (tab === "excel") return isExcelRoute(location.pathname);
     if (tab === "employees") return isEmployeesRoute(location.pathname);
-    if (tab === "reminder") return isReminderRoute(location.pathname);
     if (tab === "customers" || tab === "catalogue") {
-      if (isEmployeesRoute(location.pathname) || isExcelRoute(location.pathname) || isReminderRoute(location.pathname) || isSettingsRoute(location.pathname)) return false;
+      if (isEmployeesRoute(location.pathname) || isExcelRoute(location.pathname) || isSettingsRoute(location.pathname)) return false;
       return activeTab === tab;
     }
     return activeTab === tab;

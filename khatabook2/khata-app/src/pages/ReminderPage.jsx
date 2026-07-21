@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import Header from "../components/Header";
-import Navbar from "../components/Navbar";
 import CustomerCard from "../components/CustomerCard";
 import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 
@@ -126,13 +125,24 @@ export default function ReminderPage() {
     <div className="min-h-screen bg-[var(--background)] relative overflow-hidden">
       <div className="relative z-10 animate-fade-in">
         <Header businessName={businessName} />
-        <Navbar activeTab="reminder" isAdmin={true} />
 
         <div className="max-w-6xl mx-auto px-4 py-3 space-y-3">
           {!session ? (
             <>
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-black text-[var(--text-primary)] tracking-tight">Bulk Reminder</h2>
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1 min-w-0">
+                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search customers..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl text-[10px] font-medium bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] hover:border-[var(--primary)]/30 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 outline-none transition placeholder:text-[var(--text-muted)]"
+                  />
+                </div>
                 {!sessionDone && (
                   <button
                     onClick={() => {
@@ -143,15 +153,15 @@ export default function ReminderPage() {
                         setSelectMode(true);
                       }
                     }}
-                    className="text-[10px] font-bold uppercase tracking-widest text-[var(--primary)] hover:text-[var(--primary-hover)] transition cursor-pointer outline-none px-3 py-1.5 rounded-xl bg-[var(--primary-light)] border border-[var(--primary)]/20"
+                    className="text-[10px] font-bold uppercase tracking-widest text-[var(--primary)] hover:text-[var(--primary-hover)] transition cursor-pointer outline-none px-3 py-1.5 rounded-xl bg-[var(--primary-light)] border border-[var(--primary)]/20 shrink-0"
                   >
                     {selectMode ? "Cancel" : "Select"}
                   </button>
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="flex gap-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="flex gap-2">
                   {["pending", "all"].map((f) => (
                     <button
                       key={f}
@@ -166,19 +176,14 @@ export default function ReminderPage() {
                     </button>
                   ))}
                 </div>
-                <div className="relative flex-1 min-w-0">
-                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <button
+                  onClick={() => navigate("/settings")}
+                  className="w-7 h-7 rounded-xl flex items-center justify-center bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--border)] transition cursor-pointer outline-none shrink-0"
+                >
+                  <svg className="w-3.5 h-3.5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6" />
                   </svg>
-                  <input
-                    type="text"
-                    placeholder="Search name or phone..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 rounded-xl text-[10px] font-medium bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] hover:border-[var(--primary)]/30 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 outline-none transition placeholder:text-[var(--text-muted)]"
-                  />
-                </div>
+                </button>
               </div>
 
               {loading ? (
