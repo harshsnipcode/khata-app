@@ -116,17 +116,17 @@ function CatalogueView({ isAdmin }) {
   return (
     <div className="space-y-6">
       {/* Catalogue Summary Card */}
-      <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4" style={{ containerType: "inline-size" }}>
         <div className="card rounded-3xl p-6 shadow-md">
           <p className="text-[var(--text-secondary)] text-xs uppercase tracking-widest mb-2 font-bold">Total Stock Value</p>
-          <h2 className="text-[var(--text-primary)] text-3xl font-black">₹{new Intl.NumberFormat("en-IN").format(totals.totalValue)}</h2>
+          <h2 className="text-[var(--text-primary)] font-black [font-size:clamp(0.875rem,7cqw,1.875rem)]">₹{new Intl.NumberFormat("en-IN").format(totals.totalValue)}</h2>
           {canViewReport && (
             <button onClick={() => navigate('/catalogue/reports')} className="mt-3 text-[var(--primary)] text-xs font-bold uppercase tracking-[0.2em] hover:text-[var(--primary-hover)] transition cursor-pointer">View Reports ›</button>
           )}
         </div>
         <div className="card rounded-3xl p-6 shadow-md">
           <p className="text-[var(--text-secondary)] text-xs uppercase tracking-widest mb-2 font-bold">Low Stock Items</p>
-          <h2 className={`text-3xl font-black ${totals.lowStockCount > 0 ? 'text-[var(--danger)]' : 'text-[var(--text-primary)]'}`}>{totals.lowStockCount} Items</h2>
+          <h2 className={`font-black [font-size:clamp(0.875rem,7cqw,1.875rem)] ${totals.lowStockCount > 0 ? 'text-[var(--danger)]' : 'text-[var(--text-primary)]'}`}>{totals.lowStockCount} Items</h2>
           <button onClick={() => setFilterType("low")} className="mt-3 text-[var(--danger)] text-xs font-bold uppercase tracking-[0.2em] hover:text-[var(--danger)]/80 transition">Show Items ›</button>
         </div>
       </div>
