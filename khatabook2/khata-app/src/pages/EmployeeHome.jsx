@@ -73,12 +73,18 @@ function EmployeeHome() {
   const [transactions, setTransactions] = useState([]);
   const [loading,      setLoading]      = useState(true);
 
+  const employeeLevel = Number(localStorage.getItem("khata_permission_level")) || 1;
+
   useSwipeNavigation({
     onSwipeLeft: () => {
       if (activeTab === "customers") {
         setActiveTab("catalogue");
       } else if (activeTab === "catalogue") {
-        navigate("/settings");
+        if (employeeLevel >= 2) {
+          navigate("/admin/excel", { state: { activeTab: "excel" } });
+        } else {
+          navigate("/settings");
+        }
       }
     },
     onSwipeRight: () => {

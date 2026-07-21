@@ -97,7 +97,7 @@ function AdminHome() {
       if (activeTab === "customers") {
         navigate(location.pathname, { state: { activeTab: "catalogue" }, replace: true });
       } else if (activeTab === "catalogue") {
-        navigate("/admin/staff", { state: { activeTab: "employees" } });
+        navigate("/admin/excel", { state: { activeTab: "excel" } });
       }
     },
     onSwipeRight: () => {

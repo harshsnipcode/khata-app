@@ -95,10 +95,10 @@ function StaffDashboard() {
 
   useSwipeNavigation({
     onSwipeLeft: () => {
-      navigate("/admin/excel", { state: { activeTab: "excel" } });
+      navigate("/settings");
     },
     onSwipeRight: () => {
-      navigate("/admin/home", { state: { activeTab: "catalogue" } });
+      navigate("/admin/reminder", { state: { activeTab: "reminder" } });
     },
   });
 

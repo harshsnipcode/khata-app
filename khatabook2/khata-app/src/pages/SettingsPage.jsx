@@ -39,7 +39,7 @@ function SettingsPage() {
     onSwipeRight: () => {
       const r = localStorage.getItem("khata_role");
       if (r === "admin") {
-        navigate("/admin/excel", { state: { activeTab: "excel" } });
+        navigate("/admin/staff", { state: { activeTab: "employees" } });
       } else {
         navigate("/employee/home", { state: { activeTab: "catalogue" } });
       }

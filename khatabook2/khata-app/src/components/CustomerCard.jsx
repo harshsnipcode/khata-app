@@ -14,7 +14,7 @@ function timeAgo(dateStr) {
   return "just now";
 }
 
-function CustomerCard({ id, initial, name, time, balance }) {
+function CustomerCard({ id, initial, name, time, balance, onClick }) {
   const navigate = useNavigate();
 
   const hasBalance = balance !== undefined && balance !== null;
@@ -48,9 +48,11 @@ function CustomerCard({ id, initial, name, time, balance }) {
     }
   }
 
+  const handleClick = onClick || (() => id && navigate(`/customer/${id}`));
+
   return (
     <div
-      onClick={() => id && navigate(`/customer/${id}`)}
+      onClick={handleClick}
       role="button"
       className="rounded-xl px-3.5 py-2.5 flex items-center gap-3 cursor-pointer relative group transition-all duration-200"
       style={{

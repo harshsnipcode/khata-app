@@ -43,10 +43,10 @@ function ExcelImportPage() {
   const navigate = useNavigate();
   useSwipeNavigation({
     onSwipeLeft: () => {
-      navigate("/settings");
+      navigate("/admin/reminder", { state: { activeTab: "reminder" } });
     },
     onSwipeRight: () => {
-      navigate("/admin/staff", { state: { activeTab: "employees" } });
+      navigate("/admin/home", { state: { activeTab: "catalogue" } });
     },
   });
   const inputRef = useRef(null);
