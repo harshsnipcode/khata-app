@@ -120,6 +120,45 @@ test("requires Customer and two known catalogue products on the same row", () =>
   );
 });
 
+test("isolates a right-side STOCK IN table from customer headers and rows", () => {
+  const parsed = parseImportMatrix([
+    ["CUSTOMER", "Aamras", "Paneer", "TOTAL", null, null, "STOCK IN", "QTY"],
+    ["Harsh Sharma", 2, 1, 3, null, null, "Aamras", 20],
+    ["Rahul Dairy", 4, null, 4, null, null, "Paneer", 10],
+    ["TOTAL", 6, 1, 7, null, null, null, null],
+  ], "Transactions", ["Aamras", "Paneer"]);
+
+  assert.deepEqual(parsed.headers, ["CUSTOMER", "Aamras", "Paneer", "TOTAL"]);
+  assert.deepEqual(parsed.rows[0].values, [2, 1, 3]);
+  assert.deepEqual(parsed.preview, [
+    ["CUSTOMER", "Aamras", "Paneer", "TOTAL"],
+    ["Harsh Sharma", 2, 1, 3],
+    ["Rahul Dairy", 4, null, 4],
+    ["TOTAL", 6, 1, 7],
+  ]);
+});
+
+test("isolates side-by-side tables when reading a real workbook", async () => {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ["CUSTOMER", "Aamras", "Paneer", "TOTAL", null, null, "STOCK IN", "QTY"],
+    ["Harsh Sharma", 2, 1, 3, null, null, "Aamras", 20],
+    ["Rahul Dairy", 4, null, 4, null, null, "Paneer", 10],
+  ]), "Transactions");
+  const bytes = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+  const parsed = await parseExcelWorkbook(bytes, ["Aamras", "Paneer"]);
+
+  assert.deepEqual(parsed.headers, ["CUSTOMER", "Aamras", "Paneer", "TOTAL"]);
+  assert.deepEqual(parsed.rows[1].values, [4, null, 4]);
+  assert.deepEqual(
+    parsed.stockInData.items.map(({ productName, quantityResult }) => ({ productName, quantityResult })),
+    [
+      { productName: "Aamras", quantityResult: { kind: "quantity", quantity: 20 } },
+      { productName: "Paneer", quantityResult: { kind: "quantity", quantity: 10 } },
+    ],
+  );
+});
+
 for (const bookType of ["xlsx", "biff8"]) {
   test(`reads a real ${bookType === "biff8" ? ".xls" : ".xlsx"} workbook`, async () => {
     const workbook = XLSX.utils.book_new();

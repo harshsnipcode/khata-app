@@ -37,3 +37,49 @@ export function collectExcelRowItems({ row, customer, productHeaders, productMap
 
   return { items, errors, skipped };
 }
+
+/**
+ * Process Stock In table items: validate quantities and match products.
+ * Uses the same normalization and product matching as customer import.
+ */
+export function collectStockInItems({ stockInData, productMap }) {
+  const items = [];
+  const unknownProducts = [];
+  const errors = [];
+
+  if (!stockInData || !stockInData.items) {
+    return { items, unknownProducts, errors };
+  }
+
+  for (const stockItem of stockInData.items) {
+    const quantityResult = stockItem.quantityResult;
+    const productName = stockItem.productName;
+    const normalizedName = normalizeProductName(productName);
+    const product = productMap.get(normalizedName);
+
+    if (quantityResult.kind === "invalid") {
+      errors.push(`Row ${stockItem.rowNumber}, ${productName}: ${quantityResult.message}`);
+      continue;
+    }
+
+    if (quantityResult.kind === "empty") {
+      continue;
+    }
+
+    if (!product) {
+      unknownProducts.push(productName);
+      continue;
+    }
+
+    items.push({
+      product,
+      quantity: quantityResult.quantity,
+      rowNumber: stockItem.rowNumber,
+    });
+  }
+
+  // Remove duplicates from unknownProducts
+  const uniqueUnknownProducts = [...new Set(unknownProducts)];
+
+  return { items, unknownProducts: uniqueUnknownProducts, errors };
+}

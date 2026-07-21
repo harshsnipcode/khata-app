@@ -35,6 +35,27 @@ function serializableCell(value) {
   return String(value ?? "");
 }
 
+function findStockInTableCoordinates(matrix) {
+  for (let rowIndex = 0; rowIndex < matrix.length; rowIndex += 1) {
+    const row = matrix[rowIndex] || [];
+    for (let columnIndex = 0; columnIndex < row.length; columnIndex += 1) {
+      if (!isStockInSectionHeader(row[columnIndex])) continue;
+
+      for (let qtyColumnIndex = columnIndex + 1; qtyColumnIndex < row.length; qtyColumnIndex += 1) {
+        const cell = row[qtyColumnIndex];
+        if (isEmpty(cell)) continue;
+        const normalized = normalizeImportName(cell);
+        if (normalized === "qty" || normalized === "quantity") {
+          return { headerRowIndex: rowIndex, stockInColumnIndex: columnIndex, qtyColumnIndex };
+        }
+        break;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", catalogueProductNames = null) {
   const matrix = (inputMatrix || []).map((row) => (row || []).map(serializableCell));
 
@@ -73,10 +94,17 @@ export function parseImportMatrix(inputMatrix, sheetName = "Sheet1", cataloguePr
   }
 
   const headerRow = matrix[headerRowIndex] || [];
-  const lastHeaderIndex = headerRow.reduce(
-    (last, value, index) => (isEmpty(value) ? last : index),
-    -1,
-  );
+  const stockInCoordinates = findStockInTableCoordinates(matrix);
+  const customerBoundary = stockInCoordinates?.headerRowIndex === headerRowIndex
+    && stockInCoordinates.stockInColumnIndex > customerColumnIndex
+    ? stockInCoordinates.stockInColumnIndex
+    : headerRow.length;
+  const lastHeaderIndex = headerRow
+    .slice(customerColumnIndex, customerBoundary)
+    .reduce(
+      (last, value, index) => (isEmpty(value) ? last : customerColumnIndex + index),
+      -1,
+    );
   const headers = headerRow
     .slice(customerColumnIndex, lastHeaderIndex + 1)
     .map((value) => String(value ?? "").trim());
@@ -144,7 +172,15 @@ export async function parseExcelWorkbook(arrayBuffer, catalogueProductNames = nu
     raw: true,
     range: { s: { r: 0, c: 0 }, e: usedRange.e },
   });
-  return parseImportMatrix(matrix, sheetName, catalogueProductNames);
+  const parsed = parseImportMatrix(matrix, sheetName, catalogueProductNames);
+  
+  // Try to parse optional STOCK IN table
+  const stockData = parseStockInTable(matrix);
+  if (stockData) {
+    parsed.stockInData = stockData;
+  }
+  
+  return parsed;
 }
 
 export async function hashFile(arrayBuffer) {
@@ -159,4 +195,69 @@ export function quantityFromCell(value) {
   if (quantity === 0) return { kind: "empty" };
   if (quantity < 0) return { kind: "invalid", message: "Quantity cannot be negative." };
   return { kind: "quantity", quantity };
+}
+
+export function isStockInSectionHeader(value) {
+  const normalized = normalizeImportName(value);
+  return normalized === "stock in";
+}
+
+/**
+ * Search the matrix for a STOCK IN header and parse the adjacent quantity column.
+ * Returns null if no STOCK IN table is found.
+ */
+export function parseStockInTable(matrix) {
+  if (!Array.isArray(matrix) || matrix.length === 0) return null;
+
+  const coordinates = findStockInTableCoordinates(matrix);
+  if (!coordinates) return null;
+
+  const { headerRowIndex, stockInColumnIndex, qtyColumnIndex } = coordinates;
+
+  // Parse rows: product name in stockInColumn, quantity in qtyColumn
+  const items = [];
+  let lastDataRowIndex = headerRowIndex;
+
+  for (let rowIndex = headerRowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
+    const row = matrix[rowIndex] || [];
+    const productNameCell = row[stockInColumnIndex];
+    const qtyCell = row[qtyColumnIndex];
+
+    // Stop at the first completely empty row
+    if (isEmpty(productNameCell) && isEmpty(qtyCell)) {
+      break;
+    }
+
+    // Skip completely empty rows within the table
+    if (isEmpty(productNameCell) || isEmpty(qtyCell)) {
+      continue;
+    }
+
+    lastDataRowIndex = rowIndex;
+    const quantityResult = quantityFromCell(qtyCell);
+    items.push({
+      rowNumber: rowIndex + 1,
+      productName: String(productNameCell ?? "").trim(),
+      quantityResult,
+    });
+  }
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  // Build preview for this section
+  const preview = [];
+  for (let rowIndex = headerRowIndex; rowIndex <= lastDataRowIndex; rowIndex += 1) {
+    const row = matrix[rowIndex] || [];
+    preview.push({
+      productName: row[stockInColumnIndex] ?? null,
+      quantity: row[qtyColumnIndex] ?? null,
+    });
+  }
+
+  return {
+    items,
+    preview,
+  };
 }

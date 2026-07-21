@@ -30,6 +30,7 @@ function ExcelImportDetail() {
   const stats = record?.import_statistics || {};
   const report = record?.validation_report || {};
   const preview = Array.isArray(record?.parsed_preview) ? record.parsed_preview : [];
+  const stockInPreview = record?.stock_in_preview || null;
   const previewSections = buildPreviewSections(preview);
   const isDeleted = record?.status === "deleted";
   const canDelete = ["imported", "restored", "completed", "completed_with_errors"].includes(record?.status);
@@ -96,10 +97,15 @@ function ExcelImportDetail() {
               <h2 className="font-black mb-4">Import Summary</h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  ["Customers", stats.customersProcessed], ["Products", stats.productsProcessed],
-                  ["Transactions", stats.transactionsCreated], ["Skipped", stats.rowsSkipped],
-                  ["Unknown customers", stats.unknownCustomers], ["Unknown products", stats.unknownProducts],
-                  ["Total quantity", stats.totalQuantityImported], ["Time", stats.processingTimeMs === undefined ? "—" : `${(stats.processingTimeMs / 1000).toFixed(2)}s`],
+                  ["Customers", stats.customersProcessed], 
+                  ["Products", stats.productsProcessed],
+                  ["Transactions", stats.transactionsCreated], 
+                  ["Stock adjustments", stats.stockInAdjustmentsCreated ?? 0],
+                  ["Skipped", stats.rowsSkipped],
+                  ["Unknown customers", stats.unknownCustomers], 
+                  ["Unknown products", stats.unknownProducts],
+                  ["Total quantity", (stats.totalQuantityImported ?? 0) + (stats.totalStockInQuantity ?? 0)], 
+                  ["Time", stats.processingTimeMs === undefined ? "—" : `${(stats.processingTimeMs / 1000).toFixed(2)}s`],
                 ].map(([label, value]) => <Info key={label} label={label} value={value ?? 0} />)}
               </div>
               <div className="grid sm:grid-cols-3 gap-4 mt-5">
@@ -109,7 +115,7 @@ function ExcelImportDetail() {
               </div>
             </section>
 
-            {previewSections.length > 0 && (
+            {(previewSections.length > 0 || stockInPreview) && (
               <div className="space-y-4">
                 <div>
                   <div className="mb-2"><h2 className="font-black">Uploaded Spreadsheet Preview</h2><p className="text-xs text-[var(--text-secondary)] mt-1">Stored parsed copy of the original worksheet.</p></div>
@@ -134,6 +140,27 @@ function ExcelImportDetail() {
                     </div>
                   </section>
                 ))}
+                {stockInPreview && stockInPreview.length > 0 && (
+                  <section className="card rounded-3xl p-5">
+                    <div className="mb-4"><h3 className="font-black text-sm uppercase tracking-widest text-[var(--text-secondary)]">Product Stock Preview</h3></div>
+                    <div className="overflow-auto border border-[var(--border)] rounded-2xl">
+                      <table className="min-w-full text-sm border-collapse">
+                        <tbody>
+                          {stockInPreview.map((item, rowIndex) => (
+                            <tr key={rowIndex} className={rowIndex === 0 ? "bg-[var(--primary-light)]" : "bg-[var(--surface)]"}>
+                              <td className="px-4 py-2.5 border-b border-r border-[var(--border)]">
+                                <span className="font-semibold">{item.productName || "—"}</span>
+                              </td>
+                              <td className="px-4 py-2.5 border-b border-[var(--border)] text-right">
+                                {item.quantity === null || item.quantity === "" ? <span className="text-[var(--text-muted)]">—</span> : `+${item.quantity}`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
               </div>
             )}
 
