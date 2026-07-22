@@ -83,3 +83,19 @@ test("half-character product headers match catalogue variants", () => {
   ]);
   assert.equal(grouped.skipped, 0);
 });
+
+test("customer import allows negative product quantities", () => {
+  const grouped = collectExcelRowItems({
+    row: { rowNumber: 6, customerName: "Harsh Sharma", values: [-2] },
+    customer: { id: 7, name: "Harsh Sharma" },
+    productHeaders: ["Buttermilk"],
+    productMap,
+    priceMap: new Map(),
+  });
+
+  assert.equal(grouped.items.length, 1);
+  assert.equal(grouped.items[0].product.name, "Buttermilk");
+  assert.equal(grouped.items[0].quantity, -2);
+  assert.equal(grouped.skipped, 0);
+  assert.deepEqual(grouped.errors, []);
+});

@@ -188,12 +188,12 @@ export async function hashFile(arrayBuffer) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function quantityFromCell(value) {
+export function quantityFromCell(value, { allowNegative = false } = {}) {
   if (isEmpty(value)) return { kind: "empty" };
   const quantity = typeof value === "number" ? value : Number(String(value).replace(/,/g, "").trim());
   if (!Number.isFinite(quantity)) return { kind: "invalid", message: "Quantity must be a number." };
   if (quantity === 0) return { kind: "empty" };
-  if (quantity < 0) return { kind: "invalid", message: "Quantity cannot be negative." };
+  if (!allowNegative && quantity < 0) return { kind: "invalid", message: "Quantity cannot be negative." };
   return { kind: "quantity", quantity };
 }
 

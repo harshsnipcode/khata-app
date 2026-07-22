@@ -11,7 +11,7 @@ export function collectExcelRowItems({ row, customer, productHeaders, productMap
   let skipped = 0;
 
   for (let columnIndex = 0; columnIndex < row.values.length; columnIndex += 1) {
-    const quantityResult = quantityFromCell(row.values[columnIndex]);
+    const quantityResult = quantityFromCell(row.values[columnIndex], { allowNegative: true });
     if (quantityResult.kind === "empty") continue;
 
     const productName = productHeaders[columnIndex];

@@ -44,9 +44,10 @@ export async function createGaveTransaction({
       p_created_by: createdBy,
       p_created_at: createdAt || new Date().toISOString(),
     };
-    if (importHistoryId) rpcPayload.p_import_history_id = importHistoryId;
     if (transactionDescription) rpcPayload.p_description = transactionDescription;
-    const { data, error } = await supabase.rpc("create_gave_transaction", rpcPayload);
+    const rpcName = importHistoryId ? "create_import_gave_transaction" : "create_gave_transaction";
+    if (importHistoryId) rpcPayload.p_import_history_id = importHistoryId;
+    const { data, error } = await supabase.rpc(rpcName, rpcPayload);
     const missingFunction = error && (error.code === "PGRST202" || error.code === "42883");
     if (!error) {
       normalizedItems.forEach((item) => {
