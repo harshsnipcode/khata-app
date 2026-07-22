@@ -28,9 +28,10 @@ test("blank, null, empty string, and zero produce no transaction", () => {
   }
 });
 
-test("positive numeric cells become quantities and invalid cells are rejected", () => {
+test("positive and negative numeric cells become quantities and invalid cells are rejected", () => {
   assert.deepEqual(quantityFromCell("1,250.5"), { kind: "quantity", quantity: 1250.5 });
-  assert.equal(quantityFromCell(-1).kind, "invalid");
+  assert.deepEqual(quantityFromCell(-1), { kind: "quantity", quantity: -1 });
+  assert.deepEqual(quantityFromCell(-4), { kind: "quantity", quantity: -4 });
   assert.equal(quantityFromCell("many").kind, "invalid");
 });
 

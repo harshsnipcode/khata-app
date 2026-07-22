@@ -157,6 +157,5 @@ export function quantityFromCell(value) {
   const quantity = typeof value === "number" ? value : Number(String(value).replace(/,/g, "").trim());
   if (!Number.isFinite(quantity)) return { kind: "invalid", message: "Quantity must be a number." };
   if (quantity === 0) return { kind: "empty" };
-  if (quantity < 0) return { kind: "invalid", message: "Quantity cannot be negative." };
   return { kind: "quantity", quantity };
 }

@@ -122,8 +122,6 @@ function TransactionEntry() {
 
   // Quantity handlers
   const handleQuantityChange = (product, newQuantity) => {
-    if (newQuantity < 0) return;
-
     setMessage("");
 
     if (newQuantity === 0) {
@@ -151,9 +149,16 @@ function TransactionEntry() {
     }
     setMessage("");
 
-    if (finalAmount <= 0) {
-      setMessage(isGot ? "Please enter an amount." : "Please enter an amount or select products.");
-      return;
+    if (isGot) {
+      if (!manualAmount) {
+        setMessage("Please enter an amount.");
+        return;
+      }
+    } else {
+      if (Object.keys(selectedProducts).length === 0 && !manualAmount) {
+        setMessage("Please enter an amount or select products.");
+        return;
+      }
     }
 
     setSaving(true);
@@ -416,7 +421,7 @@ function TransactionEntry() {
           <div className="sticky top-0 z-50 bg-[var(--background)] py-3 -mx-4 px-4">
             <button
               onClick={handleSave}
-              disabled={saving || finalAmount <= 0}
+              disabled={saving || (Object.keys(selectedProducts).length === 0 && !manualAmount)}
               className="w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-400 hover:to-red-400 text-white shadow-rose-500/5"
             >
               {saving ? "Saving..." : `Save (₹${formattedAmount})`}
@@ -429,7 +434,7 @@ function TransactionEntry() {
           <form onSubmit={handleSave}>
             <button
               type="submit"
-              disabled={saving || finalAmount <= 0}
+              disabled={saving || !manualAmount}
               className="w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 text-xs outline-none cursor-pointer shadow-lg disabled:opacity-50 disabled:pointer-events-none bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/5"
             >
               {saving ? "Saving Transaction..." : `Save Transaction (₹${formattedAmount})`}
