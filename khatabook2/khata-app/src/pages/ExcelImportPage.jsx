@@ -167,6 +167,7 @@ function ExcelImportPage() {
       let rowsSkipped = 0;
       let totalQuantity = 0;
       let stockInTotalQuantity = 0;
+      const soldQuantityByProduct = new Map();
 
       // Validate: check if any unknown products exist before proceeding
       if (allUnknownProducts.length > 0) {
@@ -200,6 +201,10 @@ function ExcelImportPage() {
           for (const item of groupedRow.items) {
             totalQuantity += item.quantity;
             processedProducts.add(item.product.id);
+            soldQuantityByProduct.set(
+              item.product.id,
+              (soldQuantityByProduct.get(item.product.id) || 0) + item.quantity,
+            );
           }
         } catch (error) {
           rowsSkipped += groupedRow.items.length;
@@ -208,22 +213,32 @@ function ExcelImportPage() {
       }
 
       // Process Stock In adjustments
+      console.log("Total Parsed:", (stockInResult.items || []).length);
+      let stockInFailed = 0;
       for (const stockItem of (stockInResult.items || [])) {
         try {
+          const soldQuantity = soldQuantityByProduct.get(stockItem.product.id) || 0;
+          console.log("Customer Sold Quantity:", soldQuantity);
+          console.log("Expected Net Stock Change:", Number(stockItem.quantity) - Number(soldQuantity));
           await createStockInAdjustment({
             product: stockItem.product,
             quantity: stockItem.quantity,
             createdBy: uploader,
             notes: `Imported from Excel`,
             importHistoryId: historyId,
+            excelProductName: stockItem.productName,
+            normalizedName: stockItem.normalizedName,
           });
           stockInAdjustmentsCreated += 1;
           stockInTotalQuantity += stockItem.quantity;
           processedProducts.add(stockItem.product.id);
         } catch (error) {
+          stockInFailed += 1;
           errors.push(`Row ${stockItem.rowNumber}, ${stockItem.product.name}: ${error.message || "stock adjustment failed"}`);
         }
       }
+      console.log("Total Updated:", stockInAdjustmentsCreated);
+      console.log("Total Failed:", stockInFailed);
 
       const statistics = {
         customersProcessed: processedCustomers.size,

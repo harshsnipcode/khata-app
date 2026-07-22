@@ -1,4 +1,5 @@
 import { offlineSupabase } from "./offline/offlineSupabase";
+import { saveFetchedData } from "./offline/db";
 import { supabase } from "./supabase";
 
 /**
@@ -188,13 +189,11 @@ export async function updateGaveTransaction({
   return { id: transactionId };
 }
 
-/**
- * Create a Stock In product transaction. Reuses the existing inventory update
- * logic without creating a customer ledger transaction.
- */
-export async function createStockInAdjustment({
+export async function createProductStockAdjustment({
   product,
+  type,
   quantity,
+  price,
   createdBy,
   createdAt,
   notes,
@@ -204,35 +203,156 @@ export async function createStockInAdjustment({
   if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
     throw new Error("Quantity must be a positive number.");
   }
+  if (type !== "stock_in" && type !== "stock_out") {
+    throw new Error("Invalid stock adjustment type.");
+  }
+  const productId = Number(product.id);
+  const createdAtValue = createdAt || new Date().toISOString();
+  const cleanNotes = String(notes ?? "").trim() || null;
 
-  // Create a product transaction record
-  const { error: txnError } = await offlineSupabase
+  if (typeof navigator !== "undefined" && navigator.onLine) {
+    const { data, error } = await supabase.rpc("create_product_stock_adjustment", {
+      p_product_id: productId,
+      p_type: type,
+      p_quantity: qtyNum,
+      p_price: price === undefined || price === null ? null : Number(price),
+      p_notes: cleanNotes,
+      p_created_by: createdBy,
+      p_created_at: createdAtValue,
+      p_import_history_id: importHistoryId || null,
+    });
+
+    const missingFunction = error && (error.code === "PGRST202" || error.code === "42883");
+    if (!error) {
+      const result = Array.isArray(data) ? data[0] : data;
+      const updatedProduct = result?.product || null;
+      const createdTransaction = result?.product_transaction || null;
+      const previousStock = Number(result?.previous_stock ?? 0);
+      const newStock = Number(result?.new_stock ?? updatedProduct?.stock_quantity ?? previousStock);
+
+      console.log("Current Stock:", previousStock);
+      console.log("Calculated New Stock:", newStock);
+      console.log("Database Update Result:", "success");
+
+      if (updatedProduct) await saveFetchedData("products", [updatedProduct]);
+      if (createdTransaction) await saveFetchedData("product_transactions", [createdTransaction]);
+      product.stock_quantity = newStock;
+      console.log("Final Stored Stock:", product.stock_quantity);
+
+      return { success: true, newStock: product.stock_quantity, product: updatedProduct };
+    }
+    if (!missingFunction) throw error;
+    console.warn("create_product_stock_adjustment RPC is not installed; falling back to client stock update.");
+  }
+
+  const { data: currentProduct, error: fetchError } = await offlineSupabase
+    .from("products")
+    .select("*")
+    .eq("id", productId)
+    .single();
+  if (fetchError) {
+    console.log("Database Update Failed", fetchError);
+    throw fetchError;
+  }
+
+  const currentStock = Number(currentProduct.stock_quantity) || 0;
+  const newStock = type === "stock_in"
+    ? currentStock + qtyNum
+    : currentStock - qtyNum;
+  const updatedAt = new Date().toISOString();
+  const transactionPayload = {
+    product_id: productId,
+    type,
+    quantity: qtyNum,
+    price: price ?? (type === "stock_in" ? currentProduct.purchase_price : currentProduct.sale_price) ?? 0,
+    notes: cleanNotes,
+    created_by: createdBy,
+    created_at: createdAtValue,
+    import_history_id: importHistoryId || null,
+    stock_applied: false,
+  };
+
+  console.log("Current Stock:", currentStock);
+  console.log("Calculated New Stock:", newStock);
+
+  // Same lifecycle as /product/:id/stock-in: record transaction, then update stock.
+  let stockTransactionId = null;
+  let canMarkStockApplied = true;
+  const { data: stockTransaction, error: txnError } = await offlineSupabase
     .from("product_transactions")
-    .insert([{
-      product_id: Number(product.id),
-      type: "stock_in",
-      quantity: qtyNum,
-      price: product.purchase_price || 0,
-      notes: String(notes ?? "").trim() || `Excel import${importHistoryId ? ` (batch ${importHistoryId})` : ""}`,
-      created_by: createdBy,
-      created_at: createdAt || new Date().toISOString(),
-    }])
-    .select()
+    .insert([transactionPayload])
+    .select("id")
     .single();
 
-  if (txnError) throw txnError;
+  if (txnError) {
+    const missingNewColumn = /import_history_id|stock_applied/i.test(String(txnError.message || ""));
+    if (!missingNewColumn) throw txnError;
+    canMarkStockApplied = false;
+    const { import_history_id: _unusedImportId, stock_applied: _unusedStockApplied, ...legacyPayload } = transactionPayload;
+    const { error: legacyTxnError } = await offlineSupabase
+      .from("product_transactions")
+      .insert([legacyPayload]);
+    if (legacyTxnError) throw legacyTxnError;
+  } else {
+    stockTransactionId = stockTransaction?.id || null;
+  }
 
-  // Update product stock
-  const newStock = Number(product.stock_quantity) + qtyNum;
+  console.log("Database Update Started");
   const { error: stockError } = await offlineSupabase
     .from("products")
-    .update({ stock_quantity: newStock, updated_at: new Date().toISOString() })
-    .eq("id", product.id);
+    .update({ stock_quantity: newStock, updated_at: updatedAt })
+    .eq("id", productId);
 
-  if (stockError) throw stockError;
+  if (stockError) {
+    console.log("Database Update Failed", stockError);
+    throw stockError;
+  }
 
-  // Update the product object for bulk import loop reuse
+  const updatedProduct = { ...currentProduct, stock_quantity: newStock, updated_at: updatedAt };
+  await saveFetchedData("products", [updatedProduct]);
   product.stock_quantity = newStock;
 
-  return { success: true, newStock };
+  if (canMarkStockApplied && stockTransactionId) {
+    const { error: markError } = await offlineSupabase
+      .from("product_transactions")
+      .update({ stock_applied: true })
+      .eq("id", stockTransactionId);
+    if (markError) throw markError;
+  }
+
+  console.log("Database Update Result:", "success");
+  console.log("Final Stored Stock:", product.stock_quantity);
+
+  return { success: true, newStock: product.stock_quantity, product: updatedProduct };
+}
+
+/**
+ * Create a Stock In product transaction using the same inventory lifecycle as
+ * the manual /product/:id/stock-in route.
+ */
+export async function createStockInAdjustment({
+  product,
+  quantity,
+  createdBy,
+  createdAt,
+  notes,
+  importHistoryId,
+  excelProductName,
+  normalizedName,
+}) {
+  console.log("Excel Product Name:", excelProductName || product.name);
+  console.log("Normalized Name:", normalizedName || "");
+  console.log("Catalogue Product:", product.name);
+  console.log("Matched Product ID:", Number(product.id));
+  console.log("Imported Quantity:", Number(quantity));
+
+  return createProductStockAdjustment({
+    product,
+    type: "stock_in",
+    quantity,
+    createdBy,
+    createdAt,
+    notes,
+    importHistoryId,
+  });
 }

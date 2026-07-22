@@ -75,6 +75,8 @@ export function collectStockInItems({ stockInData, productMap }) {
       product,
       quantity: quantityResult.quantity,
       rowNumber: stockItem.rowNumber,
+      productName,
+      normalizedName,
     });
   }
 

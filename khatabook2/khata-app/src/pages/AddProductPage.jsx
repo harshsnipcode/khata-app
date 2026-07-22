@@ -61,17 +61,23 @@ function AddProductPage() {
 
       // 2. Create Opening Stock Transaction
       if (Number(openingStock) > 0) {
-        const { error: tError } = await offlineSupabase.from("product_transactions").insert([
-          {
-            product_id: product.id,
-            type: "stock_in",
-            quantity: Number(openingStock),
-            price: Number(purchasePrice),
-            notes: "Opening Stock",
-            created_by
-          }
-        ]);
-        if (tError) throw tError;
+        const openingStockPayload = {
+          product_id: product.id,
+          type: "stock_in",
+          quantity: Number(openingStock),
+          price: Number(purchasePrice),
+          notes: "Opening Stock",
+          created_by,
+          stock_applied: true,
+        };
+        const { error: tError } = await offlineSupabase.from("product_transactions").insert([openingStockPayload]);
+        if (tError) {
+          const missingStockApplied = /stock_applied/i.test(String(tError.message || ""));
+          if (!missingStockApplied) throw tError;
+          const { stock_applied: _unusedStockApplied, ...legacyPayload } = openingStockPayload;
+          const { error: legacyError } = await offlineSupabase.from("product_transactions").insert([legacyPayload]);
+          if (legacyError) throw legacyError;
+        }
       }
 
       navigate('/home'); // Or specific catalogue tab if handled by state

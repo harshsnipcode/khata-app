@@ -22,9 +22,12 @@ CREATE TABLE IF NOT EXISTS public.product_transactions (
   price numeric,
   notes text,
   created_by text,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  import_history_id uuid,
+  stock_applied boolean NOT NULL DEFAULT true
 );
 
 -- Indexing for performance
 CREATE INDEX IF NOT EXISTS products_created_at_idx ON public.products(created_at DESC);
 CREATE INDEX IF NOT EXISTS product_transactions_product_id_idx ON public.product_transactions(product_id);
+CREATE INDEX IF NOT EXISTS product_transactions_import_history_id_idx ON public.product_transactions(import_history_id);

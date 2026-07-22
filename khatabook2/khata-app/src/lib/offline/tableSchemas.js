@@ -7,7 +7,7 @@ export const TABLE_COLUMNS = Object.freeze({
   transactions: ["id", "customer_id", "type", "amount", "description", "payment_mode", "date", "created_by", "created_at", "import_history_id"],
   transaction_items: ["id", "transaction_id", "product_id", "quantity", "price", "created_at"],
   customer_product_prices: ["id", "customer_id", "product_id", "custom_price", "created_at", "updated_at"],
-  product_transactions: ["id", "product_id", "type", "quantity", "price", "notes", "created_by", "created_at"],
+  product_transactions: ["id", "product_id", "type", "quantity", "price", "notes", "created_by", "created_at", "import_history_id", "stock_applied"],
   employees: ["id", "username", "auth_id", "created_by", "created_at", "attendance_enabled", "permissions_enabled", "salary_type", "salary_amount", "salary_start_date", "permission_level"],
   employee_attendance: ["id", "employee_id", "date", "status", "created_at"],
   salary_payments: ["id", "employee_id", "amount", "notes", "payment_date", "created_at"],

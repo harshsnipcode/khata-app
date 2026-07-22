@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
+import { createProductStockAdjustment } from "../lib/transactionService";
 
 function StockEntry() {
   const { id } = useParams();
@@ -42,29 +43,14 @@ function StockEntry() {
       const qtyNum = Number(quantity);
       const priceNum = Number(price);
 
-      // 1. Record Transaction
-      const { error: tError } = await offlineSupabase.from("product_transactions").insert([
-        {
-          product_id: Number(id),
-          type,
-          quantity: qtyNum,
-          price: priceNum,
-          notes,
-          created_by
-        }
-      ]);
-      if (tError) throw tError;
-
-      // 2. Update Product Stock
-      const newStock = type === 'stock_in' 
-        ? Number(product.stock_quantity) + qtyNum 
-        : Number(product.stock_quantity) - qtyNum;
-
-      const { error: pError } = await offlineSupabase.from("products").update({
-        stock_quantity: newStock,
-        updated_at: new Date().toISOString()
-      }).eq("id", id);
-      if (pError) throw pError;
+      await createProductStockAdjustment({
+        product,
+        type,
+        quantity: qtyNum,
+        price: priceNum,
+        notes,
+        createdBy: created_by,
+      });
 
       navigate(`/product/${id}/stock-success`, {
         state: { quantity: qtyNum, type, productName: product.name, unit: product.unit }
