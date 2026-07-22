@@ -298,17 +298,19 @@ export async function createProductStockAdjustment({
   }
 
   console.log("Database Update Started");
-  const { error: stockError } = await offlineSupabase
+  const { data: updatedRow, error: stockError } = await offlineSupabase
     .from("products")
     .update({ stock_quantity: newStock, updated_at: updatedAt })
-    .eq("id", productId);
+    .eq("id", productId)
+    .select("*")
+    .single();
 
   if (stockError) {
     console.log("Database Update Failed", stockError);
     throw stockError;
   }
 
-  const updatedProduct = { ...currentProduct, stock_quantity: newStock, updated_at: updatedAt };
+  const updatedProduct = updatedRow || { ...currentProduct, stock_quantity: newStock, updated_at: updatedAt };
   await saveFetchedData("products", [updatedProduct]);
   product.stock_quantity = newStock;
 
@@ -328,7 +330,10 @@ export async function createProductStockAdjustment({
 
 /**
  * Create a Stock In product transaction using the same inventory lifecycle as
- * the manual /product/:id/stock-in route.
+ * the manual /product/:id/stock-in route.  When online this always goes through
+ * the atomic server-side RPC so the product's stock_quantity is guaranteed to
+ * be updated in the same round-trip as the product_transactions insert.  The
+ * client-side fallback only runs when offline or when the RPC is not installed.
  */
 export async function createStockInAdjustment({
   product,
@@ -346,6 +351,50 @@ export async function createStockInAdjustment({
   console.log("Matched Product ID:", Number(product.id));
   console.log("Imported Quantity:", Number(quantity));
 
+  const qtyNum = Number(quantity);
+  if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
+    throw new Error("Quantity must be a positive number.");
+  }
+  const productId = Number(product.id);
+  const createdAtValue = createdAt || new Date().toISOString();
+  const cleanNotes = String(notes ?? "").trim() || null;
+
+  // Online path: use the atomic RPC to guarantee the products row is updated.
+  if (typeof navigator !== "undefined" && navigator.onLine) {
+    const { data, error } = await supabase.rpc("create_product_stock_adjustment", {
+      p_product_id: productId,
+      p_type: "stock_in",
+      p_quantity: qtyNum,
+      p_notes: cleanNotes,
+      p_created_by: createdBy,
+      p_created_at: createdAtValue,
+      p_import_history_id: importHistoryId || null,
+    });
+
+    const missingFunction = error && (error.code === "PGRST202" || error.code === "42883");
+    if (!error) {
+      const result = Array.isArray(data) ? data[0] : data;
+      const updatedProduct = result?.product || null;
+      const createdTransaction = result?.product_transaction || null;
+      const previousStock = Number(result?.previous_stock ?? 0);
+      const newStock = Number(result?.new_stock ?? updatedProduct?.stock_quantity ?? previousStock);
+
+      console.log("RPC Stock In — Matched Product ID:", productId);
+      console.log("RPC Stock In — Previous Stock:", previousStock);
+      console.log("RPC Stock In — New Stock:", newStock);
+
+      if (updatedProduct) await saveFetchedData("products", [updatedProduct]);
+      if (createdTransaction) await saveFetchedData("product_transactions", [createdTransaction]);
+      product.stock_quantity = newStock;
+
+      console.log("RPC Stock In — Catalogue value:", product.stock_quantity);
+      return { success: true, newStock, product: updatedProduct };
+    }
+    if (!missingFunction) throw error;
+    console.warn("create_product_stock_adjustment RPC is not installed; falling back to client stock update.");
+  }
+
+  // Offline / legacy fallback – identical to the manual stock-in path.
   return createProductStockAdjustment({
     product,
     type: "stock_in",

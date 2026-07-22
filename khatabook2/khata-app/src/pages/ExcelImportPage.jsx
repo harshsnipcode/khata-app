@@ -16,6 +16,7 @@ import {
   parseExcelWorkbook,
 } from "../lib/excelImport";
 import { createStockInAdjustment } from "../lib/transactionService";
+import { saveFetchedData } from "../lib/offline/db";
 
 const EMPTY_REPORT = { unknownCustomers: [], unknownProducts: [], errors: [] };
 const CATALOGUE_PAGE_SIZE = 1000;
@@ -239,6 +240,27 @@ function ExcelImportPage() {
       }
       console.log("Total Updated:", stockInAdjustmentsCreated);
       console.log("Total Failed:", stockInFailed);
+
+      // Reconcile stock for all products so stock_quantity always matches
+      // the product_transactions ledger, regardless of whether individual
+      // RPCs / UPDATEs succeeded.
+      if (processedProducts.size > 0) {
+        try {
+          const { data: reconciled, error: reconErr } = await supabase.rpc(
+            "reconcile_product_inventory_from_ledger"
+          );
+          if (!reconErr && Array.isArray(reconciled)) {
+            await saveFetchedData(
+              "products",
+              reconciled.map((r) => ({ id: r.product_id, stock_quantity: r.reconciled_stock }))
+            );
+          } else if (reconErr) {
+            console.warn("Reconcile RPC unavailable; individual adjustments should have set stock:", reconErr);
+          }
+        } catch (reconCatch) {
+          console.warn("Reconcile RPC failed (non-fatal):", reconCatch);
+        }
+      }
 
       const statistics = {
         customersProcessed: processedCustomers.size,
