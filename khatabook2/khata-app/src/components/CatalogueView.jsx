@@ -34,6 +34,9 @@ function CatalogueView({ isAdmin }) {
   useEffect(() => {
     loadProducts();
 
+    const handleInventoryUpdated = () => loadProducts();
+    window.addEventListener("inventory-updated", handleInventoryUpdated);
+
     const channel = supabase
       .channel("catalogue-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "products" }, () => loadProducts())
@@ -41,6 +44,7 @@ function CatalogueView({ isAdmin }) {
       .subscribe();
 
     return () => {
+      window.removeEventListener("inventory-updated", handleInventoryUpdated);
       supabase.removeChannel(channel);
     };
   }, []);

@@ -40,6 +40,11 @@ function ProductDetails() {
   useEffect(() => {
     loadData();
 
+    const handleInventoryUpdated = (event) => {
+      if (String(event.detail?.productId) === String(id)) loadData();
+    };
+    window.addEventListener("inventory-updated", handleInventoryUpdated);
+
     const channel = supabase
       .channel(`product-details-${id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "products", filter: `id=eq.${id}` }, () => loadData())
@@ -47,6 +52,7 @@ function ProductDetails() {
       .subscribe();
 
     return () => {
+      window.removeEventListener("inventory-updated", handleInventoryUpdated);
       supabase.removeChannel(channel);
     };
   }, [id]);

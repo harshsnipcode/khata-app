@@ -222,27 +222,48 @@ export async function createProductStockAdjustment({
       p_import_history_id: importHistoryId || null,
     });
 
-    const missingFunction = error && (error.code === "PGRST202" || error.code === "42883");
-    if (!error) {
-      const result = Array.isArray(data) ? data[0] : data;
-      const updatedProduct = result?.product || null;
-      const createdTransaction = result?.product_transaction || null;
-      const previousStock = Number(result?.previous_stock ?? 0);
-      const newStock = Number(result?.new_stock ?? updatedProduct?.stock_quantity ?? previousStock);
-
-      console.log("Current Stock:", previousStock);
-      console.log("Calculated New Stock:", newStock);
-      console.log("Database Update Result:", "success");
-
-      if (updatedProduct) await saveFetchedData("products", [updatedProduct]);
-      if (createdTransaction) await saveFetchedData("product_transactions", [createdTransaction]);
-      product.stock_quantity = newStock;
-      console.log("Final Stored Stock:", product.stock_quantity);
-
-      return { success: true, newStock: product.stock_quantity, product: updatedProduct };
+    if (error) {
+      const missingFunction = error.code === "PGRST202" || error.code === "42883";
+      if (missingFunction) {
+        throw new Error("Atomic stock adjustment is not installed. Apply db/create_product_stock_adjustment_rpc.sql before importing stock.");
+      }
+      throw error;
     }
-    if (!missingFunction) throw error;
-    console.warn("create_product_stock_adjustment RPC is not installed; falling back to client stock update.");
+
+    const result = Array.isArray(data) ? data[0] : data;
+    const previousStock = Number(result?.previous_stock);
+    const expectedStock = type === "stock_in"
+      ? previousStock + qtyNum
+      : previousStock - qtyNum;
+
+    if (!Number.isFinite(previousStock)) {
+      throw new Error("Stock adjustment returned an invalid previous stock value.");
+    }
+
+    const { data: authoritativeProduct, error: productError } = await supabase
+      .from("products")
+      .select("*")
+      .eq("id", productId)
+      .single();
+    if (productError) throw productError;
+
+    const persistedStock = Number(authoritativeProduct?.stock_quantity);
+    if (!Number.isFinite(persistedStock) || persistedStock !== expectedStock) {
+      throw new Error(`Stock verification failed for product ${productId}. Expected ${expectedStock}, found ${persistedStock}.`);
+    }
+
+    const createdTransaction = result?.product_transaction || null;
+    await saveFetchedData("products", [authoritativeProduct]);
+    if (createdTransaction) await saveFetchedData("product_transactions", [createdTransaction]);
+    product.stock_quantity = persistedStock;
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("inventory-updated", {
+        detail: { productId, stockQuantity: persistedStock },
+      }));
+    }
+
+    return { success: true, newStock: persistedStock, product: authoritativeProduct };
   }
 
   const { data: currentProduct, error: fetchError } = await offlineSupabase
@@ -250,10 +271,7 @@ export async function createProductStockAdjustment({
     .select("*")
     .eq("id", productId)
     .single();
-  if (fetchError) {
-    console.log("Database Update Failed", fetchError);
-    throw fetchError;
-  }
+  if (fetchError) throw fetchError;
 
   const currentStock = Number(currentProduct.stock_quantity) || 0;
   const newStock = type === "stock_in"
@@ -272,9 +290,6 @@ export async function createProductStockAdjustment({
     stock_applied: false,
   };
 
-  console.log("Current Stock:", currentStock);
-  console.log("Calculated New Stock:", newStock);
-
   // Same lifecycle as /product/:id/stock-in: record transaction, then update stock.
   let stockTransactionId = null;
   let canMarkStockApplied = true;
@@ -288,7 +303,9 @@ export async function createProductStockAdjustment({
     const missingNewColumn = /import_history_id|stock_applied/i.test(String(txnError.message || ""));
     if (!missingNewColumn) throw txnError;
     canMarkStockApplied = false;
-    const { import_history_id: _unusedImportId, stock_applied: _unusedStockApplied, ...legacyPayload } = transactionPayload;
+    const legacyPayload = { ...transactionPayload };
+    delete legacyPayload.import_history_id;
+    delete legacyPayload.stock_applied;
     const { error: legacyTxnError } = await offlineSupabase
       .from("product_transactions")
       .insert([legacyPayload]);
@@ -297,16 +314,12 @@ export async function createProductStockAdjustment({
     stockTransactionId = stockTransaction?.id || null;
   }
 
-  console.log("Database Update Started");
   const { error: stockError } = await offlineSupabase
     .from("products")
     .update({ stock_quantity: newStock, updated_at: updatedAt })
     .eq("id", productId);
 
-  if (stockError) {
-    console.log("Database Update Failed", stockError);
-    throw stockError;
-  }
+  if (stockError) throw stockError;
 
   const updatedProduct = { ...currentProduct, stock_quantity: newStock, updated_at: updatedAt };
   await saveFetchedData("products", [updatedProduct]);
@@ -320,8 +333,11 @@ export async function createProductStockAdjustment({
     if (markError) throw markError;
   }
 
-  console.log("Database Update Result:", "success");
-  console.log("Final Stored Stock:", product.stock_quantity);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("inventory-updated", {
+      detail: { productId, stockQuantity: newStock },
+    }));
+  }
 
   return { success: true, newStock: product.stock_quantity, product: updatedProduct };
 }
@@ -337,15 +353,7 @@ export async function createStockInAdjustment({
   createdAt,
   notes,
   importHistoryId,
-  excelProductName,
-  normalizedName,
 }) {
-  console.log("Excel Product Name:", excelProductName || product.name);
-  console.log("Normalized Name:", normalizedName || "");
-  console.log("Catalogue Product:", product.name);
-  console.log("Matched Product ID:", Number(product.id));
-  console.log("Imported Quantity:", Number(quantity));
-
   return createProductStockAdjustment({
     product,
     type: "stock_in",

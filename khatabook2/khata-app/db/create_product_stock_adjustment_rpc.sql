@@ -42,6 +42,8 @@ CREATE OR REPLACE FUNCTION public.create_product_stock_adjustment(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
 AS $$
 DECLARE
   previous_stock numeric;
