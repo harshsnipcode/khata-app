@@ -15,8 +15,10 @@ function ExcelImportDetail() {
   const [error, setError] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDeleteFromListConfirm, setShowDeleteFromListConfirm] = useState(false);
+  const [showDeleteAbandonedConfirm, setShowDeleteAbandonedConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deletingFromList, setDeletingFromList] = useState(false);
+  const [deletingAbandoned, setDeletingAbandoned] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const businessName = localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy";
 
@@ -32,6 +34,7 @@ function ExcelImportDetail() {
   const preview = Array.isArray(record?.parsed_preview) ? record.parsed_preview : [];
   const previewSections = buildPreviewSections(preview);
   const isDeleted = record?.status === "deleted";
+  const isProcessing = record?.status === "processing";
   const canDelete = ["imported", "restored", "completed", "completed_with_errors"].includes(record?.status);
 
   const handleDeleteImport = async () => {
@@ -66,6 +69,37 @@ function ExcelImportDetail() {
     } catch (deleteFailure) {
       setDeleteError(deleteFailure.message || "Unable to delete this import from the list.");
       setDeletingFromList(false);
+    }
+  };
+
+  const handleDeleteAbandoned = async () => {
+    setDeletingAbandoned(true);
+    setDeleteError("");
+    try {
+      if (!navigator.onLine) {
+        throw new Error("Deleting an import requires an internet connection.");
+      }
+
+      const { data: linkedTxns } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("import_history_id", importId);
+
+      if (linkedTxns?.length) {
+        const txnIds = linkedTxns.map((t) => t.id);
+        await supabase.from("transaction_items").delete().in("transaction_id", txnIds);
+        await supabase.from("transactions").delete().in("id", txnIds);
+      }
+
+      const { error: deleteError } = await supabase
+        .from("import_history")
+        .delete()
+        .eq("id", importId);
+      if (deleteError) throw deleteError;
+      navigate("/admin/excel", { replace: true });
+    } catch (deleteFailure) {
+      setDeleteError(deleteFailure.message || "Unable to delete this import.");
+      setDeletingAbandoned(false);
     }
   };
 
@@ -139,7 +173,11 @@ function ExcelImportDetail() {
 
             <section className="rounded-3xl border border-rose-500/20 bg-rose-500/5 p-5">
               <h2 className="font-black text-rose-600">Delete This Import</h2>
-              <p className="text-sm text-[var(--text-secondary)] mt-1">Remove every transaction created by this Excel import as one reversible batch.</p>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                {isProcessing
+                  ? "Remove this unfinished import from the history."
+                  : "Remove every transaction created by this Excel import as one reversible batch."}
+              </p>
               {isDeleted ? (
                 <>
                   <p className="mt-4 text-sm font-bold text-[var(--text-secondary)]">This import has already been deleted.</p>
@@ -147,13 +185,18 @@ function ExcelImportDetail() {
                     Delete from List
                   </button>
                 </>
+              ) : isProcessing ? (
+                <>
+                  <p className="mt-4 text-sm text-[var(--text-secondary)]">This import never completed. You can remove it from the history.</p>
+                  <button onClick={() => setShowDeleteAbandonedConfirm(true)} className="mt-4 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wide cursor-pointer active:scale-95 transition">
+                    Delete Import
+                  </button>
+                </>
               ) : canDelete ? (
                 <button onClick={() => setShowDeleteConfirm(true)} className="mt-4 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wide cursor-pointer active:scale-95 transition">
                   Delete This Import
                 </button>
-              ) : (
-                <p className="mt-4 text-sm font-bold text-[var(--text-secondary)]">This import is not available for batch deletion.</p>
-              )}
+              ) : null}
               {deleteError && <p className="mt-3 text-sm font-bold text-rose-600">{deleteError}</p>}
             </section>
           </>
@@ -184,6 +227,21 @@ function ExcelImportDetail() {
               <button disabled={deletingFromList} onClick={() => setShowDeleteFromListConfirm(false)} className="px-4 py-2.5 rounded-xl border border-[var(--border)] text-xs font-bold cursor-pointer disabled:opacity-50">Cancel</button>
               <button disabled={deletingFromList} onClick={handleDeleteFromList} className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-black cursor-pointer disabled:opacity-50">
                 {deletingFromList ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAbandonedConfirm && (
+        <div className="fixed inset-0 z-[100] bg-black/50 p-4 flex items-center justify-center">
+          <div className="w-full max-w-md rounded-3xl bg-[var(--surface)] border border-[var(--border)] p-6 shadow-2xl">
+            <h2 className="text-lg font-black">Delete abandoned import?</h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-2">This import never completed. Deleting it will remove this unfinished import and any partial transactions it created. No completed transactions will be reversed.</p>
+            <div className="flex justify-end gap-2 mt-6">
+              <button disabled={deletingAbandoned} onClick={() => setShowDeleteAbandonedConfirm(false)} className="px-4 py-2.5 rounded-xl border border-[var(--border)] text-xs font-bold cursor-pointer disabled:opacity-50">Cancel</button>
+              <button disabled={deletingAbandoned} onClick={handleDeleteAbandoned} className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-black cursor-pointer disabled:opacity-50">
+                {deletingAbandoned ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>
