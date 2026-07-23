@@ -68,8 +68,8 @@ function DownloadExcelPage() {
       const [customers, products, transactions] = await Promise.all([
         fetchEveryPage(() => supabase
           .from("customers")
-          .select("id, name, route_position, created_at")
-          .order("route_position", { ascending: true, nullsFirst: false })
+          .select("id, name, collection_position, created_at")
+          .order("collection_position", { ascending: true, nullsFirst: false })
           .order("created_at", { ascending: false })),
         fetchEveryPage(() => supabase
           .from("products")

@@ -2,9 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOfflineFirst, offlineSupabase } from "../lib/offline/offlineSupabase";
 import {
-  sortCustomersByRoutePosition,
-  moveCustomerToPosition,
-  persistCustomerOrder,
+  sortCustomersByMatrix,
+  moveCustomerToMatrixPosition,
+  persistMatrixOrder,
 } from "../utils/customerOrdering";
 
 // Timezone-safe local date string helper
@@ -134,18 +134,18 @@ function CataloguePreview() {
   const openOrderModal = async () => {
     const { data } = await offlineSupabase
       .from("customers")
-      .select("id, name, route_position")
-      .order("route_position", { ascending: true, nullsFirst: false });
-    if (data) setOrderCustomers(sortCustomersByRoutePosition(data));
+      .select("id, name, matrix_position")
+      .order("matrix_position", { ascending: true, nullsFirst: false });
+    if (data) setOrderCustomers(sortCustomersByMatrix(data));
     setShowOrderModal(true);
   };
 
   const handleOrderSave = async (customerId, newPosition) => {
     setOrderSaving(true);
     try {
-      const reordered = moveCustomerToPosition(orderCustomers, customerId, newPosition);
+      const reordered = moveCustomerToMatrixPosition(orderCustomers, customerId, newPosition);
       setOrderCustomers(reordered);
-      await persistCustomerOrder(offlineSupabase, reordered);
+      await persistMatrixOrder(offlineSupabase, reordered);
     } catch (err) {
       console.error("Failed to save position", err);
     }
@@ -220,8 +220,8 @@ function CataloguePreview() {
       grid[custKey][prodKey] = (grid[custKey][prodKey] || 0) + Number(item.quantity);
     });
 
-    // Include ALL customers, sorted by route_position
-    const allCustomers = sortCustomersByRoutePosition(data.customers);
+    // Include ALL customers, sorted by matrix_position
+    const allCustomers = sortCustomersByMatrix(data.customers);
 
     // Include ALL products, sorted alphabetically (same ordering as before)
     const allProducts = [...data.products].sort((a, b) =>

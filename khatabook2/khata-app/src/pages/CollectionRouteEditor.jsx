@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import {
-  sortCustomersByRoutePosition,
-  moveCustomerToPosition,
-  persistCustomerOrder,
+  sortCustomersByCollection,
+  moveCustomerToCollectionPosition,
+  persistCollectionOrder,
 } from "../utils/customerOrdering";
 
 function PositionModal({ customer, total, onClose, onSave }) {
@@ -78,10 +78,10 @@ function CollectionRouteEditor() {
     setLoading(true);
     const { data, error } = await supabase
       .from("customers")
-      .select("id, name, route_position")
-      .order("route_position", { ascending: true, nullsFirst: false });
+      .select("id, name, collection_position")
+      .order("collection_position", { ascending: true, nullsFirst: false });
     if (!error && data) {
-      const ordered = sortCustomersByRoutePosition(data);
+      const ordered = sortCustomersByCollection(data);
       setCustomers(ordered);
     }
     setLoading(false);
@@ -92,9 +92,9 @@ function CollectionRouteEditor() {
   const handleSavePosition = async (customerId, newPosition) => {
     setSaving(true);
     try {
-      const reordered = moveCustomerToPosition(customers, customerId, newPosition);
+      const reordered = moveCustomerToCollectionPosition(customers, customerId, newPosition);
       setCustomers(reordered);
-      await persistCustomerOrder(offlineSupabase, reordered);
+      await persistCollectionOrder(offlineSupabase, reordered);
     } catch (err) {
       console.error("Failed to save position", err);
       await load();

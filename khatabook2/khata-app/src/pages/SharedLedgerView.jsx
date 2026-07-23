@@ -30,7 +30,7 @@ function SharedLedgerView() {
       if (transactionsWithItems.length > 0) {
         const itemsResult = await supabase
           .from("transaction_items")
-          .select("id, transaction_id, product_id, quantity, price, products(name)")
+          .select("id, transaction_id, product_id, quantity, price, products(name, unit)")
           .in("transaction_id", transactionsWithItems.map(t => t.id));
 
         if (!itemsResult.error) {
@@ -199,7 +199,7 @@ function SharedLedgerView() {
                           <div className="mt-1.5 space-y-1">
                             {txn.items.map((item, idx) => (
                               <p key={idx} className="text-[var(--text-primary)] font-semibold text-sm">
-                                {item.products?.name} <span className="text-[var(--text-secondary)] font-medium">× {item.quantity}</span>
+                                {item.products?.name} <span className="text-[var(--text-secondary)] font-medium">× {item.quantity}{item.products?.unit || "pcs"}</span>
                               </p>
                             ))}
                           </div>

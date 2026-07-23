@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { applyCollectionQueue } from "../src/lib/collectionQueue.js";
 
 const customers = [
-  { id: 3, name: "Harsh", route_position: 3 },
-  { id: 1, name: "Rahul", route_position: 1 },
-  { id: 2, name: "Sneha", route_position: 2 },
+  { id: 3, name: "Harsh", collection_position: 3 },
+  { id: 1, name: "Rahul", collection_position: 1 },
+  { id: 2, name: "Sneha", collection_position: 2 },
 ];
 
 test("keeps the configured collection route before any visits", () => {

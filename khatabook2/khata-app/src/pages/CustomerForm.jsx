@@ -60,14 +60,14 @@ function CustomerForm() {
 
       const { data: maxRow } = await supabase
         .from("customers")
-        .select("route_position")
-        .order("route_position", { ascending: false, nullsFirst: false })
+        .select("collection_position")
+        .order("collection_position", { ascending: false, nullsFirst: false })
         .limit(1)
         .single();
-      const nextRoute = (maxRow?.route_position ?? 0) + 1;
+      const nextPos = (maxRow?.collection_position ?? 0) + 1;
 
       const { data, error } = await offlineSupabase.from("customers").insert([
-        { name, phone, created_by, route_position: nextRoute },
+        { name, phone, created_by, collection_position: nextPos, matrix_position: nextPos },
       ]).select();
 
       if (error) throw error;

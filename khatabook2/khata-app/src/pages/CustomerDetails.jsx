@@ -45,7 +45,7 @@ function CustomerDetails() {
       if (transactionsWithItems.length > 0) {
         const itemsResult = await supabase
           .from("transaction_items")
-          .select("id, transaction_id, product_id, quantity, price, products(name)")
+          .select("id, transaction_id, product_id, quantity, price, products(name, unit)")
           .in("transaction_id", transactionsWithItems.map(t => t.id));
 
         if (!itemsResult.error) {
@@ -317,7 +317,7 @@ function CustomerDetails() {
                     ? txn.payment_mode === "online" ? "Online" : "Cash"
                     : null;
                   const description = itemCount > 0
-                    ? txn.items.map(item => `${item.products?.name} × ${item.quantity}`).join(", ")
+                    ? txn.items.map(item => `${item.products?.name} × ${item.quantity}${item.products?.unit || "pcs"}`).join(", ")
                     : "Direct Entry";
 
                   return (

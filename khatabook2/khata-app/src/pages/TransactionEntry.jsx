@@ -496,7 +496,7 @@ function TransactionEntry() {
                           )}
                         </div>
                         <p className="text-[var(--text-secondary)] text-xs mt-1.5 font-medium">
-                          ₹{new Intl.NumberFormat("en-IN").format(effectivePrice)} × {quantity} = <span className="text-emerald-400 font-bold">₹{new Intl.NumberFormat("en-IN").format(itemTotal)}</span>
+                          ₹{new Intl.NumberFormat("en-IN").format(effectivePrice)} × {quantity}{product.unit || "pcs"} = <span className="text-emerald-400 font-bold">₹{new Intl.NumberFormat("en-IN").format(itemTotal)}</span>
                           
                         </p>
                         <p className={`text-[10px] uppercase font-bold tracking-wider mt-1 ${

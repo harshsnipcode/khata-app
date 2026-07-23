@@ -13,6 +13,7 @@ function EditProductPage() {
   const [purchasePrice, setPurchasePrice] = useState("");
   const [openingStock, setOpeningStock] = useState("");
   const [lowStockLimit, setLowStockLimit] = useState("");
+  const [unit, setUnit] = useState("");
   const [groupId, setGroupId] = useState("");
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +47,7 @@ function EditProductPage() {
       setPurchasePrice(String(pRes.data.purchase_price));
       setOpeningStock(String(pRes.data.stock_quantity || 0));
       setLowStockLimit(String(pRes.data.low_stock_limit || 0));
+      setUnit(pRes.data.unit || "pcs");
       setGroupId(pRes.data.group_id ? String(pRes.data.group_id) : "");
       setLoading(false);
     };
@@ -76,6 +78,7 @@ function EditProductPage() {
         purchase_price: Number(purchasePrice),
         stock_quantity: Number(openingStock || 0),
         low_stock_limit: Number(lowStockLimit || 0),
+        unit: unit.trim() || "pcs",
         group_id: groupId ? Number(groupId) : null,
       }).eq("id", id);
 
@@ -153,6 +156,16 @@ function EditProductPage() {
                 className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-5 py-4 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300 text-sm"
                 placeholder="e.g. Full Cream Milk"
                 required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[var(--text-secondary)] text-[10px] font-bold uppercase tracking-wider pl-1">Unit</label>
+              <input
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-5 py-4 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300 text-sm"
+                placeholder="e.g. pcs, kg, litre, packet"
               />
             </div>
 

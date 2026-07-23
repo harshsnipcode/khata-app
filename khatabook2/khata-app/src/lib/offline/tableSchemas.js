@@ -1,7 +1,7 @@
 // Keep this allowlist aligned with the checked-in SQL files in /db.
 // Sync must never send cache metadata or an unrecognized column to Supabase.
 export const TABLE_COLUMNS = Object.freeze({
-  customers: ["id", "name", "phone", "type", "created_by", "created_at", "updated_at", "address", "gstin", "photo_url", "auto_sms_enabled", "route_position"],
+  customers: ["id", "name", "phone", "type", "created_by", "created_at", "updated_at", "address", "gstin", "photo_url", "auto_sms_enabled", "matrix_position", "collection_position"],
   product_groups: ["id", "name", "created_at", "updated_at"],
   products: ["id", "name", "group_id", "sale_price", "purchase_price", "stock_quantity", "low_stock_limit", "unit", "image_url", "created_by", "created_at", "updated_at"],
   transactions: ["id", "customer_id", "type", "amount", "description", "payment_mode", "date", "created_by", "created_at", "import_history_id"],

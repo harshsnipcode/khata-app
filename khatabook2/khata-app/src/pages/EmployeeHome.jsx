@@ -222,7 +222,7 @@ function EmployeeHome() {
           return true;
         });
       }
-      return list.sort((a, b) => (a.route_position ?? 9999) - (b.route_position ?? 9999));
+      return list.sort((a, b) => (a.collection_position ?? 9999) - (b.collection_position ?? 9999));
     }
     return applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType);
   }, [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType, collectionMode]);

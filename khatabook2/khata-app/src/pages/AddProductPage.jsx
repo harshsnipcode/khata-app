@@ -11,6 +11,7 @@ function AddProductPage() {
   const [purchasePrice, setPurchasePrice] = useState("");
   const [openingStock, setOpeningStock] = useState("");
   const [lowStockLimit, setLowStockLimit] = useState("");
+  const [unit, setUnit] = useState("");
   const [groupId, setGroupId] = useState("");
   const [groups, setGroups] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -49,7 +50,7 @@ function AddProductPage() {
           purchase_price: Number(purchasePrice),
           stock_quantity: Number(openingStock || 0),
           low_stock_limit: Number(lowStockLimit || 0),
-          unit: "PCS",
+          unit: unit.trim() || "pcs",
           group_id: groupId ? Number(groupId) : null,
           created_by
         }
@@ -111,6 +112,16 @@ function AddProductPage() {
                 className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-5 py-4 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300 text-sm"
                 placeholder="e.g. Full Cream Milk"
                 required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[var(--text-secondary)] text-[10px] font-bold uppercase tracking-wider pl-1">Unit</label>
+              <input
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-5 py-4 text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300 text-sm"
+                placeholder="e.g. pcs, kg, litre, packet"
               />
             </div>
 

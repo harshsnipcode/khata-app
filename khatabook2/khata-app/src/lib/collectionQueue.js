@@ -23,7 +23,7 @@ export function resetCollectionQueue() {
 
 export function applyCollectionQueue(customers, queue = getCollectionQueue()) {
   const route = [...customers].sort(
-    (a, b) => (a.route_position ?? 9999) - (b.route_position ?? 9999),
+    (a, b) => (a.collection_position ?? 9999) - (b.collection_position ?? 9999),
   );
   const customerById = new Map(route.map((customer) => [String(customer.id), customer]));
   const queuedIds = new Set(queue);

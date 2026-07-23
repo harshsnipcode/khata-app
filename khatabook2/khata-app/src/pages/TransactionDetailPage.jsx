@@ -64,7 +64,7 @@ function TransactionDetailPage() {
 
       const { data: txItems } = await supabase
         .from("transaction_items")
-        .select("id, transaction_id, product_id, quantity, price, products(name)")
+        .select("id, transaction_id, product_id, quantity, price, products(name, unit)")
         .eq("transaction_id", id);
       setItems(txItems || []);
 
@@ -145,7 +145,7 @@ function TransactionDetailPage() {
     const isGave = transaction.type === "gave";
     const typeLabel = isGave ? "You Gave" : "You Got";
     const itemsText = items.length > 0
-      ? items.map((item) => `  ${item.products?.name || "Product"} x${item.quantity} — ₹${new Intl.NumberFormat("en-IN").format(item.price * item.quantity)}`).join("\n")
+      ? items.map((item) => `  ${item.products?.name || "Product"} x${item.quantity}${item.products?.unit || "pcs"} — ₹${new Intl.NumberFormat("en-IN").format(item.price * item.quantity)}`).join("\n")
       : "  Cash/Direct Entry";
 
     const message = `${businessName}
@@ -303,7 +303,7 @@ Balance After Transaction:
                         {item.products?.name || "Product"}
                       </p>
                       <p className="text-[9px] text-[var(--text-muted)]">
-                        x{item.quantity} @ ₹{new Intl.NumberFormat("en-IN").format(item.price)}
+                        x{item.quantity}{item.products?.unit || "pcs"} @ ₹{new Intl.NumberFormat("en-IN").format(item.price)}
                       </p>
                     </div>
                     <p className="text-[11px] font-bold text-[var(--text-primary)]">
