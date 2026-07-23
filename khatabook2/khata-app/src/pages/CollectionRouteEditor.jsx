@@ -6,7 +6,6 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
-  TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -31,23 +30,26 @@ function SortableItem({ id, customer, index, isDragging }) {
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: transition || "transform 200ms ease",
     opacity: itemDragging ? 0.4 : 1,
     zIndex: itemDragging ? 50 : "auto",
+    willChange: "transform",
   };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`card rounded-xl px-3.5 py-3 flex items-center gap-3 touch-none select-none ${
+      className={`card rounded-xl px-3.5 py-3 flex items-center gap-3 ${
         itemDragging ? "shadow-2xl scale-[1.03]" : ""
       }`}
-      {...attributes}
-      {...listeners}
     >
-      {/* Drag Handle */}
-      <div className="shrink-0 text-[var(--text-muted)] opacity-40">
+      {/* Drag Handle — listeners attached here only */}
+      <div
+        className="shrink-0 text-[var(--text-muted)] opacity-40 touch-none cursor-grab active:cursor-grabbing"
+        {...listeners}
+        {...attributes}
+      >
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="9" cy="6" r="1.5" />
           <circle cx="15" cy="6" r="1.5" />
@@ -98,9 +100,6 @@ function CollectionRouteEditor() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { delay: 800, tolerance: 8 },
-    }),
-    useSensor(TouchSensor, {
       activationConstraint: { delay: 800, tolerance: 8 },
     }),
     useSensor(KeyboardSensor, {
