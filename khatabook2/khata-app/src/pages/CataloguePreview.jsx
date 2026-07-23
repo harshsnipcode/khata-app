@@ -1,24 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { offlineSupabase, useOfflineFirst } from "../lib/offline/offlineSupabase";
+import { useOfflineFirst, offlineSupabase } from "../lib/offline/offlineSupabase";
 import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-
-const DISTRIBUTION_MATRIX_ORDER_KEY = "distribution_matrix_product_order";
+  sortCustomersByRoutePosition,
+  moveCustomerToPosition,
+  persistCustomerOrder,
+} from "../utils/customerOrdering";
 
 // Timezone-safe local date string helper
 const getTodayString = () => {
@@ -42,82 +29,61 @@ const getFormattedDate = (dateStr) => {
   });
 };
 
-const productOrderKey = (product) => String(product?.id ?? product?.local_uuid ?? "");
+function PositionModal({ customer, total, onClose, onSave }) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
 
-function applySavedProductOrder(products, savedOrder) {
-  const alphabetic = [...products].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  const byKey = new Map(alphabetic.map((product) => [productOrderKey(product), product]));
-  const ordered = [];
-  (savedOrder || []).forEach((key) => {
-    const product = byKey.get(String(key));
-    if (product) {
-      ordered.push(product);
-      byKey.delete(String(key));
-    }
-  });
-  return [...ordered, ...byKey.values()];
-}
-
-function SortableProductCard({ product, index }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: productOrderKey(product) });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition: transition || "transform 200ms ease",
-    opacity: isDragging ? 0.4 : 1,
-    zIndex: isDragging ? 50 : "auto",
-    willChange: "transform",
+  const handleSave = async () => {
+    const num = parseInt(value, 10);
+    if (!num || num < 1 || num > total) return;
+    setSaving(true);
+    await onSave(customer.id, num);
+    setSaving(false);
+    onClose();
   };
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className={`card rounded-xl px-3.5 py-3 flex items-center gap-3 ${isDragging ? "shadow-2xl scale-[1.03]" : ""}`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-6"
+      onClick={() => { if (!saving) onClose(); }}
     >
       <div
-        className="shrink-0 text-[var(--text-muted)] opacity-40 touch-none cursor-grab active:cursor-grabbing"
-        {...listeners}
-        {...attributes}
+        className="w-full max-w-sm card rounded-3xl p-6 shadow-2xl animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
       >
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="9" cy="6" r="1.5" />
-          <circle cx="15" cy="6" r="1.5" />
-          <circle cx="9" cy="12" r="1.5" />
-          <circle cx="15" cy="12" r="1.5" />
-          <circle cx="9" cy="18" r="1.5" />
-          <circle cx="15" cy="18" r="1.5" />
-        </svg>
-      </div>
-
-      <div
-        className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
-        style={{ background: "#ebf6f5", color: "#5cbdb9" }}
-      >
-        {index + 1}
-      </div>
-
-      <div
-        className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0"
-        style={{ background: "#ebf6f5", color: "#5cbdb9" }}
-      >
-        {(product.name?.[0] || "?").toUpperCase()}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-sm truncate" style={{ color: "#2d3436" }}>
-          {product.name}
+        <h2 className="text-base font-black uppercase tracking-wider text-[var(--text-primary)] mb-1">
+          Move {customer.name}
+        </h2>
+        <p className="text-xs text-[var(--text-secondary)] mb-4">
+          Currently at position #{customer.position}. Enter new position (1–{total}).
         </p>
-        <p className="text-[10px] font-medium text-[var(--text-muted)]">
-          Matrix position #{index + 1}
-        </p>
+        <input
+          type="number"
+          min="1"
+          max={total}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+          autoFocus
+          className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--primary)] transition-all duration-300"
+          placeholder={`1 – ${total}`}
+        />
+        <div className="flex gap-3 mt-4">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="flex-1 bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--border)] text-[var(--text-primary)] font-bold py-3 rounded-2xl transition active:scale-95 text-[10px] uppercase tracking-widest cursor-pointer outline-none disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !value}
+            className="flex-1 bg-[var(--primary)] hover:opacity-90 text-white font-black py-3 rounded-2xl transition active:scale-95 text-[10px] uppercase tracking-widest cursor-pointer outline-none disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -126,13 +92,12 @@ function SortableProductCard({ product, index }) {
 function CataloguePreview() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [savingOrder, setSavingOrder] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [isTransposed, setIsTransposed] = useState(false);
-  const [isOrderMode, setIsOrderMode] = useState(false);
-  const [draftProducts, setDraftProducts] = useState([]);
-  const [savedProductOrder, setSavedProductOrder] = useState([]);
-  const [settingsRow, setSettingsRow] = useState(null);
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [orderCustomers, setOrderCustomers] = useState([]);
+  const [orderSaving, setOrderSaving] = useState(false);
+  const [modalCustomer, setModalCustomer] = useState(null);
   const [data, setData] = useState({
     customers: [],
     products: [],
@@ -166,14 +131,26 @@ function CataloguePreview() {
     loadAllData();
   }, []);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { delay: 800, tolerance: 8 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
+  const openOrderModal = async () => {
+    const { data } = await offlineSupabase
+      .from("customers")
+      .select("id, name, route_position")
+      .order("route_position", { ascending: true, nullsFirst: false });
+    if (data) setOrderCustomers(sortCustomersByRoutePosition(data));
+    setShowOrderModal(true);
+  };
+
+  const handleOrderSave = async (customerId, newPosition) => {
+    setOrderSaving(true);
+    try {
+      const reordered = moveCustomerToPosition(orderCustomers, customerId, newPosition);
+      setOrderCustomers(reordered);
+      await persistCustomerOrder(offlineSupabase, reordered);
+    } catch (err) {
+      console.error("Failed to save position", err);
+    }
+    setOrderSaving(false);
+  };
 
   // Map customer lookups by ID and local_uuid
   const customerMap = useMemo(() => {
@@ -243,20 +220,20 @@ function CataloguePreview() {
       grid[custKey][prodKey] = (grid[custKey][prodKey] || 0) + Number(item.quantity);
     });
 
-    // Include ALL customers, sorted alphabetically (same ordering as before)
-    const allCustomers = [...data.customers].sort((a, b) =>
+    // Include ALL customers, sorted by route_position
+    const allCustomers = sortCustomersByRoutePosition(data.customers);
+
+    // Include ALL products, sorted alphabetically (same ordering as before)
+    const allProducts = [...data.products].sort((a, b) =>
       (a.name || "").localeCompare(b.name || "")
     );
-
-    // Include ALL products, using the saved Distribution Matrix order when present.
-    const allProducts = applySavedProductOrder(data.products, savedProductOrder);
 
     return {
       grid,
       customers: allCustomers,
       products: allProducts,
     };
-  }, [dateItems, filteredTxnsMap, customerMap, productMap, data.customers, data.products, savedProductOrder]);
+  }, [dateItems, filteredTxnsMap, customerMap, productMap, data.customers, data.products]);
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -298,80 +275,12 @@ function CataloguePreview() {
 
   const isEmpty = matrixData.customers.length === 0 || matrixData.products.length === 0;
 
-  useEffect(() => {
-    useOfflineFirst("business_settings").getAll().then(({ data: rows }) => {
-      const row = (rows || [])[0] || null;
-      setSettingsRow(row);
-      const order = row?.settings?.[DISTRIBUTION_MATRIX_ORDER_KEY];
-      setSavedProductOrder(Array.isArray(order) ? order.map(String) : []);
-    }).catch(() => {});
-  }, []);
-
-  const enterOrderMode = () => {
-    setDraftProducts(matrixData.products);
-    setIsOrderMode(true);
-  };
-
-  const handleDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id) return;
-    setDraftProducts((prev) => {
-      const oldIndex = prev.findIndex((product) => productOrderKey(product) === active.id);
-      const newIndex = prev.findIndex((product) => productOrderKey(product) === over.id);
-      if (oldIndex === -1 || newIndex === -1) return prev;
-      return arrayMove(prev, oldIndex, newIndex);
-    });
-  };
-
-  const saveProductOrder = async () => {
-    const nextOrder = draftProducts.map(productOrderKey).filter(Boolean);
-    setSavingOrder(true);
-    try {
-      const { data: latestRows } = await useOfflineFirst("business_settings").getAll();
-      const latestRow = (latestRows || [])[0] || settingsRow;
-      const nextSettings = {
-        ...(latestRow?.settings || {}),
-        [DISTRIBUTION_MATRIX_ORDER_KEY]: nextOrder,
-      };
-      if (latestRow?.id) {
-        const { error } = await offlineSupabase
-          .from("business_settings")
-          .update({ settings: nextSettings, updated_at: new Date().toISOString() })
-          .eq("id", latestRow.id);
-        if (error) throw error;
-        setSettingsRow({ ...latestRow, settings: nextSettings });
-      } else {
-        const { data: inserted, error } = await offlineSupabase
-          .from("business_settings")
-          .insert([{ id: 1, settings: nextSettings, updated_at: new Date().toISOString() }])
-          .select("*")
-          .single();
-        if (error) throw error;
-        setSettingsRow(inserted);
-      }
-      setSavedProductOrder(nextOrder);
-      setIsOrderMode(false);
-    } catch (error) {
-      console.error("Failed to save Distribution Matrix order", error);
-    } finally {
-      setSavingOrder(false);
-    }
-  };
-
   return (
     <div className="h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col overflow-hidden select-none animate-fade-in">
       <div className="w-full flex flex-col flex-1 min-h-0 px-3 md:px-4 pt-3 md:pt-4 pb-2 md:pb-3 gap-2 md:gap-3">
         
         {/* Header Section */}
         <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-2 shrink-0">
-          <button
-            onClick={isOrderMode ? saveProductOrder : enterOrderMode}
-            disabled={savingOrder || loading || isEmpty}
-            className={`flex items-center gap-1 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
-              isOrderMode ? "text-[var(--primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-            }`}
-          >
-            <span>{savingOrder ? "Saving..." : isOrderMode ? "Save" : "Order"}</span>
-          </button>
           <div className="space-y-0.5">
             <h1 className="text-sm md:text-xl font-bold tracking-tight text-[var(--text-primary)]">
               Distribution Matrix
@@ -382,18 +291,16 @@ function CataloguePreview() {
                 : `Showing sheet for ${getFormattedDate(selectedDate)}`}
             </p>
           </div>
-          {!isOrderMode && (
-            <button
-              onClick={() => navigate(-1)}
-              className="flex items-center gap-1 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm"
-            >
-              <svg className="w-3 h-3 md:w-3.5 md:h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12" />
-                <polyline points="12 19 5 12 12 5" />
-              </svg>
-              <span>Back</span>
-            </button>
-          )}
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm"
+          >
+            <svg className="w-3 h-3 md:w-3.5 md:h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            <span>Back</span>
+          </button>
         </div>
 
         {/* Toolbar: Date picker + Transpose button */}
@@ -415,38 +322,20 @@ function CataloguePreview() {
             <span>🔄</span>
             <span className="hidden xs:inline">Transpose</span>
           </button>
+
+          <button
+            onClick={openOrderModal}
+            className="flex items-center gap-1 bg-transparent hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 rounded-lg md:rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm"
+          >
+            <span>📋</span>
+            <span className="hidden xs:inline">Order</span>
+          </button>
         </div>
 
         {/* Matrix Container */}
         {loading ? (
           <div className="card rounded-2xl flex-1 flex items-center justify-center text-[var(--text-secondary)] font-bold animate-pulse uppercase tracking-widest text-xs md:text-sm">
             Loading Matrix Data...
-          </div>
-        ) : isOrderMode ? (
-          <div className="card rounded-2xl flex-1 min-h-0 p-3 overflow-auto shadow-sm">
-            <p className="text-[10px] text-[var(--text-muted)] font-medium mb-3">
-              Long press and drag to reorder products. Press Save to commit.
-            </p>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={draftProducts.map(productOrderKey)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-1.5">
-                  {draftProducts.map((product, index) => (
-                    <SortableProductCard
-                      key={productOrderKey(product)}
-                      product={product}
-                      index={index}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
           </div>
         ) : isEmpty ? (
           <div className="card border-dashed rounded-2xl flex-1 flex flex-col items-center justify-center text-[var(--text-secondary)]">
@@ -597,6 +486,85 @@ function CataloguePreview() {
         )}
         
       </div>
+
+      {/* Order Modal */}
+      {showOrderModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+          onClick={() => { if (!orderSaving) setShowOrderModal(false); }}
+        >
+          <div
+            className="w-full max-w-lg max-h-[85vh] card rounded-t-3xl sm:rounded-3xl shadow-2xl animate-scale-in flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 pt-5 pb-3 border-b border-[var(--border)] shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-black uppercase tracking-wider text-[var(--text-primary)]">
+                    Customer Order
+                  </h2>
+                  <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">
+                    Tap a customer to change position
+                  </p>
+                </div>
+                {orderSaving && (
+                  <span className="text-[10px] font-bold text-[var(--primary)] animate-pulse">Saving...</span>
+                )}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-1.5">
+              {orderCustomers.map((customer, index) => (
+                <button
+                  key={customer.id}
+                  onClick={() => setModalCustomer({ ...customer, position: index + 1 })}
+                  className="w-full card rounded-xl px-3.5 py-3 flex items-center gap-3 text-left cursor-pointer active:scale-[0.98] transition-all duration-150"
+                >
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+                    style={{ background: "#ebf6f5", color: "#5cbdb9" }}
+                  >
+                    {index + 1}
+                  </div>
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0"
+                    style={{ background: "#ebf6f5", color: "#5cbdb9" }}
+                  >
+                    {(customer.name?.[0] || "?").toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm truncate" style={{ color: "#2d3436" }}>
+                      {customer.name}
+                    </p>
+                    <p className="text-[10px] font-medium text-[var(--text-muted)]">
+                      Position #{index + 1}
+                    </p>
+                  </div>
+                  <svg className="w-4 h-4 text-[var(--text-muted)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-[var(--border)] shrink-0">
+              <button
+                onClick={() => setShowOrderModal(false)}
+                className="w-full bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--border)] text-[var(--text-primary)] font-bold py-3 rounded-2xl transition active:scale-95 text-[10px] uppercase tracking-widest cursor-pointer outline-none"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalCustomer && (
+        <PositionModal
+          customer={modalCustomer}
+          total={orderCustomers.length}
+          onClose={() => setModalCustomer(null)}
+          onSave={handleOrderSave}
+        />
+      )}
     </div>
   );
 }
