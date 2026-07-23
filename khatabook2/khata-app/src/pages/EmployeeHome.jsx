@@ -156,9 +156,14 @@ function EmployeeHome() {
     setCollectionMode(next);
     if (settingsId) {
       try {
+        const { data: currentSettingsRow } = await supabase
+          .from("business_settings")
+          .select("settings")
+          .eq("id", settingsId)
+          .single();
         await offlineSupabase
           .from("business_settings")
-          .update({ settings: { collection_mode_enabled: next } })
+          .update({ settings: { ...(currentSettingsRow?.settings || {}), collection_mode_enabled: next } })
           .eq("id", settingsId);
       } catch {
         setCollectionMode(!next);

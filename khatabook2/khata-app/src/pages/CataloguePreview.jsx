@@ -1,6 +1,24 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useOfflineFirst } from "../lib/offline/offlineSupabase";
+import { offlineSupabase, useOfflineFirst } from "../lib/offline/offlineSupabase";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+const DISTRIBUTION_MATRIX_ORDER_KEY = "distribution_matrix_product_order";
 
 // Timezone-safe local date string helper
 const getTodayString = () => {
@@ -24,11 +42,97 @@ const getFormattedDate = (dateStr) => {
   });
 };
 
+const productOrderKey = (product) => String(product?.id ?? product?.local_uuid ?? "");
+
+function applySavedProductOrder(products, savedOrder) {
+  const alphabetic = [...products].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const byKey = new Map(alphabetic.map((product) => [productOrderKey(product), product]));
+  const ordered = [];
+  (savedOrder || []).forEach((key) => {
+    const product = byKey.get(String(key));
+    if (product) {
+      ordered.push(product);
+      byKey.delete(String(key));
+    }
+  });
+  return [...ordered, ...byKey.values()];
+}
+
+function SortableProductCard({ product, index }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: productOrderKey(product) });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition || "transform 200ms ease",
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : "auto",
+    willChange: "transform",
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`card rounded-xl px-3.5 py-3 flex items-center gap-3 ${isDragging ? "shadow-2xl scale-[1.03]" : ""}`}
+    >
+      <div
+        className="shrink-0 text-[var(--text-muted)] opacity-40 touch-none cursor-grab active:cursor-grabbing"
+        {...listeners}
+        {...attributes}
+      >
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="9" cy="6" r="1.5" />
+          <circle cx="15" cy="6" r="1.5" />
+          <circle cx="9" cy="12" r="1.5" />
+          <circle cx="15" cy="12" r="1.5" />
+          <circle cx="9" cy="18" r="1.5" />
+          <circle cx="15" cy="18" r="1.5" />
+        </svg>
+      </div>
+
+      <div
+        className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+        style={{ background: "#ebf6f5", color: "#5cbdb9" }}
+      >
+        {index + 1}
+      </div>
+
+      <div
+        className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0"
+        style={{ background: "#ebf6f5", color: "#5cbdb9" }}
+      >
+        {(product.name?.[0] || "?").toUpperCase()}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-sm truncate" style={{ color: "#2d3436" }}>
+          {product.name}
+        </p>
+        <p className="text-[10px] font-medium text-[var(--text-muted)]">
+          Matrix position #{index + 1}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function CataloguePreview() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [savingOrder, setSavingOrder] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [isTransposed, setIsTransposed] = useState(false);
+  const [isOrderMode, setIsOrderMode] = useState(false);
+  const [draftProducts, setDraftProducts] = useState([]);
+  const [savedProductOrder, setSavedProductOrder] = useState([]);
+  const [settingsRow, setSettingsRow] = useState(null);
   const [data, setData] = useState({
     customers: [],
     products: [],
@@ -61,6 +165,15 @@ function CataloguePreview() {
     };
     loadAllData();
   }, []);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 800, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   // Map customer lookups by ID and local_uuid
   const customerMap = useMemo(() => {
@@ -135,17 +248,15 @@ function CataloguePreview() {
       (a.name || "").localeCompare(b.name || "")
     );
 
-    // Include ALL products, sorted alphabetically (same ordering as before)
-    const allProducts = [...data.products].sort((a, b) =>
-      (a.name || "").localeCompare(b.name || "")
-    );
+    // Include ALL products, using the saved Distribution Matrix order when present.
+    const allProducts = applySavedProductOrder(data.products, savedProductOrder);
 
     return {
       grid,
       customers: allCustomers,
       products: allProducts,
     };
-  }, [dateItems, filteredTxnsMap, customerMap, productMap, data.customers, data.products]);
+  }, [dateItems, filteredTxnsMap, customerMap, productMap, data.customers, data.products, savedProductOrder]);
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -187,12 +298,80 @@ function CataloguePreview() {
 
   const isEmpty = matrixData.customers.length === 0 || matrixData.products.length === 0;
 
+  useEffect(() => {
+    useOfflineFirst("business_settings").getAll().then(({ data: rows }) => {
+      const row = (rows || [])[0] || null;
+      setSettingsRow(row);
+      const order = row?.settings?.[DISTRIBUTION_MATRIX_ORDER_KEY];
+      setSavedProductOrder(Array.isArray(order) ? order.map(String) : []);
+    }).catch(() => {});
+  }, []);
+
+  const enterOrderMode = () => {
+    setDraftProducts(matrixData.products);
+    setIsOrderMode(true);
+  };
+
+  const handleDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    setDraftProducts((prev) => {
+      const oldIndex = prev.findIndex((product) => productOrderKey(product) === active.id);
+      const newIndex = prev.findIndex((product) => productOrderKey(product) === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
+  const saveProductOrder = async () => {
+    const nextOrder = draftProducts.map(productOrderKey).filter(Boolean);
+    setSavingOrder(true);
+    try {
+      const { data: latestRows } = await useOfflineFirst("business_settings").getAll();
+      const latestRow = (latestRows || [])[0] || settingsRow;
+      const nextSettings = {
+        ...(latestRow?.settings || {}),
+        [DISTRIBUTION_MATRIX_ORDER_KEY]: nextOrder,
+      };
+      if (latestRow?.id) {
+        const { error } = await offlineSupabase
+          .from("business_settings")
+          .update({ settings: nextSettings, updated_at: new Date().toISOString() })
+          .eq("id", latestRow.id);
+        if (error) throw error;
+        setSettingsRow({ ...latestRow, settings: nextSettings });
+      } else {
+        const { data: inserted, error } = await offlineSupabase
+          .from("business_settings")
+          .insert([{ id: 1, settings: nextSettings, updated_at: new Date().toISOString() }])
+          .select("*")
+          .single();
+        if (error) throw error;
+        setSettingsRow(inserted);
+      }
+      setSavedProductOrder(nextOrder);
+      setIsOrderMode(false);
+    } catch (error) {
+      console.error("Failed to save Distribution Matrix order", error);
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
   return (
     <div className="h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col overflow-hidden select-none animate-fade-in">
       <div className="w-full flex flex-col flex-1 min-h-0 px-3 md:px-4 pt-3 md:pt-4 pb-2 md:pb-3 gap-2 md:gap-3">
         
         {/* Header Section */}
         <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-2 shrink-0">
+          <button
+            onClick={isOrderMode ? saveProductOrder : enterOrderMode}
+            disabled={savingOrder || loading || isEmpty}
+            className={`flex items-center gap-1 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+              isOrderMode ? "text-[var(--primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+          >
+            <span>{savingOrder ? "Saving..." : isOrderMode ? "Save" : "Order"}</span>
+          </button>
           <div className="space-y-0.5">
             <h1 className="text-sm md:text-xl font-bold tracking-tight text-[var(--text-primary)]">
               Distribution Matrix
@@ -203,16 +382,18 @@ function CataloguePreview() {
                 : `Showing sheet for ${getFormattedDate(selectedDate)}`}
             </p>
           </div>
-          <button
-            onClick={() => navigate(-1)}
-            className="flex items-center gap-1 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm"
-          >
-            <svg className="w-3 h-3 md:w-3.5 md:h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-            <span>Back</span>
-          </button>
+          {!isOrderMode && (
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-1 bg-[var(--surface)] hover:bg-[var(--border)] border border-[var(--border)] px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition cursor-pointer outline-none active:scale-95 shrink-0 shadow-sm"
+            >
+              <svg className="w-3 h-3 md:w-3.5 md:h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+              <span>Back</span>
+            </button>
+          )}
         </div>
 
         {/* Toolbar: Date picker + Transpose button */}
@@ -240,6 +421,32 @@ function CataloguePreview() {
         {loading ? (
           <div className="card rounded-2xl flex-1 flex items-center justify-center text-[var(--text-secondary)] font-bold animate-pulse uppercase tracking-widest text-xs md:text-sm">
             Loading Matrix Data...
+          </div>
+        ) : isOrderMode ? (
+          <div className="card rounded-2xl flex-1 min-h-0 p-3 overflow-auto shadow-sm">
+            <p className="text-[10px] text-[var(--text-muted)] font-medium mb-3">
+              Long press and drag to reorder products. Press Save to commit.
+            </p>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={draftProducts.map(productOrderKey)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-1.5">
+                  {draftProducts.map((product, index) => (
+                    <SortableProductCard
+                      key={productOrderKey(product)}
+                      product={product}
+                      index={index}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           </div>
         ) : isEmpty ? (
           <div className="card border-dashed rounded-2xl flex-1 flex flex-col items-center justify-center text-[var(--text-secondary)]">
