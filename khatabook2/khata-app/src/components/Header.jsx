@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
 import heroLogo from "../assets/hero.png";
+import { getLogoUrl } from "../lib/businessSettings";
 
 function Header({ businessName = "Shiv Shankar Dairy" }) {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [syncStatus, setSyncStatus] = useState('synced');
-  const [logo, setLogo] = useState(() => localStorage.getItem("khata_business_logo"));
+  const [logo, setLogo] = useState(null);
+
+  useEffect(() => {
+    getLogoUrl().then((url) => setLogo(url)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -15,7 +20,7 @@ function Header({ businessName = "Shiv Shankar Dairy" }) {
       }
     };
     const handleLogoUpdate = () => {
-      setLogo(localStorage.getItem("khata_business_logo"));
+      getLogoUrl().then((url) => setLogo(url)).catch(() => {});
     };
 
     window.addEventListener('online', handleOnline);
@@ -45,6 +50,7 @@ function Header({ businessName = "Shiv Shankar Dairy" }) {
           alt="Business logo"
           className="w-7 h-7 rounded-xl object-cover shadow-sm shrink-0"
           style={{ background: "rgba(255,255,255,0.22)" }}
+          onError={() => setLogo(null)}
         />
         <h1 className="text-sm font-bold tracking-tight text-white truncate max-w-[180px] sm:max-w-[280px]">
           {businessName}

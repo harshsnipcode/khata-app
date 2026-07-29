@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
+import { getLogoUrl, uploadLogo } from "../lib/businessSettings";
 
 function SettingsPage() {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ function SettingsPage() {
   const [editName, setEditName] = useState("");
   const [logo, setLogo] = useState(null);
   const [newLogo, setNewLogo] = useState(null);
+  const [newLogoFile, setNewLogoFile] = useState(null);
   const [role, setRole] = useState("");
   const [profileName, setProfileName] = useState("");
   const [saved, setSaved] = useState(false);
@@ -18,11 +20,10 @@ function SettingsPage() {
 
   useEffect(() => {
     const name = localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy";
-    const savedLogo = localStorage.getItem("khata_business_logo");
     const r = localStorage.getItem("khata_role") || "";
     setBusinessName(name);
     setEditName(name);
-    setLogo(savedLogo);
+    getLogoUrl().then((url) => setLogo(url)).catch(() => {});
     setRole(r === "admin" ? "Admin" : r === "employee" ? "Employee" : "");
     if (r === "admin") {
       const storedProfile = localStorage.getItem("khata_profile_name");
@@ -56,6 +57,7 @@ function SettingsPage() {
   const handleLogoChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setNewLogoFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => {
       setNewLogo(ev.target.result);
@@ -63,14 +65,20 @@ function SettingsPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const name = editName.trim() || "Shiv Shankar Dairy";
     localStorage.setItem("khata_business_name", name);
     setBusinessName(name);
-    if (newLogo) {
-      localStorage.setItem("khata_business_logo", newLogo);
-      setLogo(newLogo);
-      setNewLogo(null);
+    if (newLogoFile) {
+      try {
+        const publicUrl = await uploadLogo(newLogoFile);
+        setLogo(publicUrl);
+        setNewLogo(null);
+        setNewLogoFile(null);
+      } catch (err) {
+        alert("Failed to upload logo. Please check your internet connection and try again.");
+        return;
+      }
     }
     window.dispatchEvent(new CustomEvent("business-profile-update"));
     setSaved(true);
