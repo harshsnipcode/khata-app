@@ -17,9 +17,6 @@ export async function getBusinessSettings() {
 }
 
 export async function getLogoUrl() {
-  const { data: files } = await supabase.storage.from(BUCKET_NAME).list("");
-  const exists = files?.some((f) => f.name === LOGO_PATH);
-  if (!exists) return null;
   const { data: { publicUrl } } = supabase.storage
     .from(BUCKET_NAME)
     .getPublicUrl(LOGO_PATH);
