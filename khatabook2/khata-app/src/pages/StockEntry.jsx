@@ -10,7 +10,6 @@ function StockEntry() {
   const type = location.pathname.endsWith("/stock-in") ? "stock_in" : "stock_out";
   const [product, setProduct] = useState(null);
   const [quantity, setQuantity] = useState("");
-  const [price, setPrice] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -20,7 +19,6 @@ function StockEntry() {
       const { data, error } = await supabase.from("products").select("*").eq("id", id).single();
       if (!error) {
         setProduct(data);
-        setPrice(type === 'stock_in' ? data.purchase_price : data.sale_price);
       }
     };
     fetchProduct();
@@ -29,8 +27,8 @@ function StockEntry() {
   const handleSave = async (e) => {
     e.preventDefault();
     if (!requirePermission("stock_entry")) return;
-    if (!quantity || !price) {
-      setError("Please enter quantity and price.");
+    if (!quantity) {
+      setError("Please enter quantity.");
       return;
     }
     setSaving(true);
@@ -40,7 +38,7 @@ function StockEntry() {
       const user = await supabase.auth.getUser();
       const created_by = user?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
       const qtyNum = Number(quantity);
-      const priceNum = Number(price);
+      const priceNum = type === 'stock_in' ? Number(product.purchase_price) : Number(product.sale_price);
 
       // 1. Record Transaction
       const { error: tError } = await offlineSupabase.from("product_transactions").insert([
@@ -118,23 +116,6 @@ function StockEntry() {
                   required
                 />
                 <span className="text-xl font-bold text-slate-500 uppercase tracking-widest shrink-0">{product.unit}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-slate-505 text-[10px] font-black uppercase tracking-widest pl-1">
-                {type === 'stock_in' ? 'Purchase Rate (per unit)' : 'Sale Rate (per unit)'}
-              </label>
-              <div className="relative">
-                <span className="absolute left-6 top-1/2 -translate-y-1/2 text-xl font-black text-slate-500">₹</span>
-                <input
-                  type="number"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  className="w-full bg-slate-950/40 border border-white/8 focus:border-emerald-500/50 hover:border-white/12 rounded-2xl pl-12 pr-6 py-4 text-xl font-black text-white focus:outline-none transition-all duration-300 focus:bg-slate-950/60"
-                  placeholder="0"
-                  required
-                />
               </div>
             </div>
 

@@ -168,24 +168,10 @@ function TransactionEntry() {
 
       let createdAt;
       const description = transactionNote.trim() || null;
-      if (isEditing && stateData.date) {
-        const origDateStr = stateData.date.split("T")[0];
-        if (selectedDate === origDateStr) {
-          // Date unchanged — preserve original timestamp exactly
-          createdAt = stateData.date;
-        } else {
-          // Date changed — combine new date with original time
-          const orig = new Date(stateData.date);
-          const dateObj = new Date(selectedDate + "T00:00:00");
-          dateObj.setHours(orig.getHours(), orig.getMinutes(), orig.getSeconds(), orig.getMilliseconds());
-          createdAt = dateObj.toISOString();
-        }
-      } else {
-        const now = new Date();
-        const dateObj = new Date(selectedDate + "T00:00:00");
-        dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
-        createdAt = dateObj.toISOString();
-      }
+      const now = new Date();
+      const dateObj = new Date(selectedDate + "T00:00:00");
+      dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      createdAt = dateObj.toISOString();
 
       if (isEditing) {
         if (isGot) {
