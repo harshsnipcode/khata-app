@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
@@ -11,6 +11,20 @@ function getHomePath() {
     if (role === "employee") return "/employee/home";
   } catch {}
   return "/";
+}
+
+function DateSeparator({ dateStr }) {
+  const date = new Date(dateStr + "T00:00:00");
+  const formatted = date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+  return (
+    <div className="flex items-center gap-3 px-3 py-1.5">
+      <div className="flex-1 h-px bg-[var(--border)]" />
+      <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] shrink-0">
+        {formatted}
+      </span>
+      <div className="flex-1 h-px bg-[var(--border)]" />
+    </div>
+  );
 }
 
 function CustomerDetails() {
@@ -308,8 +322,11 @@ function CustomerDetails() {
               </div>
 
               {/* Transaction Rows */}
-              <div className="divide-y divide-[var(--border)]">
-                {transactionRows.map((txn) => {
+              <div>
+                {transactionRows.map((txn, index) => {
+                  const currentDate = txn.created_at.split("T")[0];
+                  const prevDate = index > 0 ? transactionRows[index - 1].created_at.split("T")[0] : null;
+                  const showSeparator = index === 0 || currentDate !== prevDate;
                   const itemCount = txn.items?.length || 0;
                   const isGot = txn.type === "got";
                   const isGave = !isGot;
@@ -321,11 +338,12 @@ function CustomerDetails() {
                     : "Direct Entry";
 
                   return (
-                    <div
-                      key={txn.id}
-                      onClick={() => navigate(`/transaction/${txn.id}`)}
-                      className="px-3 py-2.5 hover:bg-[var(--surface)] transition-colors cursor-pointer"
-                    >
+                    <Fragment key={txn.id}>
+                      {showSeparator && <DateSeparator dateStr={currentDate} />}
+                      <div
+                        onClick={() => navigate(`/transaction/${txn.id}`)}
+                        className="px-3 py-2.5 hover:bg-[var(--surface)] transition-colors cursor-pointer border-b border-[var(--border)] last:border-b-0"
+                      >
                       <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 items-start">
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-[var(--text-primary)] flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
@@ -376,6 +394,7 @@ function CustomerDetails() {
                         </div>
                       </div>
                     </div>
+                    </Fragment>
                   );
                 })}
               </div>
