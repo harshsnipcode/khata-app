@@ -26,8 +26,8 @@ function CustomerTransactionsReport() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showDurationModal, setShowDurationModal] = useState(false);
-  const [durationFilter, setDurationFilter] = useState("all");
-  const [singleDay, setSingleDay] = useState("");
+  const [durationFilter, setDurationFilter] = useState("single_day");
+  const [singleDay, setSingleDay] = useState(getDateStr(new Date()));
 
   const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
   const [paymentFilter, setPaymentFilter] = useState(null);

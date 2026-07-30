@@ -104,7 +104,7 @@ function TransactionEntry() {
   // Calculate total amount from selected products using effective price
   const calculatedAmount = useMemo(() => {
     return Object.values(selectedProducts).reduce(
-      (sum, item) => sum + ((customerPrices[item.product.id] ?? item.product.sale_price) * item.quantity),
+      (sum, item) => sum + Math.round((customerPrices[item.product.id] ?? item.product.sale_price) * item.quantity),
       0
     );
   }, [selectedProducts, customerPrices]);
@@ -465,7 +465,7 @@ function TransactionEntry() {
                   const quantity = selected?.quantity || 0;
                   const effectivePrice = getEffectivePrice(product);
                   const isCustomPrice = customerPrices[product.id] !== undefined;
-                  const itemTotal = effectivePrice * quantity;
+                  const itemTotal = Math.round(effectivePrice * quantity);
 
                   return (
                     <div

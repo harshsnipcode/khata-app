@@ -145,7 +145,7 @@ function TransactionDetailPage() {
     const isGave = transaction.type === "gave";
     const typeLabel = isGave ? "You Gave" : "You Got";
     const itemsText = items.length > 0
-      ? items.map((item) => `  ${item.products?.name || "Product"} x${item.quantity}${item.products?.unit || "pcs"} — ₹${new Intl.NumberFormat("en-IN").format(item.price * item.quantity)}`).join("\n")
+      ? items.map((item) => `  ${item.products?.name || "Product"} x${item.quantity}${item.products?.unit || "pcs"} — ₹${new Intl.NumberFormat("en-IN").format(Math.round(item.price * item.quantity))}`).join("\n")
       : "  Cash/Direct Entry";
 
     const message = `${businessName}
@@ -307,7 +307,7 @@ Balance After Transaction:
                       </p>
                     </div>
                     <p className="text-[11px] font-bold text-[var(--text-primary)]">
-                      ₹{new Intl.NumberFormat("en-IN").format(item.price * item.quantity)}
+                      ₹{new Intl.NumberFormat("en-IN").format(Math.round(item.price * item.quantity))}
                     </p>
                   </div>
                 ))}
