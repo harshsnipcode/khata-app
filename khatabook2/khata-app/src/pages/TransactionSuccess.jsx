@@ -27,7 +27,11 @@ function TransactionSuccess() {
           </div>
           <p className="text-slate-500 uppercase tracking-[0.3em] text-[10px] font-black mb-4 pl-1">Transaction Complete</p>
           <h1 className={`text-4xl font-black mb-2 tracking-tight ${actionColor}`}>₹{formattedAmount}</h1>
-          <p className="text-[var(--text-primary)] text-lg font-bold tracking-tight">{actionLabel} {itemCount} Product{itemCount !== 1 ? "s" : ""}</p>
+          {type === "got" ? (
+            <p className="text-[var(--text-primary)] text-lg font-bold tracking-tight">Received ₹{formattedAmount}</p>
+          ) : (
+            <p className="text-[var(--text-primary)] text-lg font-bold tracking-tight">Sold {itemCount} Product{itemCount !== 1 ? "s" : ""}</p>
+          )}
           <p className="text-[var(--text-secondary)] text-sm font-medium mt-2">Customer ledger updated successfully.</p>
         </div>
 
