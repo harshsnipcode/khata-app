@@ -118,7 +118,8 @@ function CustomerTransactionsReport() {
         const name = cust?.name?.toLowerCase() || "";
         const phone = cust?.phone || "";
         const desc = t.description?.toLowerCase() || "";
-        return name.includes(term) || phone.includes(term) || desc.includes(term);
+        const amount = String(t.amount);
+        return name.includes(term) || phone.includes(term) || desc.includes(term) || amount.includes(term);
       });
     }
 
