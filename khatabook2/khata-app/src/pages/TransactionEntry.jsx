@@ -495,22 +495,31 @@ function TransactionEntry() {
                       </div>
 
                       {/* Quantity Selector */}
-                      <div className="flex items-center gap-3.5 ml-4 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleQuantityChange(product, quantity - 1)}
-                          className="w-10 h-10 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-black text-lg hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer outline-none border border-rose-500/10 flex items-center justify-center"
-                        >
-                          −
-                        </button>
-                        <span className="w-8 text-center font-black text-[var(--text-primary)] text-base">{quantity}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleQuantityChange(product, quantity + 1)}
-                          className="w-10 h-10 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-black text-lg hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer outline-none border border-emerald-500/10 flex items-center justify-center"
-                        >
-                          +
-                        </button>
+                      <div
+                        className="ml-4 shrink-0"
+                        onClick={(e) => {
+                          const input = e.currentTarget.querySelector("input");
+                          if (input) input.focus();
+                        }}
+                      >
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={quantity || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "") {
+                              handleQuantityChange(product, 0);
+                              return;
+                            }
+                            const num = Number(val);
+                            if (!isNaN(num)) {
+                              handleQuantityChange(product, num);
+                            }
+                          }}
+                          className="w-20 sm:w-24 text-center font-black text-[var(--text-primary)] text-base bg-[var(--surface)] border border-[var(--border)] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/30 transition-all duration-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          placeholder="0"
+                        />
                       </div>
                     </div>
                   );
