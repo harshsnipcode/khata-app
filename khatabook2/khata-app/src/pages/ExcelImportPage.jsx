@@ -11,6 +11,7 @@ import { collectExcelRowItems } from "../lib/excelImportGrouping";
 import { excludeTotalSummaries } from "../lib/excelImportValidation";
 import {
   hashFile,
+  isIgnoredOwnShopCustomer,
   normalizeImportName,
   normalizeProductName,
   parseExcelWorkbook,
@@ -141,8 +142,9 @@ function ExcelImportPage() {
         console.log(`Catalogue product:\nOriginal: ${product.name}\nNormalized: ${normalizeProductName(product.name)}`);
       });
       const unknownProducts = [...new Set(productHeaders.filter((name) => !productMap.has(normalizeProductName(name))))];
+      const importRows = processingView.rows.filter((row) => !isIgnoredOwnShopCustomer(row.customerName));
       const unknownCustomers = [...new Set(
-        processingView.rows
+        importRows
           .map((row) => row.customerName)
           .filter((name) => name && !customerMap.has(normalizeImportName(name))),
       )];
@@ -153,7 +155,7 @@ function ExcelImportPage() {
       let rowsSkipped = 0;
       let totalQuantity = 0;
 
-      for (const row of processingView.rows) {
+      for (const row of importRows) {
         const customer = customerMap.get(normalizeImportName(row.customerName));
         const groupedRow = collectExcelRowItems({
           row,
