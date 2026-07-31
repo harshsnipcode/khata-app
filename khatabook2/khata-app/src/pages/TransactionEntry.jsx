@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
-import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
+import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { createGaveTransaction, updateGaveTransaction } from "../lib/transactionService";
 import { moveCustomerToCollectionQueueEnd } from "../lib/collectionQueue";
 
@@ -252,14 +252,14 @@ function TransactionEntry() {
             const balance = gave - got;
             const balanceLabel = balance >= 0 ? "You Will Get" : "You Will Give";
 
-            const template = getSavedTemplate();
-            const text = fillTemplate(template, {
-              customerName: customer.name,
-              balance: Math.abs(balance),
-              balanceType: balanceLabel,
-              ledgerLink: `${window.location.origin}/share/customer/${id}`,
-              businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
-            });
+      const template = await loadSavedTemplate();
+      const text = fillTemplate(template, {
+        customerName: customer.name,
+        balance: Math.abs(balance),
+        balanceType: balanceLabel,
+        ledgerLink: `${window.location.origin}/share/customer/${id}`,
+        businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
+      });
             const phone = customer.phone.replace(/[^0-9]/g, "");
             if (phone) {
               const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);

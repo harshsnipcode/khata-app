@@ -1,3 +1,10 @@
+export const SYSTEM_ADMIN_USERNAME = "admin";
+export const SYSTEM_ADMIN_PROFILE_NAME = "Super Admin";
+
+export function isSystemAdminUsername(username) {
+  return (username || "").toLowerCase() === SYSTEM_ADMIN_USERNAME;
+}
+
 export async function hashPassword(password, salt) {
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(

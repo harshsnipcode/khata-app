@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
-import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
+import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { can } from "../lib/permissions";
 
 function getHomePath() {
@@ -225,7 +225,7 @@ function CustomerDetails() {
             <div className="text-[var(--text-secondary)] text-[8px] font-black uppercase tracking-wider mb-2">Share & Remind</div>
             <div className="flex gap-2">
               <button
-                onClick={() => {
+                onClick={async () => {
                   const raw = (customer.phone || "").replace(/[^0-9]/g, "");
                   const phone = raw.length === 10 ? `91${raw}` : raw;
                   if (!phone) {
@@ -233,7 +233,7 @@ function CustomerDetails() {
                     return;
                   }
 
-                  const template = getSavedTemplate();
+                  const template = await loadSavedTemplate();
                   const text = fillTemplate(template, {
                     customerName: customer.name,
                     balance: Math.round(balanceAmount),
@@ -254,14 +254,14 @@ function CustomerDetails() {
                 <span>WhatsApp</span>
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   const phone = (customer.phone || "").replace(/[^0-9]/g, "");
                   if (!phone) {
                     alert("Customer has no phone number saved.");
                     return;
                   }
 
-                  const template = getSavedTemplate();
+                  const template = await loadSavedTemplate();
                   const text = fillTemplate(template, {
                     customerName: customer.name,
                     balance: Math.round(balanceAmount),

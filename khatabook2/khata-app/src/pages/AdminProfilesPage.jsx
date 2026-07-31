@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import { hashPassword, generateSalt } from "../lib/adminAuth";
+import { hashPassword, generateSalt, isSystemAdminUsername, SYSTEM_ADMIN_PROFILE_NAME } from "../lib/adminAuth";
 
 function AdminProfilesPage() {
   const navigate = useNavigate();
@@ -36,7 +36,7 @@ function AdminProfilesPage() {
         .select("*")
         .order("created_at", { ascending: true });
       if (!fetchError && data) {
-        setAdmins(data);
+        setAdmins(data.filter((a) => !isSystemAdminUsername(a.username)));
       }
     } catch {}
     setLoading(false);
@@ -90,6 +90,12 @@ function AdminProfilesPage() {
     }
     try {
       const trimmedUsername = formData.username.trim().toLowerCase();
+
+      if (isSystemAdminUsername(trimmedUsername)) {
+        setFormError(`${SYSTEM_ADMIN_PROFILE_NAME} credentials are reserved and cannot be created or edited here.`);
+        setSaving(false);
+        return;
+      }
 
       if (editingId) {
         const { data: existing } = await supabase

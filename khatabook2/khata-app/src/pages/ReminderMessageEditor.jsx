@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  getSavedTemplate,
+  loadSavedTemplate,
   saveTemplate,
   resetTemplate,
   DEFAULT_TEMPLATE,
@@ -29,7 +29,7 @@ function ReminderMessageEditor() {
   const [preview, setPreview] = useState("");
 
   useEffect(() => {
-    setTemplate(getSavedTemplate());
+    loadSavedTemplate().then(setTemplate);
   }, []);
 
   useEffect(() => {
@@ -48,14 +48,14 @@ function ReminderMessageEditor() {
     );
   }, [template]);
 
-  const handleSave = () => {
-    saveTemplate(template);
+  const handleSave = async () => {
+    await saveTemplate(template);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleReset = () => {
-    resetTemplate();
+  const handleReset = async () => {
+    await resetTemplate();
     setTemplate(DEFAULT_TEMPLATE);
   };
 

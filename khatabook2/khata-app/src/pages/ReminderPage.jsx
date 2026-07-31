@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import Header from "../components/Header";
 import CustomerCard from "../components/CustomerCard";
-import { getSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
+import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 
 function buildBalanceMap(transactions) {
   const map = {};
@@ -82,7 +82,7 @@ export default function ReminderPage() {
   const currentCustomer = session ? session.queue[sessionIndex] : null;
   const totalSelected = selectedIds.size;
 
-  const sendReminder = () => {
+  const sendReminder = async () => {
     const customer = currentCustomer;
     if (!customer) return;
     const raw = (customer.phone || "").replace(/[^0-9]/g, "");
@@ -92,7 +92,7 @@ export default function ReminderPage() {
       return;
     }
     const bal = balanceMap[customer.id] ?? 0;
-    const template = getSavedTemplate();
+    const template = await loadSavedTemplate();
     const text = fillTemplate(template, {
       customerName: customer.name,
       balance: Math.round(Math.abs(bal)),
