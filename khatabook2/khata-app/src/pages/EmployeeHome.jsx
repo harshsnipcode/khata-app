@@ -10,6 +10,7 @@ import CatalogueView from "../components/CatalogueView";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { can } from "../lib/permissions";
+import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
 
 
 
@@ -105,6 +106,7 @@ function EmployeeHome() {
   const [showFilter,    setShowFilter]    = useState(false);
 
   const [collectionMode, setCollectionMode] = useState(false);
+  const [collectionQueue, setCollectionQueue] = useState(() => getCollectionQueue());
   const [settingsId, setSettingsId] = useState(null);
 
   /* ── data loading ── */
@@ -222,10 +224,15 @@ function EmployeeHome() {
           return true;
         });
       }
-      return list.sort((a, b) => (a.collection_position ?? 9999) - (b.collection_position ?? 9999));
+      return applyCollectionQueue(list, collectionQueue);
     }
     return applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType);
-  }, [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType, collectionMode]);
+  }, [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType, collectionMode, collectionQueue]);
+
+  const reloadCollectionOrder = useCallback(() => {
+    resetCollectionQueue();
+    setCollectionQueue([]);
+  }, []);
 
   const activeFilterCount = (filterType !== "all" ? 1 : 0) + (sortType !== "recent" ? 1 : 0);
 
@@ -278,6 +285,7 @@ function EmployeeHome() {
                 activeCount={activeFilterCount}
                 collectionMode={collectionMode}
                 toggleCollectionMode={toggleCollectionMode}
+                onReloadCollectionOrder={reloadCollectionOrder}
               />
 
               {/* Active filter pills */}
