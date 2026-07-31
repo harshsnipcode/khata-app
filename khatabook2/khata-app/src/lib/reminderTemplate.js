@@ -89,8 +89,12 @@ export async function resetTemplate() {
 
 export function fillTemplate(template, vars) {
   if (!template) template = DEFAULT_TEMPLATE;
+  const date = new Date().toLocaleDateString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
+  const allVars = { date, ...vars };
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    const val = vars[key];
+    const val = allVars[key];
     return val !== undefined && val !== null ? String(val) : `{{${key}}}`;
   });
 }

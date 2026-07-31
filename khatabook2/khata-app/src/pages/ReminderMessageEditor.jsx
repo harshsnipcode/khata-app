@@ -20,6 +20,7 @@ const PLACEHOLDER_HELP = [
   { key: "{{balanceType}}", desc: "You Will Get / You Will Give" },
   { key: "{{ledgerLink}}", desc: "Link to the customer ledger" },
   { key: "{{businessName}}", desc: "Your business name" },
+  { key: "{{date}}", desc: "Current date" },
 ];
 
 function ReminderMessageEditor() {
@@ -40,6 +41,9 @@ function ReminderMessageEditor() {
       ledgerLink: "https://example.com/share/customer/11",
       businessName:
         localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
+      date: new Date().toLocaleDateString("en-IN", {
+        day: "2-digit", month: "short", year: "numeric",
+      }),
     };
     setPreview(
       template

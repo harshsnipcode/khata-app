@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import { getLogoUrl } from "../lib/businessSettings";
+import heroLogo from "../assets/hero.png";
 
 function SharedLedgerView() {
   const { id } = useParams();
@@ -8,6 +10,12 @@ function SharedLedgerView() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
+  const [logo, setLogo] = useState(null);
+
+  useEffect(() => {
+    getLogoUrl().then((url) => setLogo(url)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -68,7 +76,7 @@ function SharedLedgerView() {
   }, [transactions]);
 
   const balance = totals.gave - totals.got;
-  const balanceLabel = balance >= 0 ? "You Will Get" : "You Will Give";
+  const balanceLabel = balance >= 0 ? "You Have To Pay" : "You Will Give";
   const balanceAmount = Math.abs(balance);
 
   const transactionRows = useMemo(() => {
@@ -122,6 +130,17 @@ function SharedLedgerView() {
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
       <div className="max-w-3xl mx-auto p-6 space-y-6 animate-fade-in">
+        {/* Business header */}
+        <div className="flex items-center gap-3">
+          <img
+            src={logo || heroLogo}
+            alt="Business logo"
+            className="w-9 h-9 rounded-xl object-cover shadow-sm shrink-0 bg-[var(--surface)] border border-[var(--border)]"
+            onError={() => setLogo(null)}
+          />
+          <h1 className="text-sm font-bold text-[var(--text-primary)] truncate">{businessName}</h1>
+        </div>
+
         {/* Header */}
         <div className="text-center pb-2">
           <div className="w-14 h-14 rounded-2xl bg-[var(--primary-light)] border border-[var(--primary)]/20 flex items-center justify-center mx-auto mb-3">
@@ -151,7 +170,7 @@ function SharedLedgerView() {
           }`}>
             <p className="text-[var(--text-secondary)] text-[10px] font-black uppercase tracking-wider">Net Balance</p>
             <p className={`text-4xl font-black mt-1 ${
-              balance > 0 ? "text-[var(--success)]" : balance < 0 ? "text-[var(--danger)]" : "text-[var(--text-secondary)]"
+              balance > 0 ? "text-[var(--danger)]" : balance < 0 ? "text-[var(--success)]" : "text-[var(--text-secondary)]"
             }`}>
               ₹{new Intl.NumberFormat("en-IN").format(balanceAmount)}
             </p>
