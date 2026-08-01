@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { getLogoUrl } from "../lib/businessSettings";
+import { activityTimestamp } from "../lib/transactionOrder";
 import heroLogo from "../assets/hero.png";
 
 function SharedLedgerView() {
@@ -80,15 +81,27 @@ function SharedLedgerView() {
   const balanceAmount = Math.abs(balance);
 
   const transactionRows = useMemo(() => {
-    const sorted = [...transactions].sort(
+    const businessOrdered = [...transactions].sort(
       (a, b) => new Date(a.created_at) - new Date(b.created_at)
     );
     let runningBalance = 0;
-    const rows = sorted.map((txn) => {
+    const rows = businessOrdered.map((txn) => {
       runningBalance += txn.type === "got" ? -Number(txn.amount) : Number(txn.amount);
       return { ...txn, balance: runningBalance };
     });
-    return rows.reverse();
+
+    const byDate = new Map();
+    for (const row of rows) {
+      const dateKey = row.created_at.split("T")[0];
+      if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+      byDate.get(dateKey).push(row);
+    }
+
+    const grouped = [];
+    for (const dateKey of [...byDate.keys()].sort().reverse()) {
+      grouped.push(...byDate.get(dateKey).sort((a, b) => activityTimestamp(b) - activityTimestamp(a)));
+    }
+    return grouped;
   }, [transactions]);
 
   if (loading) {

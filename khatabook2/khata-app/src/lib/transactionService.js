@@ -27,6 +27,7 @@ export async function createGaveTransaction({
   );
   const transactionAmount = amount === undefined ? calculatedAmount : Number(amount);
   const transactionDescription = String(description ?? "").trim() || null;
+  const activityAt = new Date().toISOString();
 
   // The migration provides an atomic server-side implementation. It keeps the
   // exact same tables and payload shape while reducing a transaction from
@@ -69,6 +70,7 @@ export async function createGaveTransaction({
       description: transactionDescription,
       created_by: createdBy,
       created_at: createdAt || new Date().toISOString(),
+      activity_at: activityAt,
     }])
     .select()
     .single();
@@ -125,6 +127,7 @@ export async function updateGaveTransaction({
   );
   const transactionAmount = amount === undefined ? calculatedAmount : Number(amount);
   const transactionDescription = String(description ?? "").trim() || null;
+  const activityAt = new Date().toISOString();
 
   // Calculate stock deltas: +original items (restore) and -new items (deduct)
   const stockDeltas = {};
@@ -180,6 +183,7 @@ export async function updateGaveTransaction({
       amount: transactionAmount,
       description: transactionDescription,
       created_at: createdAt || new Date().toISOString(),
+      activity_at: activityAt,
     })
     .eq("id", transactionId);
   if (txnErr) throw txnErr;

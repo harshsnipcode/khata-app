@@ -213,7 +213,7 @@ function AdminHome() {
   const lastActivityMap = useMemo(() => {
     const map = {};
     transactions.forEach((t) => {
-      const ts = t.created_at;
+      const ts = t.activity_at || t.created_at;
       if (ts && (!map[t.customer_id] || new Date(ts) > new Date(map[t.customer_id]))) {
         map[t.customer_id] = ts;
       }

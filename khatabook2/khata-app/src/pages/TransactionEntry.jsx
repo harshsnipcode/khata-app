@@ -177,7 +177,7 @@ function TransactionEntry() {
         if (isGot) {
           const { error: uErr } = await offlineSupabase
             .from("transactions")
-            .update({ amount: finalAmount, description, payment_mode: paymentMode, created_at: createdAt })
+            .update({ amount: finalAmount, description, payment_mode: paymentMode, created_at: createdAt, activity_at: new Date().toISOString() })
             .eq("id", editTransactionId);
           if (uErr) throw uErr;
         } else {
@@ -206,6 +206,7 @@ function TransactionEntry() {
             created_by,
             payment_mode: paymentMode,
             created_at: createdAt,
+            activity_at: new Date().toISOString(),
           }])
           .select()
           .single();
