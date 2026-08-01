@@ -11,6 +11,8 @@ import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/off
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { can } from "../lib/permissions";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
+import { splitByTodayActivity } from "../lib/transactionOrder";
+import ActivityDivider from "../components/ActivityDivider";
 
 
 
@@ -190,7 +192,7 @@ function EmployeeHome() {
   const lastActivityMap = useMemo(() => {
     const map = {};
     transactions.forEach((t) => {
-      const ts = t.created_at;
+      const ts = t.activity_at || t.created_at;
       if (ts && (!map[t.customer_id] || new Date(ts) > new Date(map[t.customer_id]))) {
         map[t.customer_id] = ts;
       }
@@ -228,6 +230,12 @@ function EmployeeHome() {
     }
     return applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType);
   }, [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType, collectionMode, collectionQueue]);
+
+  /* ── today's activity vs older (divider between them) ── */
+  const customerSections = useMemo(() => {
+    if (collectionMode) return null;
+    return splitByTodayActivity(displayedCustomers, lastActivityMap);
+  }, [displayedCustomers, lastActivityMap, collectionMode]);
 
   const reloadCollectionOrder = useCallback(() => {
     resetCollectionQueue();
@@ -332,16 +340,45 @@ function EmployeeHome() {
                   </div>
                 )}
 
-                {!loading && displayedCustomers.map((customer) => (
-                  <CustomerCard
-                    key={customer.id}
-                    id={customer.id}
-                    initial={customer.name?.[0]?.toUpperCase()}
-                    name={customer.name}
-                    time={lastActivityMap[customer.id] || customer.created_at}
-                    balance={balanceMap[customer.id] ?? 0}
-                  />
-                ))}
+                {!loading &&
+                  (customerSections ? (
+                    <>
+                      {customerSections.today.map((customer) => (
+                        <CustomerCard
+                          key={customer.id}
+                          id={customer.id}
+                          initial={customer.name?.[0]?.toUpperCase()}
+                          name={customer.name}
+                          time={lastActivityMap[customer.id] || customer.created_at}
+                          balance={balanceMap[customer.id] ?? 0}
+                        />
+                      ))}
+
+                      {customerSections.older.length > 0 && <ActivityDivider />}
+
+                      {customerSections.older.map((customer) => (
+                        <CustomerCard
+                          key={customer.id}
+                          id={customer.id}
+                          initial={customer.name?.[0]?.toUpperCase()}
+                          name={customer.name}
+                          time={lastActivityMap[customer.id] || customer.created_at}
+                          balance={balanceMap[customer.id] ?? 0}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    displayedCustomers.map((customer) => (
+                      <CustomerCard
+                        key={customer.id}
+                        id={customer.id}
+                        initial={customer.name?.[0]?.toUpperCase()}
+                        name={customer.name}
+                        time={lastActivityMap[customer.id] || customer.created_at}
+                        balance={balanceMap[customer.id] ?? 0}
+                      />
+                    ))
+                  ))}
               </div>
             </>
           )}

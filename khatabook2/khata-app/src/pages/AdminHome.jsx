@@ -10,6 +10,8 @@ import FilterModal from "../components/FilterModal";
 import CatalogueView from "../components/CatalogueView";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
+import { splitByTodayActivity } from "../lib/transactionOrder";
+import ActivityDivider from "../components/ActivityDivider";
 
 
 /* ── helpers ─────────────────────────────────────────── */
@@ -254,6 +256,12 @@ function AdminHome() {
     return applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType);
   }, [customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType, collectionMode, collectionQueue]);
 
+  /* ── today's activity vs older (divider between them) ── */
+  const customerSections = useMemo(() => {
+    if (collectionMode) return null;
+    return splitByTodayActivity(displayedCustomers, lastActivityMap);
+  }, [displayedCustomers, lastActivityMap, collectionMode]);
+
   const reloadCollectionOrder = useCallback(() => {
     resetCollectionQueue();
     setCollectionQueue([]);
@@ -388,20 +396,57 @@ function AdminHome() {
                   </div>
                 )}
 
-                {!loading && displayedCustomers.map((customer) => (
-                  <CustomerCard
-                    key={customer.id}
-                    id={customer.id}
-                    initial={customer.name?.[0]?.toUpperCase()}
-                    name={customer.name}
-                    time={new Date(Math.max(
-                      ...[lastActivityMap[customer.id], customer.updated_at, customer.created_at]
-                        .filter(Boolean)
-                        .map((timestamp) => new Date(timestamp).getTime()),
-                    )).toISOString()}
-                    balance={balanceMap[customer.id] ?? 0}
-                  />
-                ))}
+                {!loading &&
+                  (customerSections ? (
+                    <>
+                      {customerSections.today.map((customer) => (
+                        <CustomerCard
+                          key={customer.id}
+                          id={customer.id}
+                          initial={customer.name?.[0]?.toUpperCase()}
+                          name={customer.name}
+                          time={new Date(Math.max(
+                            ...[lastActivityMap[customer.id], customer.updated_at, customer.created_at]
+                              .filter(Boolean)
+                              .map((timestamp) => new Date(timestamp).getTime()),
+                          )).toISOString()}
+                          balance={balanceMap[customer.id] ?? 0}
+                        />
+                      ))}
+
+                      {customerSections.older.length > 0 && <ActivityDivider />}
+
+                      {customerSections.older.map((customer) => (
+                        <CustomerCard
+                          key={customer.id}
+                          id={customer.id}
+                          initial={customer.name?.[0]?.toUpperCase()}
+                          name={customer.name}
+                          time={new Date(Math.max(
+                            ...[lastActivityMap[customer.id], customer.updated_at, customer.created_at]
+                              .filter(Boolean)
+                              .map((timestamp) => new Date(timestamp).getTime()),
+                          )).toISOString()}
+                          balance={balanceMap[customer.id] ?? 0}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    displayedCustomers.map((customer) => (
+                      <CustomerCard
+                        key={customer.id}
+                        id={customer.id}
+                        initial={customer.name?.[0]?.toUpperCase()}
+                        name={customer.name}
+                        time={new Date(Math.max(
+                          ...[lastActivityMap[customer.id], customer.updated_at, customer.created_at]
+                            .filter(Boolean)
+                            .map((timestamp) => new Date(timestamp).getTime()),
+                        )).toISOString()}
+                        balance={balanceMap[customer.id] ?? 0}
+                      />
+                    ))
+                  ))}
               </div>
             </>
           )}
