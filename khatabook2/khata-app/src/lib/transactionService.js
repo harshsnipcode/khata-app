@@ -22,7 +22,7 @@ export async function createGaveTransaction({
   }));
 
   const calculatedAmount = normalizedItems.reduce(
-    (sum, item) => sum + item.quantity * item.price,
+    (sum, item) => sum + Math.round(item.quantity * item.price),
     0,
   );
   const transactionAmount = amount === undefined ? calculatedAmount : Number(amount);
@@ -120,7 +120,7 @@ export async function updateGaveTransaction({
   }));
 
   const calculatedAmount = normalizedItems.reduce(
-    (sum, item) => sum + item.quantity * item.price,
+    (sum, item) => sum + Math.round(item.quantity * item.price),
     0,
   );
   const transactionAmount = amount === undefined ? calculatedAmount : Number(amount);
