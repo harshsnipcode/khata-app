@@ -6,6 +6,7 @@ import {
   moveCustomerToMatrixPosition,
   persistMatrixOrder,
 } from "../utils/customerOrdering";
+import { localDateKey } from "../lib/dateKey";
 
 // Timezone-safe local date string helper
 const getTodayString = () => {
@@ -175,7 +176,7 @@ function CataloguePreview() {
   // Filter transactions for the selected date
   const filteredTxns = useMemo(() => {
     return data.transactions.filter((t) => {
-      const txnDate = t.created_at?.split("T")[0] || t.date;
+      const txnDate = localDateKey(t.created_at || t.date);
       return txnDate === selectedDate;
     });
   }, [data.transactions, selectedDate]);

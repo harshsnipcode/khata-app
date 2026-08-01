@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import ReportTabs from "../components/ReportTabs";
+import { localDateKey } from "../lib/dateKey";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 
@@ -100,13 +101,13 @@ function CustomerTransactionsReport() {
 
     if (effectiveDates.start) {
       list = list.filter((t) => {
-        const txnDate = t.created_at?.split("T")[0] || t.date;
+        const txnDate = localDateKey(t.created_at || t.date);
         return txnDate >= effectiveDates.start;
       });
     }
     if (effectiveDates.end) {
       list = list.filter((t) => {
-        const txnDate = t.created_at?.split("T")[0] || t.date;
+        const txnDate = localDateKey(t.created_at || t.date);
         return txnDate <= effectiveDates.end;
       });
     }
@@ -216,7 +217,7 @@ function CustomerTransactionsReport() {
       }
       const cust = customerMap[t.customer_id];
       const name = cust?.name || `#${t.customer_id}`;
-      const date = (t.created_at?.split("T")[0] || t.date || "");
+      const date = localDateKey(t.created_at || t.date);
       const type = t.type === "gave" ? "Gave" : "Got";
       const amt = `₹${formatINR(t.amount)}`;
       const bal = `₹${formatINR(Math.abs(t.runningBal))}`;

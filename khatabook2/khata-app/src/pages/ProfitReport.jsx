@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import ReportTabs from "../components/ReportTabs";
+import { localDateKey } from "../lib/dateKey";
 
 function getDateStr(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -89,7 +90,7 @@ function ProfitReport() {
     transactions
       .filter((transaction) => {
         if (transaction.type !== "gave") return false;
-        const txnDate = transaction.created_at?.split("T")[0] || transaction.date;
+        const txnDate = localDateKey(transaction.created_at || transaction.date);
         return (!startDate || txnDate >= startDate) && (!endDate || txnDate <= endDate);
       })
       .forEach((transaction) => {

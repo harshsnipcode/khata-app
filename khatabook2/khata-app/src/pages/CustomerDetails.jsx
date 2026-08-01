@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { activityTimestamp } from "../lib/transactionOrder";
+import { localDateKey } from "../lib/dateKey";
 import { can } from "../lib/permissions";
 
 function getHomePath() {
@@ -128,7 +129,7 @@ function CustomerDetails() {
 
     const byDate = new Map();
     for (const row of rows) {
-      const dateKey = row.created_at.split("T")[0];
+      const dateKey = localDateKey(row.created_at || row.date);
       if (!byDate.has(dateKey)) byDate.set(dateKey, []);
       byDate.get(dateKey).push(row);
     }
@@ -337,8 +338,8 @@ function CustomerDetails() {
               {/* Transaction Rows */}
               <div>
                 {transactionRows.map((txn, index) => {
-                  const currentDate = txn.created_at.split("T")[0];
-                  const prevDate = index > 0 ? transactionRows[index - 1].created_at.split("T")[0] : null;
+                  const currentDate = localDateKey(txn.created_at || txn.date);
+                  const prevDate = index > 0 ? localDateKey(transactionRows[index - 1].created_at || transactionRows[index - 1].date) : null;
                   const showSeparator = index === 0 || currentDate !== prevDate;
                   const itemCount = txn.items?.length || 0;
                   const isGot = txn.type === "got";
