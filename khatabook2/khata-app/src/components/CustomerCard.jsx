@@ -14,7 +14,7 @@ function timeAgo(dateStr) {
   return "just now";
 }
 
-function CustomerCard({ id, initial, name, time, balance, onClick }) {
+function CustomerCard({ id, initial, name, time, balance, onClick, showTime = true }) {
   const navigate = useNavigate();
 
   const hasBalance = balance !== undefined && balance !== null;
@@ -91,9 +91,11 @@ function CustomerCard({ id, initial, name, time, balance, onClick }) {
         >
           {name}
         </h3>
-        <p className="text-[10px] font-medium" style={{ color: "#b2bec3" }}>
-          {timeAgo(time)}
-        </p>
+        {showTime && time && (
+          <p className="text-[10px] font-medium" style={{ color: "#b2bec3" }}>
+            {timeAgo(time)}
+          </p>
+        )}
       </div>
 
       {/* Balance Badge */}

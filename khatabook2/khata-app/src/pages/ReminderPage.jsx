@@ -226,6 +226,7 @@ export default function ReminderPage() {
                             name={customer.name}
                             time={customer.created_at}
                             balance={bal}
+                            showTime={false}
                             onClick={
                               selectMode
                                 ? (e) => { e.stopPropagation(); toggleSelect(customer.id); }
