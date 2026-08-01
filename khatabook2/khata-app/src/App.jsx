@@ -20,7 +20,6 @@ import SalaryPayment from "./pages/SalaryPayment";
 import EmployeeSalarySummary from "./pages/EmployeeSalarySummary";
 import CustomerTransactionsReport from "./pages/CustomerTransactionsReport";
 import ProfitReport from "./pages/ProfitReport";
-import TransactionDetails from "./pages/TransactionDetails";
 import TransactionDetailPage from "./pages/TransactionDetailPage";
 import CustomerListPage from "./pages/CustomerListPage";
 import CustomerForm from "./pages/CustomerForm";
@@ -131,7 +130,7 @@ function AppShell() {
       <Route path="/admin/excel/:importId" element={<ExcelRoute><ExcelImportDetail /></ExcelRoute>} />
       <Route path="/admin/reminder" element={<AdminRoute><ReminderPage /></AdminRoute>} />
       <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
-      <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetails />} />
+      <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetailPage />} />
       <Route path="/admin/reports/profit" element={<ProfitReport />} />
       <Route path="/admin/reports/profit/group/:groupId" element={<ProfitReport />} />
       <Route path="/customers/add" element={<CustomerListPage />} />
