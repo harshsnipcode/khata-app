@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { moveToRecycleBin } from "../lib/offline/db";
 import { requirePermission, can } from "../lib/permissions";
+import { loadCreatorLookup, resolveCreatorName } from "../lib/creatorName";
 
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-IN", {
@@ -36,6 +37,25 @@ function TransactionDetailPage() {
 
   const [deleting, setDeleting] = useState(false);
   const [deleteMsg, setDeleteMsg] = useState("");
+
+  const [isAdmin] = useState(() => localStorage.getItem("khata_role") === "admin");
+  const [creatorName, setCreatorName] = useState("");
+
+  useEffect(() => {
+    if (!isAdmin || !transaction) return;
+    let cancelled = false;
+    loadCreatorLookup()
+      .then((lookup) => {
+        if (cancelled) return;
+        setCreatorName(resolveCreatorName(transaction.created_by, lookup));
+      })
+      .catch(() => {
+        if (!cancelled) setCreatorName("Unknown");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, transaction]);
 
   useEffect(() => {
     const load = async () => {
@@ -291,6 +311,13 @@ Balance After Transaction:
               <span>Call</span>
             </a>
           </div>
+
+          {isAdmin && (
+            <div>
+              <p className="text-[8px] text-[var(--text-secondary)] font-black uppercase tracking-wider mb-0.5">Created By</p>
+              <p className="text-xs font-bold text-[var(--text-primary)]">{creatorName || "Loading..."}</p>
+            </div>
+          )}
 
           {items.length > 0 && (
             <div>
