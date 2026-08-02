@@ -6,6 +6,7 @@ import { groupLedgerByBusinessDate } from "../lib/transactionOrder";
 import { localDateKey } from "../lib/dateKey";
 import { can } from "../lib/permissions";
 import { summarizeTransactions } from "../lib/customerBalance";
+import { getLedgerLink } from "../lib/appUrl";
 
 function getHomePath() {
   try {
@@ -233,7 +234,7 @@ function CustomerDetails() {
                     customerName: customer.name,
                     balance: Math.round(balanceAmount),
                     balanceType: balanceLabel,
-                    ledgerLink: `${window.location.origin}/share/customer/${id}`,
+                    ledgerLink: getLedgerLink(id),
                     businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
                   });
                   const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
@@ -261,7 +262,7 @@ function CustomerDetails() {
                     customerName: customer.name,
                     balance: Math.round(balanceAmount),
                     balanceType: balanceLabel,
-                    ledgerLink: `${window.location.origin}/share/customer/${id}`,
+                    ledgerLink: getLedgerLink(id),
                     businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
                   });
                   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);

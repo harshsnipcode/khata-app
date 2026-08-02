@@ -5,6 +5,7 @@ import { requirePermission } from "../lib/permissions";
 import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { createGaveTransaction, updateGaveTransaction } from "../lib/transactionService";
 import { moveCustomerToCollectionQueueEnd } from "../lib/collectionQueue";
+import { getLedgerLink } from "../lib/appUrl";
 
 function getLocalDateInputValue(date = new Date()) {
   const year = date.getFullYear();
@@ -265,7 +266,7 @@ function TransactionEntry() {
         customerName: customer.name,
         balance: Math.abs(balance),
         balanceType: balanceLabel,
-        ledgerLink: `${window.location.origin}/share/customer/${id}`,
+        ledgerLink: getLedgerLink(id),
         businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
       });
             const phone = customer.phone.replace(/[^0-9]/g, "");

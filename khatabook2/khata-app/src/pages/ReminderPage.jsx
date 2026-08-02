@@ -5,6 +5,7 @@ import Header from "../components/Header";
 import CustomerCard from "../components/CustomerCard";
 import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
+import { getLedgerLink } from "../lib/appUrl";
 
 export default function ReminderPage() {
   const navigate = useNavigate();
@@ -88,7 +89,7 @@ export default function ReminderPage() {
       customerName: customer.name,
       balance: Math.round(Math.abs(bal)),
       balanceType: bal > 0 ? "You Will Get" : "Settled",
-      ledgerLink: `${window.location.origin}/share/customer/${customer.id}`,
+      ledgerLink: getLedgerLink(customer.id),
       businessName,
     });
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
