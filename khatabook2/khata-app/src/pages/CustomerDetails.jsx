@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
-import { activityTimestamp } from "../lib/transactionOrder";
+import { groupLedgerByBusinessDate } from "../lib/transactionOrder";
 import { localDateKey } from "../lib/dateKey";
 import { can } from "../lib/permissions";
 import { summarizeTransactions } from "../lib/customerBalance";
@@ -119,18 +119,7 @@ function CustomerDetails() {
       };
     });
 
-    const byDate = new Map();
-    for (const row of rows) {
-      const dateKey = localDateKey(row.created_at || row.date);
-      if (!byDate.has(dateKey)) byDate.set(dateKey, []);
-      byDate.get(dateKey).push(row);
-    }
-
-    const grouped = [];
-    for (const dateKey of [...byDate.keys()].sort().reverse()) {
-      grouped.push(...byDate.get(dateKey).sort((a, b) => activityTimestamp(b) - activityTimestamp(a)));
-    }
-    return grouped;
+    return groupLedgerByBusinessDate(rows);
   }, [transactions]);
 
   if (loading) return (

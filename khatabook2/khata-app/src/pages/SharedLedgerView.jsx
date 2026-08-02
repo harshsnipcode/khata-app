@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { getLogoUrl } from "../lib/businessSettings";
-import { activityTimestamp } from "../lib/transactionOrder";
-import { localDateKey } from "../lib/dateKey";
+import { groupLedgerByBusinessDate } from "../lib/transactionOrder";
 import heroLogo from "../assets/hero.png";
 
 function SharedLedgerView() {
@@ -91,18 +90,7 @@ function SharedLedgerView() {
       return { ...txn, balance: runningBalance };
     });
 
-    const byDate = new Map();
-    for (const row of rows) {
-      const dateKey = localDateKey(row.created_at || row.date);
-      if (!byDate.has(dateKey)) byDate.set(dateKey, []);
-      byDate.get(dateKey).push(row);
-    }
-
-    const grouped = [];
-    for (const dateKey of [...byDate.keys()].sort().reverse()) {
-      grouped.push(...byDate.get(dateKey).sort((a, b) => activityTimestamp(b) - activityTimestamp(a)));
-    }
-    return grouped;
+    return groupLedgerByBusinessDate(rows);
   }, [transactions]);
 
   if (loading) {
