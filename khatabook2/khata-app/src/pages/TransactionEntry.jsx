@@ -170,7 +170,14 @@ function TransactionEntry() {
       const description = transactionNote.trim() || null;
       const now = new Date();
       const dateObj = new Date(selectedDate + "T00:00:00");
-      dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      const original = isEditing && stateData.date ? new Date(stateData.date) : null;
+      if (original && !isNaN(original.getTime())) {
+        // Keep the original creation time-of-day; only the business date may
+        // change on edit. The displayed timestamp must not shift to "now".
+        dateObj.setHours(original.getHours(), original.getMinutes(), original.getSeconds(), original.getMilliseconds());
+      } else {
+        dateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      }
       createdAt = dateObj.toISOString();
 
       if (isEditing) {
