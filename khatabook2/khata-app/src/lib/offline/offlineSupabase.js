@@ -137,6 +137,7 @@ function createQueryBuilder(table, method, payload, options = {}) {
     maybeSingle: false,
     order: null,
     limit: null,
+    range: null,
   };
 
   const builder = {
@@ -200,6 +201,10 @@ function createQueryBuilder(table, method, payload, options = {}) {
       ops.limit = count;
       return this;
     },
+    range(from, to) {
+      ops.range = { from, to };
+      return this;
+    },
     async then(onFulfilled, onRejected) {
       try {
         const result = await this.execute();
@@ -247,6 +252,7 @@ async function executeOnline(ops) {
   }
   if (ops.order) query = query.order(ops.order.column, { ascending: ops.order.ascending });
   if (ops.limit !== null) query = query.limit(ops.limit);
+  if (ops.range) query = query.range(ops.range.from, ops.range.to);
   if (ops.single) query = query.single();
   if (ops.maybeSingle) query = query.maybeSingle();
   return await query;
@@ -257,8 +263,12 @@ async function refreshCacheAfterOnlineResult(ops, data) {
     // This is a server READ refreshing the cache, not a confirmed write, so it
     // must never overwrite a local edit that is still pending in the queue.
     const rows = Array.isArray(data) ? data : (data ? [data] : []);
+    // Only a complete, unpaginated server snapshot may replace the offline
+    // cache. Paginated reads must merge instead so a partial page can never
+    // truncate the cached transactions (and skew customer balances).
     const canSafelyReplace = SERVER_SNAPSHOT_REPLACE_TABLES.has(ops.table)
       && ops.filters.length === 0
+      && ops.range === null
       && (rows.length === 0 || !ops.selectColumns || ops.selectColumns === "*");
     if (canSafelyReplace) {
       await replaceFetchedData(ops.table, rows, { protectUnsynced: true });
@@ -286,6 +296,7 @@ async function executeOffline(ops) {
     let rows = await getAll(ops.table);
     rows = applyFilters(rows, ops.filters);
     rows = applyOrder(rows, ops.order);
+    if (ops.range !== null) rows = rows.slice(ops.range.from, ops.range.to + 1);
     if (ops.limit !== null) rows = rows.slice(0, ops.limit);
     rows = applySelect(ops.table, rows, ops.selectColumns);
     if (ops.single || ops.maybeSingle) {

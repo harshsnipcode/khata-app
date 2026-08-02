@@ -4,16 +4,7 @@ import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import Header from "../components/Header";
 import CustomerCard from "../components/CustomerCard";
 import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
-
-function buildBalanceMap(transactions) {
-  const map = {};
-  for (const txn of transactions) {
-    if (!map[txn.customer_id]) map[txn.customer_id] = 0;
-    if (txn.type === "gave") map[txn.customer_id] += Number(txn.amount);
-    else map[txn.customer_id] -= Number(txn.amount);
-  }
-  return map;
-}
+import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
 
 export default function ReminderPage() {
   const navigate = useNavigate();
@@ -38,10 +29,10 @@ export default function ReminderPage() {
     setLoading(true);
     Promise.all([
       supabase.from("customers").select("*").order("name", { ascending: true }),
-      supabase.from("transactions").select("*").order("created_at", { ascending: false }),
-    ]).then(([custRes, txnRes]) => {
+      fetchAllTransactions(),
+    ]).then(([custRes, txnData]) => {
       setCustomers(custRes.data || []);
-      setTransactions(txnRes.data || []);
+      setTransactions(txnData || []);
       setLoading(false);
     });
   }, []);

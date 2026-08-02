@@ -5,6 +5,7 @@ import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { activityTimestamp } from "../lib/transactionOrder";
 import { localDateKey } from "../lib/dateKey";
 import { can } from "../lib/permissions";
+import { summarizeTransactions } from "../lib/customerBalance";
 
 function getHomePath() {
   try {
@@ -99,16 +100,7 @@ function CustomerDetails() {
     };
   }, [id]);
 
-  const totals = useMemo(() => {
-    return transactions.reduce(
-      (acc, txn) => {
-        if (txn.type === "got") acc.got += Number(txn.amount);
-        else acc.gave += Number(txn.amount);
-        return acc;
-      },
-      { got: 0, gave: 0 }
-    );
-  }, [transactions]);
+  const totals = useMemo(() => summarizeTransactions(transactions), [transactions]);
 
   const balance = totals.gave - totals.got;
   const balanceLabel = balance >= 0 ? "You Will Get" : "You Will Give";

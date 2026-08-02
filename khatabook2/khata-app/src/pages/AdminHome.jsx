@@ -11,21 +11,11 @@ import CatalogueView from "../components/CatalogueView";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
 import { splitByTodayActivity } from "../lib/transactionOrder";
+import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
 import ActivityDivider from "../components/ActivityDivider";
 
 
 /* ── helpers ─────────────────────────────────────────── */
-
-/** Build a map: customer_id → net balance (gave - got) */
-function buildBalanceMap(transactions) {
-  const map = {};
-  for (const txn of transactions) {
-    if (!map[txn.customer_id]) map[txn.customer_id] = 0;
-    if (txn.type === "gave") map[txn.customer_id] += Number(txn.amount);
-    else                     map[txn.customer_id] -= Number(txn.amount);
-  }
-  return map;
-}
 
 function applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType) {
   // 1. Search
@@ -132,13 +122,13 @@ function AdminHome() {
   /* ── data loading ── */
   const load = useCallback(async () => {
     setLoading(true);
-    const [custRes, txnRes, empRes] = await Promise.all([
+    const [custRes, txnData, empRes] = await Promise.all([
       supabase.from("customers").select("*").order("created_at", { ascending: false }),
-      supabase.from("transactions").select("*").order("created_at", { ascending: false }),
+      fetchAllTransactions(),
       supabase.from("employees").select("*").order("created_at", { ascending: false }),
     ]);
     setCustomers(custRes.data || []);
-    setTransactions(txnRes.data || []);
+    setTransactions(txnData || []);
     setEmployees(empRes.data || []);
     setLoading(false);
   }, []);
