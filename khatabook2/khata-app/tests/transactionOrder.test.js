@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { groupLedgerByBusinessDate } from "../src/lib/transactionOrder.js";
+import { addRunningBalanceFromOldestDisplayed, groupLedgerByBusinessDate } from "../src/lib/transactionOrder.js";
 
 const txn = (id, created, activity, date, type = "got", amount = 100) => ({
   id,
@@ -80,5 +80,24 @@ test("groups by business date, newest date first", () => {
   assert.deepEqual(
     groupLedgerByBusinessDate(rows).map((t) => t.id),
     [2, 3, 1]
+  );
+});
+
+test("calculates running balance from the oldest displayed card to the latest", () => {
+  const rows = [
+    txn(1, "2026-07-29T10:23:00+00:00", "2026-07-29T10:23:00+00:00", "2026-07-29", "gave", 100),
+    txn(2, "2026-07-29T12:47:00+00:00", "2026-07-29T12:47:00+00:00", "2026-07-29", "got", 10),
+    txn(3, "2026-07-29T22:01:00+00:00", "2026-08-01T22:01:00+00:00", "2026-08-01", "gave", 30),
+  ];
+
+  const displayRows = addRunningBalanceFromOldestDisplayed(groupLedgerByBusinessDate(rows));
+
+  assert.deepEqual(
+    displayRows.map((t) => ({ id: t.id, balance: t.balance })),
+    [
+      { id: 3, balance: 120 },
+      { id: 2, balance: 90 },
+      { id: 1, balance: 100 },
+    ]
   );
 });

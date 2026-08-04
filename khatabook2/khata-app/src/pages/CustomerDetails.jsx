@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
-import { groupLedgerByBusinessDate } from "../lib/transactionOrder";
+import { addRunningBalanceFromOldestDisplayed, groupLedgerByBusinessDate } from "../lib/transactionOrder";
 import { localDateKey } from "../lib/dateKey";
 import { can } from "../lib/permissions";
 import { summarizeTransactions } from "../lib/customerBalance";
@@ -108,19 +108,7 @@ function CustomerDetails() {
   const balanceAmount = Math.abs(balance);
 
   const transactionRows = useMemo(() => {
-    const businessOrdered = [...transactions].sort(
-      (a, b) => new Date(a.created_at) - new Date(b.created_at)
-    );
-    let runningBalance = 0;
-    const rows = businessOrdered.map((txn) => {
-      runningBalance += txn.type === "got" ? -Number(txn.amount) : Number(txn.amount);
-      return {
-        ...txn,
-        balance: runningBalance,
-      };
-    });
-
-    return groupLedgerByBusinessDate(rows);
+    return addRunningBalanceFromOldestDisplayed(groupLedgerByBusinessDate(transactions));
   }, [transactions]);
 
   if (loading) return (

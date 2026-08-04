@@ -35,8 +35,7 @@ function compareByCreatedDesc(a, b) {
   return new Date(b.created_at || b.date) - new Date(a.created_at || a.date);
 }
 
-// Takes ledger rows (already in business-date ascending order, with the running
-// balance computed) and returns them grouped by business date, newest date
+// Takes ledger rows and returns them grouped by business date, newest date
 // first. Within each date group genuinely backdated entries (business date
 // earlier than the day they were entered) float above the normal same-day
 // entries; both normal and backdated entries are newest-first by their original
@@ -58,6 +57,22 @@ export function groupLedgerByBusinessDate(rows) {
     );
   }
   return grouped;
+}
+
+export function addRunningBalanceFromOldestDisplayed(rows) {
+  let runningBalance = 0;
+  const rowsWithBalance = [...rows];
+
+  for (let index = rowsWithBalance.length - 1; index >= 0; index -= 1) {
+    const txn = rowsWithBalance[index];
+    runningBalance += txn.type === "got" ? -Number(txn.amount) : Number(txn.amount);
+    rowsWithBalance[index] = {
+      ...txn,
+      balance: runningBalance,
+    };
+  }
+
+  return rowsWithBalance;
 }
 
 function activityDateKey(timestamp) {
