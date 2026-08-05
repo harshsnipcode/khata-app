@@ -2,13 +2,14 @@ import { useNavigate } from "react-router-dom";
 
 function ReportTabs({ active }) {
   const navigate = useNavigate();
+  const role = localStorage.getItem("khata_role");
   const tabs = [
     { key: "transactions", label: "Customer Transactions", path: "/admin/reports/customer-transactions" },
-    { key: "profit", label: "Profit Report", path: "/admin/reports/profit" },
+    ...(role === "admin" ? [{ key: "profit", label: "Profit Report", path: "/admin/reports/profit" }] : []),
   ];
 
   return (
-    <div className="grid grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-sm">
+    <div className={`grid ${tabs.length === 2 ? "grid-cols-2" : "grid-cols-1"} rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-sm`}>
       {tabs.map((tab) => {
         const selected = active === tab.key;
         return (

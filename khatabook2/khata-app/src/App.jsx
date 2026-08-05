@@ -120,8 +120,8 @@ function AppShell() {
       <Route path="/admin/reminder" element={<AdminRoute><ReminderPage /></AdminRoute>} />
       <Route path="/admin/reports/customer-transactions" element={<CustomerTransactionsReport />} />
       <Route path="/admin/reports/customer-transactions/:id" element={<TransactionDetailPage />} />
-      <Route path="/admin/reports/profit" element={<ProfitReport />} />
-      <Route path="/admin/reports/profit/group/:groupId" element={<ProfitReport />} />
+      <Route path="/admin/reports/profit" element={<AdminRoute><ProfitReport /></AdminRoute>} />
+      <Route path="/admin/reports/profit/group/:groupId" element={<AdminRoute><ProfitReport /></AdminRoute>} />
       <Route path="/customers/add" element={<CustomerListPage />} />
       <Route path="/party/new" element={<ErrorBoundary><CustomerForm /></ErrorBoundary>} />
       <Route path="/customer/:id" element={<CustomerDetails />} />
