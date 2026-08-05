@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { supabase } from "./lib/supabase";
+import { recordRouteChange } from "./lib/perf";
 import AdminRoute from "./components/AdminRoute";
 import ExcelRoute from "./components/ExcelRoute";
 import ReminderPage from "./pages/ReminderPage";
@@ -48,6 +49,7 @@ import ErrorBoundary from "./lib/ErrorBoundary";
 
 function AppShell() {
   const [ready, setReady] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const init = async () => {
@@ -56,40 +58,23 @@ function AppShell() {
       if (role === "admin") {
         const user = localStorage.getItem("khata_user");
         if (user && navigator.onLine) {
-          try {
-            const { data } = await supabase
-              .from("admin_profiles")
-              .select("id, profile_name")
-              .eq("username", user.toLowerCase())
-              .maybeSingle();
-            if (data?.profile_name) {
-              localStorage.setItem("khata_profile_name", data.profile_name);
-            }
-          } catch {}
+          void supabase
+            .from("admin_profiles")
+            .select("id, profile_name")
+            .eq("username", user.toLowerCase())
+            .maybeSingle()
+            .then(({ data }) => {
+              if (data?.profile_name) {
+                localStorage.setItem("khata_profile_name", data.profile_name);
+              }
+            })
+            .catch(() => {});
         }
         setReady(true);
         return;
       }
 
       if (role === "employee") {
-        if (!navigator.onLine) {
-          setReady(true);
-          return;
-        }
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            console.log("[Auth] Employee restored");
-            setReady(true);
-            return;
-          }
-          localStorage.removeItem("khata_role");
-          localStorage.removeItem("khata_user");
-        } catch {
-          localStorage.removeItem("khata_role");
-          localStorage.removeItem("khata_user");
-        }
-        console.log("[Auth] No session found");
         setReady(true);
         return;
       }
@@ -99,6 +84,10 @@ function AppShell() {
     };
     init();
   }, []);
+
+  useEffect(() => {
+    recordRouteChange(location.pathname);
+  }, [location.pathname]);
 
   if (!ready) {
     return (

@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import { recordQueryTiming } from "../perf";
 import { sanitizeTablePayload } from "./tableSchemas";
 import {
   OFFLINE_TABLES,
@@ -240,6 +241,7 @@ function createQueryBuilder(table, method, payload, options = {}) {
 }
 
 async function executeOnline(ops) {
+  const startedAt = performance.now();
   const isMutation = ops.method === "insert" || ops.method === "upsert" || ops.method === "update";
   const payload = isMutation && OFFLINE_TABLES.includes(ops.table)
     ? sanitizeTablePayload(ops.table, rewriteForeignKeys(ops.payload))
@@ -255,7 +257,22 @@ async function executeOnline(ops) {
   if (ops.range) query = query.range(ops.range.from, ops.range.to);
   if (ops.single) query = query.single();
   if (ops.maybeSingle) query = query.maybeSingle();
-  return await query;
+  const result = await query;
+  recordQueryTiming({
+    source: "online",
+    table: ops.table,
+    method: ops.method,
+    filters: ops.filters.map((filter) => `${filter.column}.${filter.operator}`),
+    order: ops.order ? ops.order.column : null,
+    range: ops.range,
+    limit: ops.limit,
+    single: ops.single,
+    maybeSingle: ops.maybeSingle,
+    durationMs: performance.now() - startedAt,
+    rowCount: Array.isArray(result.data) ? result.data.length : (result.data ? 1 : 0),
+    error: result.error?.message || null,
+  });
+  return result;
 }
 
 async function refreshCacheAfterOnlineResult(ops, data) {
@@ -292,6 +309,7 @@ async function refreshCacheAfterOnlineResult(ops, data) {
 }
 
 async function executeOffline(ops) {
+  const startedAt = performance.now();
   if (ops.method === "select") {
     let rows = await getAll(ops.table);
     rows = applyFilters(rows, ops.filters);
@@ -301,12 +319,42 @@ async function executeOffline(ops) {
     rows = applySelect(ops.table, rows, ops.selectColumns);
     if (ops.single || ops.maybeSingle) {
       const row = rows[0] || null;
-      return {
+      const result = {
         data: row,
         error: row || ops.maybeSingle ? null : { message: "No rows found", offline: true },
       };
+      recordQueryTiming({
+        source: "offline",
+        table: ops.table,
+        method: ops.method,
+        filters: ops.filters.map((filter) => `${filter.column}.${filter.operator}`),
+        order: ops.order ? ops.order.column : null,
+        range: ops.range,
+        limit: ops.limit,
+        single: ops.single,
+        maybeSingle: ops.maybeSingle,
+        durationMs: performance.now() - startedAt,
+        rowCount: result.data ? 1 : 0,
+        error: result.error?.message || null,
+      });
+      return result;
     }
-    return { data: rows, error: null };
+    const result = { data: rows, error: null };
+    recordQueryTiming({
+      source: "offline",
+      table: ops.table,
+      method: ops.method,
+      filters: ops.filters.map((filter) => `${filter.column}.${filter.operator}`),
+      order: ops.order ? ops.order.column : null,
+      range: ops.range,
+      limit: ops.limit,
+      single: ops.single,
+      maybeSingle: ops.maybeSingle,
+      durationMs: performance.now() - startedAt,
+      rowCount: rows.length,
+      error: null,
+    });
+    return result;
   }
 
   if (ops.method === "insert" || ops.method === "upsert") {
