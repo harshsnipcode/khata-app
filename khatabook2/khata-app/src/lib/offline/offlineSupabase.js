@@ -113,6 +113,21 @@ function scheduleSyncIfOnline() {
   }, 0);
 }
 
+function hasUsableCachedResult(result) {
+  if (!result || result.error) return false;
+  if (Array.isArray(result.data)) return result.data.length > 0;
+  return result.data !== null && result.data !== undefined;
+}
+
+function refreshSelectCacheInBackground(ops) {
+  setTimeout(async () => {
+    try {
+      const result = await executeOnline(ops);
+      if (!result.error) await refreshCacheAfterOnlineResult(ops, result.data);
+    } catch {}
+  }, 0);
+}
+
 function buildMutationRows(table, payload) {
   const rows = Array.isArray(payload) ? payload : [payload];
   const now = new Date().toISOString();
@@ -225,6 +240,13 @@ function createQueryBuilder(table, method, payload, options = {}) {
         return executeOffline(ops);
       }
       if (isOnline()) {
+        if (ops.method === "select") {
+          const cached = await executeOffline(ops);
+          if (hasUsableCachedResult(cached)) {
+            refreshSelectCacheInBackground(ops);
+            return cached;
+          }
+        }
         try {
           const result = await executeOnline(ops);
           if (!result.error) await refreshCacheAfterOnlineResult(ops, result.data);
