@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 
@@ -96,6 +96,15 @@ function EmployeeSalarySummary() {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const loadPayments = useCallback(async () => {
+    const { data: pays } = await supabase
+      .from("salary_payments")
+      .select("*")
+      .eq("employee_id", id)
+      .order("payment_date", { ascending: false });
+    setPayments(pays || []);
+  }, [id]);
+
   useEffect(() => {
     const load = async () => {
       const { data: emp } = await supabase.from("employees").select("*").eq("id", id).single();
@@ -106,19 +115,21 @@ function EmployeeSalarySummary() {
         const map = {};
         (att || []).forEach((a) => { map[a.date] = a.status; });
         setAttendanceData(map);
-
-        const { data: pays } = await supabase
-          .from("salary_payments")
-          .select("*")
-          .eq("employee_id", id)
-          .order("payment_date", { ascending: false });
-        setPayments(pays || []);
       }
 
+      await loadPayments();
       setLoading(false);
     };
     load();
-  }, [id]);
+  }, [id, loadPayments]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`salary-summary-${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "salary_payments", filter: `employee_id=eq.${id}` }, () => loadPayments())
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [id, loadPayments]);
 
   if (loading) {
     return (
@@ -226,11 +237,12 @@ function EmployeeSalarySummary() {
             ) : (
               <div className="space-y-3">
                 {payments.map((p) => (
-                  <div
+                  <button
                     key={p.id}
-                    className="flex items-center justify-between bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4"
+                    onClick={() => navigate(`/admin/employees/${id}/payment/${p.id}`)}
+                    className="w-full flex items-center justify-between bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-4 transition hover:border-[var(--primary)] active:scale-[0.99] cursor-pointer outline-none text-left"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-bold text-[var(--text-primary)]">
                         {new Date(p.payment_date).toLocaleDateString("en-IN", {
                           day: "2-digit",
@@ -239,11 +251,16 @@ function EmployeeSalarySummary() {
                         })}
                       </p>
                       {p.notes && (
-                        <p className="text-[10px] text-[var(--text-muted)] font-medium mt-0.5">{p.notes}</p>
+                        <p className="text-[10px] text-[var(--text-muted)] font-medium mt-0.5 truncate">{p.notes}</p>
                       )}
                     </div>
-                    <p className="text-sm font-bold text-[var(--text-primary)]">₹{Math.round(Number(p.amount)).toLocaleString()}</p>
-                  </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <p className="text-sm font-bold text-[var(--text-primary)]">₹{Math.round(Number(p.amount)).toLocaleString()}</p>
+                      <svg className="w-4 h-4 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    </div>
+                  </button>
                 ))}
               </div>
             )}

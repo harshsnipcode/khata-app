@@ -197,7 +197,10 @@ export async function replaceFetchedData(table, rows, { protectUnsynced = false 
   ));
   writeCache({ ...currentCache, [table]: dedupeRows(table, [...serverRows, ...unsyncedLocalRows]) });
   if (table === "import_batch_recycle_bin" && rows.length === 0) {
-    clearRecycleBinCache();
+    // Legacy cleanup: older builds stored excel imports inside the local
+    // recycle bin. Only drop those entries, never wipe locally-deleted
+    // transactions, customers, products, or salary payments.
+    writeRecycleBinRaw(readRecycleBinRaw().filter((entry) => entry.entity_type !== "excel_import"));
   }
 }
 
@@ -426,7 +429,12 @@ export async function getRecycleBin() {
 export async function restoreFromRecycleBin(local_uuid) {
   try {
     const rawItems = readRecycleBinRaw();
-    const item = rawItems.find((entry) => entry.local_uuid === local_uuid);
+    const item = rawItems.find(
+      (entry) =>
+        entry.local_uuid === local_uuid ||
+        (entry.id !== undefined && entry.id !== null && String(entry.id) === String(local_uuid)) ||
+        (entry.entity_id !== undefined && entry.entity_id !== null && String(entry.entity_id) === String(local_uuid))
+    );
     if (!item) return { success: false, error: "Item not found" };
 
     const originalData = typeof item.original_data === "string"

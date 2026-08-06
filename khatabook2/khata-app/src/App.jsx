@@ -18,6 +18,7 @@ import EmployeeCredentialsEdit from "./pages/EmployeeCredentialsEdit";
 import StaffDashboard from "./pages/StaffDashboard";
 import CreateEmployee from "./pages/CreateEmployee";
 import SalaryPayment from "./pages/SalaryPayment";
+import PaymentDetail from "./pages/PaymentDetail";
 import EmployeeSalarySummary from "./pages/EmployeeSalarySummary";
 import CustomerTransactionsReport from "./pages/CustomerTransactionsReport";
 import ProfitReport from "./pages/ProfitReport";
@@ -112,6 +113,7 @@ function AppShell() {
       <Route path="/admin/employees/:id/edit" element={<AdminRoute><EmployeeEdit /></AdminRoute>} />
       <Route path="/admin/employees/:id/credentials" element={<AdminRoute><EmployeeCredentialsEdit /></AdminRoute>} />
       <Route path="/admin/employees/:id/payment" element={<AdminRoute><SalaryPayment /></AdminRoute>} />
+      <Route path="/admin/employees/:id/payment/:paymentId" element={<AdminRoute><PaymentDetail /></AdminRoute>} />
       <Route path="/admin/employees/:id/summary" element={<AdminRoute><EmployeeSalarySummary /></AdminRoute>} />
       <Route path="/admin/staff" element={<AdminRoute><StaffDashboard /></AdminRoute>} />
       <Route path="/admin/staff/new" element={<AdminRoute><CreateEmployee /></AdminRoute>} />

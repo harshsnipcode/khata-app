@@ -159,13 +159,17 @@ test("server-empty catalogue snapshots clear stale synced catalogue cache", asyn
   assert.deepEqual(await getAll("product_transactions"), []);
 });
 
-test("server-empty import recycle snapshot clears local recycle bin cache", async () => {
+test("server-empty import recycle snapshot clears only legacy excel_import entries", async () => {
   installLocalStorageMock();
   await moveToRecycleBin("transactions", 1, "Testing transaction", { id: 1 }, "admin");
+  await moveToRecycleBin("salary_payments", 2, "Salary payment", { id: 2, amount: 500 }, "admin");
+  await moveToRecycleBin("excel_import", 3, "Legacy import", { id: 3 }, "admin");
 
   await replaceFetchedData("import_batch_recycle_bin", []);
 
-  assert.deepEqual(await getRecycleBin(), []);
+  const remaining = await getRecycleBin();
+  assert.equal(remaining.length, 2, "locally-deleted transactions and salary payments must survive");
+  assert.ok(remaining.every((entry) => entry.entity_type !== "excel_import"), "legacy excel_import entries are cleared");
 });
 
 test("protected saveFetchedData never overwrites a pending offline edit with stale server data", async () => {

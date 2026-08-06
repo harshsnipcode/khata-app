@@ -10,6 +10,7 @@ function getEntityIcon(type) {
     case "transactions": return "💳";
     case "customers": return "👤";
     case "products": return "📦";
+    case "salary_payments": return "💸";
     default: return "📄";
   }
 }
@@ -20,6 +21,7 @@ function getEntityLabel(type) {
     case "transactions": return "Transaction";
     case "customers": return "Customer";
     case "products": return "Product";
+    case "salary_payments": return "Salary Payment";
     default: return "Unknown";
   }
 }
@@ -100,11 +102,12 @@ function RecycleBinPage() {
     console.log(`[RecycleBin] === START RESTORE FLOW === local_uuid: ${local_uuid}`);
 
     // ── STEP 1: Read raw recycle bin entry BEFORE restore (since restore deletes it) ──
+    let rawItem = null;
     let rawOriginalData = null;
     let entityType = "transactions";
     let rawItemDebug = {};
     try {
-      const rawItem = await db.table('recycle_bin').get(local_uuid);
+      rawItem = await db.table('recycle_bin').get(local_uuid);
       console.log("RAW RECYCLE ITEM");
       console.log(rawItem);
       if (rawItem) {
@@ -129,7 +132,13 @@ function RecycleBinPage() {
     }
 
     // ── STEP 2: Run restoreFromRecycleBin ──
-    const result = await restoreFromRecycleBin(local_uuid);
+    let result = await restoreFromRecycleBin(local_uuid);
+    // Self-heal when the caller's id does not match the stored local_uuid but
+    // STEP 1 located the raw entry (matches by local_uuid, id, or entity_id).
+    if (!result.success && rawItem && rawItem.local_uuid && rawItem.local_uuid !== local_uuid) {
+      console.warn(`[RecycleBin] STEP 2 fallback — retrying with stored local_uuid: ${rawItem.local_uuid}`);
+      result = await restoreFromRecycleBin(rawItem.local_uuid);
+    }
     console.log("RESTORED DATA");
     console.log(result.data);
     console.log(`[RecycleBin] STEP 2 — restoreFromRecycleBin result:`, {
@@ -251,7 +260,12 @@ function RecycleBinPage() {
       setTimeout(() => setActionMsg(""), 2500);
     } else {
       console.error(`[RecycleBin] Local restore failed:`, result.error);
-      setActionMsg("Failed to restore: " + (result.error || "Unknown error"));
+      await loadItems();
+      setActionMsg(
+        result.error === "Item not found"
+          ? "This item is no longer in the recycle bin. It may have already been restored."
+          : "Failed to restore: " + (result.error || "Unknown error")
+      );
     }
   };
 
