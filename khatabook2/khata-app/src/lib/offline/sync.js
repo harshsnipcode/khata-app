@@ -4,6 +4,7 @@ import {
   SERVER_SNAPSHOT_REPLACE_TABLES,
   getPendingQueue,
   isOnline,
+  purgeUnsupportedQueueOps,
   removeQueueItem,
   replaceFetchedData,
   rewriteFilters,
@@ -147,6 +148,18 @@ export async function syncPendingData() {
   emitStatus("pending");
   let queueDrained = false;
   try {
+    // Stale operations for tables that are not valid sync tables (e.g. leftover
+    // recycle_bin inserts from older builds) can never execute and would fail
+    // forever, blocking the queue. Drop them before processing.
+    const dropped = await purgeUnsupportedQueueOps();
+    for (const op of dropped) {
+      console.warn("[OfflineSync] Dropped stale operation for unsupported table", {
+        queueId: op.id,
+        table: op.table,
+        method: op.method,
+      });
+    }
+
     const queue = await getPendingQueue();
     const startCount = queue.length;
     let succeeded = 0;

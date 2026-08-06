@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { sanitizeTablePayload, TABLE_COLUMNS } from "../src/lib/offline/tableSchemas.js";
-import { getAll, getRecycleBin, moveToRecycleBin, replaceFetchedData, saveFetchedData, upsertLocalRows } from "../src/lib/offline/db.js";
+import {
+  enqueueOperation,
+  getAll,
+  getPendingQueue,
+  getRecycleBin,
+  moveToRecycleBin,
+  purgeUnsupportedQueueOps,
+  replaceFetchedData,
+  saveFetchedData,
+  upsertLocalRows,
+} from "../src/lib/offline/db.js";
 
 function installLocalStorageMock() {
   const store = new Map();
@@ -157,6 +167,36 @@ test("server-empty catalogue snapshots clear stale synced catalogue cache", asyn
   assert.deepEqual((await getAll("products")).map((row) => row.id), [-1]);
   assert.deepEqual(await getAll("customer_product_prices"), []);
   assert.deepEqual(await getAll("product_transactions"), []);
+});
+
+test("stale queue operations for unsupported tables are purged before sync", async () => {
+  installLocalStorageMock();
+
+  enqueueOperation({
+    table: "recycle_bin",
+    method: "insert",
+    payload: { local_uuid: "legacy", entity_type: "transactions" },
+    filters: [],
+    options: {},
+    selectColumns: "*",
+  });
+  enqueueOperation({
+    table: "customers",
+    method: "insert",
+    payload: { id: -1, name: "Pending Customer", phone: "000" },
+    filters: [],
+    options: {},
+    selectColumns: "*",
+  });
+
+  const dropped = await purgeUnsupportedQueueOps();
+
+  assert.equal(dropped.length, 1, "only the unsupported recycle_bin op is dropped");
+  assert.equal(dropped[0].table, "recycle_bin");
+
+  const remaining = await getPendingQueue();
+  assert.equal(remaining.length, 1, "valid customer op survives the purge");
+  assert.equal(remaining[0].table, "customers");
 });
 
 test("server-empty import recycle snapshot clears only legacy excel_import entries", async () => {

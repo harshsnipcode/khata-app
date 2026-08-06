@@ -309,6 +309,14 @@ export async function removeQueueItem(id) {
   writeQueue(readQueue().filter((item) => item.id !== id));
 }
 
+export async function purgeUnsupportedQueueOps() {
+  const queue = readQueue();
+  const unsupported = queue.filter((op) => !OFFLINE_TABLES.includes(op.table));
+  if (unsupported.length === 0) return [];
+  writeQueue(queue.filter((op) => OFFLINE_TABLES.includes(op.table)));
+  return unsupported;
+}
+
 export function cancelQueuedDeletes(table, entityId) {
   const targetId = String(entityId);
   writeQueue(readQueue().filter((item) => {
