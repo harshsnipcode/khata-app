@@ -6,3 +6,13 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://nqciyviiizulka
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_25O7qf9JI7G8g_EfZ0z2Yw_-vgJtF1z";
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export function createEphemeralSupabaseClient() {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}

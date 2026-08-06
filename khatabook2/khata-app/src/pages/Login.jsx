@@ -17,8 +17,9 @@ function Login() {
     setError("");
     setLoading(true);
 
-    const pseudoEmail = `${username}@example.com`;
-    console.log("[Login] Attempt", { username, pseudoEmail });
+    const normalizedUsername = username.trim();
+    const pseudoEmail = `${normalizedUsername}@example.com`;
+    console.log("[Login] Attempt", { username: normalizedUsername, pseudoEmail });
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: pseudoEmail,
@@ -45,14 +46,14 @@ function Login() {
     // mark role as employee
     try {
       localStorage.setItem("khata_role", "employee");
-      localStorage.setItem("khata_user", username);
+      localStorage.setItem("khata_user", normalizedUsername);
 
       // fetch permission level from employees table
       try {
         const { data: emp } = await offlineSupabase
           .from("employees")
           .select("permission_level, permissions_enabled")
-          .eq("username", username)
+          .eq("username", normalizedUsername)
           .single();
         if (emp) {
           const level = emp.permissions_enabled ? (emp.permission_level || 1) : 1;
@@ -61,11 +62,15 @@ function Login() {
         } else {
           console.log("[Login] Employee active", { role: "employee", foundInTable: false });
         }
-      } catch {}
-    } catch (e) {}
+      } catch (permissionError) {
+        console.log("[Login] Permission lookup skipped", permissionError?.message || permissionError);
+      }
+    } catch (storageError) {
+      console.log("[Login] Local session storage skipped", storageError?.message || storageError);
+    }
 
     console.log("[Login] Navigation attempted -> /employee/home");
-    navigate("/employee/home", { state: { username } });
+    navigate("/employee/home", { state: { username: normalizedUsername } });
   };
 
   return (

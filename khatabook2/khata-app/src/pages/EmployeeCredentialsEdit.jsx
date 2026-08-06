@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
+import { createEphemeralSupabaseClient, supabase } from "../lib/supabase";
 
 function EmployeeCredentialsEdit() {
   const { id } = useParams();
@@ -30,11 +30,21 @@ function EmployeeCredentialsEdit() {
   const handleSave = async () => {
     setError("");
 
-    const usernameChanged = username.trim() && username.trim() !== employee.username;
-    const passwordProvided = !!password;
+    const normalizedUsername = username.trim();
+    const currentUsername = employee.username?.trim() || "";
+    const usernameChanged = normalizedUsername && normalizedUsername !== currentUsername;
+    const passwordProvided = password.length > 0;
 
     if (!usernameChanged && !passwordProvided) {
       setError("No changes to save.");
+      return;
+    }
+    if (!normalizedUsername) {
+      setError("Username cannot be empty.");
+      return;
+    }
+    if (passwordProvided && password.length < 6) {
+      setError("Password must be at least 6 characters.");
       return;
     }
 
@@ -52,19 +62,19 @@ function EmployeeCredentialsEdit() {
         return;
       }
 
-      const newEmail = usernameChanged ? `${username.trim()}@example.com` : null;
+      const loginEmail = `${normalizedUsername}@example.com`;
 
       console.log("[CredentialsEdit] Update attempt", {
         auth_id: employee.auth_id,
         usernameChanged,
         passwordProvided,
-        newEmail,
+        loginEmail,
       });
 
       const { data, error: rpcError } = await supabase.rpc("admin_update_employee_auth", {
         p_user_id: employee.auth_id,
         p_password: passwordProvided ? password : null,
-        p_email: newEmail,
+        p_email: loginEmail,
         p_confirm_email: true,
       });
 
@@ -77,8 +87,39 @@ function EmployeeCredentialsEdit() {
         throw new Error(data.error || "Failed to update credentials.");
       }
 
-      if (usernameChanged) {
-        await supabase.from("employees").update({ username: username.trim() }).eq("id", id);
+      const resolvedAuthId = data?.user_id || employee.auth_id;
+      if (usernameChanged || resolvedAuthId !== employee.auth_id) {
+        const { error: employeeError } = await supabase
+          .from("employees")
+          .update({ username: normalizedUsername, auth_id: resolvedAuthId })
+          .eq("id", id);
+
+        if (employeeError) {
+          throw new Error(employeeError.message || "Login account changed, but employee username could not be saved.");
+        }
+      }
+
+      if (passwordProvided) {
+        const verifier = createEphemeralSupabaseClient();
+        const { data: verifyData, error: verifyError } = await verifier.auth.signInWithPassword({
+          email: loginEmail,
+          password,
+        });
+        await verifier.auth.signOut();
+
+        console.log("[CredentialsEdit] Verification sign-in", {
+          loginEmail,
+          employeeAuthId: employee.auth_id,
+          resolvedAuthId,
+          verifyUserId: verifyData?.user?.id,
+          verifyUserEmail: verifyData?.user?.email,
+          verifyError: verifyError?.message || null,
+          verifyErrorCode: verifyError?.code || null,
+        });
+
+        if (verifyError) {
+          throw new Error(`Password update did not pass login verification. Please try saving again. (${verifyError?.message || "unknown error"})`);
+        }
       }
 
       navigate(`/admin/employees/${id}/edit`, { replace: true });
