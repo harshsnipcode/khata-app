@@ -27,6 +27,7 @@ function EmployeeRoute({ children }) {
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        console.log("[EmployeeRoute] Navigation blocked: no auth session");
         localStorage.removeItem("khata_role");
         localStorage.removeItem("khata_user");
         localStorage.removeItem("khata_permission_level");

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function EmployeeCredentialsEdit() {
   const { id } = useParams();
@@ -18,7 +17,7 @@ function EmployeeCredentialsEdit() {
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await offlineSupabase.from("employees").select("*").eq("id", id).single();
+      const { data } = await supabase.from("employees").select("*").eq("id", id).single();
       if (data) {
         setEmployee(data);
         setUsername(data.username);
@@ -47,24 +46,44 @@ function EmployeeCredentialsEdit() {
         setSaving(false);
         return;
       }
-      if (usernameChanged) {
-        const newEmail = `${username.trim()}@example.com`;
-        if (employee.auth_id) {
-          await supabase.auth.admin.updateUserById(employee.auth_id, {
-            email: newEmail,
-          });
-        }
-        await supabase.from("employees").update({ username: username.trim() }).eq("id", id);
+      if (!employee.auth_id) {
+        setError("This employee has no linked login account, so credentials cannot be changed. Recreate the employee while online.");
+        setSaving(false);
+        return;
       }
 
-      if (passwordProvided && employee.auth_id) {
-        await supabase.auth.admin.updateUserById(employee.auth_id, {
-          password,
-        });
+      const newEmail = usernameChanged ? `${username.trim()}@example.com` : null;
+
+      console.log("[CredentialsEdit] Update attempt", {
+        auth_id: employee.auth_id,
+        usernameChanged,
+        passwordProvided,
+        newEmail,
+      });
+
+      const { data, error: rpcError } = await supabase.rpc("admin_update_employee_auth", {
+        p_user_id: employee.auth_id,
+        p_password: passwordProvided ? password : null,
+        p_email: newEmail,
+        p_confirm_email: true,
+      });
+
+      console.log("[CredentialsEdit] RPC result", { data, rpcError });
+
+      if (rpcError) {
+        throw new Error(rpcError.message || "Failed to update credentials.");
+      }
+      if (data && data.ok === false) {
+        throw new Error(data.error || "Failed to update credentials.");
+      }
+
+      if (usernameChanged) {
+        await supabase.from("employees").update({ username: username.trim() }).eq("id", id);
       }
 
       navigate(`/admin/employees/${id}/edit`, { replace: true });
     } catch (err) {
+      console.log("[CredentialsEdit] Update failed", err?.message || err);
       setError(err?.message || err?.error_description || "Failed to update credentials.");
       setSaving(false);
     }

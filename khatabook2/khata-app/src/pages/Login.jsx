@@ -18,9 +18,17 @@ function Login() {
     setLoading(true);
 
     const pseudoEmail = `${username}@example.com`;
-    const { error } = await supabase.auth.signInWithPassword({
+    console.log("[Login] Attempt", { username, pseudoEmail });
+
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: pseudoEmail,
       password,
+    });
+
+    console.log("[Login] Password verification result", {
+      employeeFound: !!data?.user,
+      error: error?.message || null,
+      status: error?.status || null,
     });
 
     if (error) {
@@ -28,6 +36,11 @@ function Login() {
       setLoading(false);
       return;
     }
+
+    console.log("[Login] Session created", {
+      session: !!data?.session,
+      user: data?.user?.email,
+    });
 
     // mark role as employee
     try {
@@ -44,10 +57,14 @@ function Login() {
         if (emp) {
           const level = emp.permissions_enabled ? (emp.permission_level || 1) : 1;
           localStorage.setItem("khata_permission_level", String(level));
+          console.log("[Login] Employee active", { role: "employee", permission_level: level });
+        } else {
+          console.log("[Login] Employee active", { role: "employee", foundInTable: false });
         }
       } catch {}
     } catch (e) {}
 
+    console.log("[Login] Navigation attempted -> /employee/home");
     navigate("/employee/home", { state: { username } });
   };
 

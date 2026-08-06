@@ -66,6 +66,16 @@ function CreateEmployee() {
         return;
       }
       authData = data;
+
+      if (authData?.user?.id) {
+        const { error: confirmError } = await supabase.rpc("admin_update_employee_auth", {
+          p_user_id: authData.user.id,
+          p_password: null,
+          p_email: null,
+          p_confirm_email: true,
+        });
+        if (confirmError) console.log("[CreateEmployee] Email confirm skipped", confirmError.message);
+      }
     }
 
     const auth_id = authData?.user?.id || null;
