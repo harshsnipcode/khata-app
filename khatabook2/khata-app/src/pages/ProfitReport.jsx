@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import ReportTabs from "../components/ReportTabs";
 import { localDateKey } from "../lib/dateKey";
+import { calculateProfitMetrics } from "../lib/profitReport";
 
 function getDateStr(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -167,10 +168,11 @@ function ProfitReport() {
       if (groupBy === "products" && activeGroupId && String(product.group_id || "") !== activeGroupId) return;
 
       const quantity = Number(item.quantity) || 0;
-      const sellingPrice = Number(item.price ?? product.sale_price) || 0;
-      const purchasePrice = Number(product.purchase_price) || 0;
-      const revenue = sellingPrice * quantity;
-      const profit = (sellingPrice - purchasePrice) * quantity;
+      const { revenue, profit } = calculateProfitMetrics({
+        sellingPrice: product.sale_price,
+        purchasePrice: product.purchase_price,
+        quantity,
+      });
       const groupId = groupBy === "customers"
         ? String(transaction.customer_id)
         : activeGroupId
