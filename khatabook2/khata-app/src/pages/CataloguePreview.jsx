@@ -423,7 +423,7 @@ function CataloguePreview() {
                                   key={prodKey}
                                   className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]"
                                 >
-                                  {qty}
+                                  {qty || "-"}
                                 </td>
                               );
                             })}
@@ -451,7 +451,7 @@ function CataloguePreview() {
                                   key={custKey}
                                   className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]"
                                 >
-                                  {qty}
+                                  {qty || "-"}
                                 </td>
                               );
                             })}
