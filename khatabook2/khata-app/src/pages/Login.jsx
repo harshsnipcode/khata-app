@@ -81,7 +81,7 @@ function Login() {
 
         <div className="text-center mb-8">
           <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(16,185,129,0.1)]">
-            KhataBook
+            Shiv Shankar Dairy
           </h1>
           <p className="text-[var(--text-secondary)] text-xs font-bold uppercase tracking-widest mt-2">
             Staff Portal
