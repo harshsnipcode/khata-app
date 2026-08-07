@@ -107,8 +107,10 @@ function AdminHome() {
 
   // Search / filter / sort
   const [searchTerm,   setSearchTerm]   = useState("");
-  const [filterType,   setFilterType]   = useState("all");
-  const [sortType,     setSortType]     = useState("recent");
+  // Persisted for the current session so navigating away and back (which
+  // remounts this component) does not reset the user's selected filter/sort.
+  const [filterType,   setFilterType]   = useState(() => sessionStorage.getItem("khata_admin_filter_type") || "all");
+  const [sortType,     setSortType]     = useState(() => sessionStorage.getItem("khata_admin_sort_type") || "recent");
 
   // Pending state inside modal (committed on "View Results")
   const [pendingFilter, setPendingFilter] = useState("all");
@@ -118,6 +120,13 @@ function AdminHome() {
   const [collectionMode, setCollectionMode] = useState(false);
   const [collectionQueue, setCollectionQueue] = useState(() => getCollectionQueue());
   const [settingsId, setSettingsId] = useState(null);
+
+  // Keep the user's filter/sort choice in sessionStorage so it survives the
+  // remount that happens when navigating to a customer and pressing Back.
+  useEffect(() => {
+    sessionStorage.setItem("khata_admin_filter_type", filterType);
+    sessionStorage.setItem("khata_admin_sort_type", sortType);
+  }, [filterType, sortType]);
 
   /* ── data loading ── */
   const load = useCallback(async () => {
