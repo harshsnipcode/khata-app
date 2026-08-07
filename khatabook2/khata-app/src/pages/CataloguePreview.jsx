@@ -90,6 +90,11 @@ function PositionModal({ customer, total, onClose, onSave }) {
   );
 }
 
+function normalizeLookupKey(value) {
+  if (value === undefined || value === null || value === "") return null;
+  return String(value);
+}
+
 function CataloguePreview() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -153,22 +158,26 @@ function CataloguePreview() {
     setOrderSaving(false);
   };
 
-  // Map customer lookups by ID and local_uuid
+  // Map customer lookups by ID and local_uuid, keyed in a stable string form.
   const customerMap = useMemo(() => {
-    const map = {};
+    const map = new Map();
     data.customers.forEach((c) => {
-      if (c.id) map[c.id] = c;
-      if (c.local_uuid) map[c.local_uuid] = c;
+      const normalizedId = normalizeLookupKey(c.id);
+      const normalizedLocalUuid = normalizeLookupKey(c.local_uuid);
+      if (normalizedId) map.set(normalizedId, c);
+      if (normalizedLocalUuid) map.set(normalizedLocalUuid, c);
     });
     return map;
   }, [data.customers]);
 
-  // Map product lookups by ID and local_uuid
+  // Map product lookups by ID and local_uuid, keyed in a stable string form.
   const productMap = useMemo(() => {
-    const map = {};
+    const map = new Map();
     data.products.forEach((p) => {
-      if (p.id) map[p.id] = p;
-      if (p.local_uuid) map[p.local_uuid] = p;
+      const normalizedId = normalizeLookupKey(p.id);
+      const normalizedLocalUuid = normalizeLookupKey(p.local_uuid);
+      if (normalizedId) map.set(normalizedId, p);
+      if (normalizedLocalUuid) map.set(normalizedLocalUuid, p);
     });
     return map;
   }, [data.products]);
@@ -181,20 +190,25 @@ function CataloguePreview() {
     });
   }, [data.transactions, selectedDate]);
 
-  // Map transactions on this date for fast item lookup
+  // Map selected-date transactions by both numeric row ids and local_uuid IDs.
   const filteredTxnsMap = useMemo(() => {
-    const map = {};
+    const map = new Map();
     filteredTxns.forEach((t) => {
-      if (t.id) map[t.id] = t;
-      if (t.local_uuid) map[t.local_uuid] = t;
+      const normalizedId = normalizeLookupKey(t.id);
+      const normalizedLocalUuid = normalizeLookupKey(t.local_uuid);
+      if (normalizedId) map.set(normalizedId, t);
+      if (normalizedLocalUuid) map.set(normalizedLocalUuid, t);
     });
     return map;
   }, [filteredTxns]);
 
-  // Filter items belonging to transactions of the selected period
+  // Filter items belonging to transactions of the selected period, using the
+  // same normalized ID lookup that the grid builder uses.
   const dateItems = useMemo(() => {
     return data.transactionItems.filter((item) => {
-      return filteredTxnsMap[item.transaction_id] !== undefined;
+      const itemTxnId = normalizeLookupKey(item.transaction_id);
+      if (!itemTxnId) return false;
+      return filteredTxnsMap.has(itemTxnId);
     });
   }, [data.transactionItems, filteredTxnsMap]);
 
@@ -207,18 +221,22 @@ function CataloguePreview() {
     // 1. Start with every customer, every product quantity implicitly 0
     // 2. Apply that day's transactions on top
     dateItems.forEach((item) => {
-      const txn = filteredTxnsMap[item.transaction_id];
+      const txn = filteredTxnsMap.get(normalizeLookupKey(item.transaction_id));
       if (!txn) return;
-      const cust = customerMap[txn.customer_id];
+
+      const custKey = normalizeLookupKey(txn.customer_id);
+      const cust = customerMap.get(custKey);
       if (!cust) return;
-      const prod = productMap[item.product_id];
+
+      const prodKey = normalizeLookupKey(item.product_id);
+      const prod = productMap.get(prodKey);
       if (!prod) return;
 
-      const custKey = cust.id || cust.local_uuid;
-      const prodKey = prod.id || prod.local_uuid;
+      const rowCustomerKey = normalizeLookupKey(cust.id) || normalizeLookupKey(cust.local_uuid);
+      const columnProductKey = normalizeLookupKey(prod.id) || normalizeLookupKey(prod.local_uuid);
 
-      if (!grid[custKey]) grid[custKey] = {};
-      grid[custKey][prodKey] = (grid[custKey][prodKey] || 0) + Number(item.quantity);
+      if (!grid[rowCustomerKey]) grid[rowCustomerKey] = {};
+      grid[rowCustomerKey][columnProductKey] = (grid[rowCustomerKey][columnProductKey] || 0) + Number(item.quantity);
     });
 
     // Include ALL customers, sorted by matrix_position
