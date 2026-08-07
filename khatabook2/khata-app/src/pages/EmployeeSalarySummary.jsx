@@ -1,100 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import { cumulativeDueSalary, calculateMonthSalary, monthlyPayments } from "../lib/salary";
 
-function getDaysInMonth(year, month) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function cumulativeDueSalary(employee, attendanceMap) {
-  if (!employee.attendance_enabled || !employee.salary_start_date) return 0;
-  const start = new Date(employee.salary_start_date);
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  if (start > today) return 0;
-  const amount = Number(employee.salary_amount) || 0;
-  const now = new Date();
-  const daysInThisMonth = getDaysInMonth(now.getFullYear(), now.getMonth());
-  if (employee.salary_type === "daily") {
-    let due = 0;
-    let d = new Date(start);
-    while (d <= today) {
-      const key = d.toISOString().split("T")[0];
-      const status = attendanceMap[key];
-      if (status !== "absent") due += amount;
-      d.setDate(d.getDate() + 1);
-    }
-    return due;
-  } else {
-    const perDay = amount / daysInThisMonth;
-    let worked = 0;
-    let d = new Date(start);
-    while (d <= today) {
-      const key = d.toISOString().split("T")[0];
-      const status = attendanceMap[key];
-      if (status !== "absent") worked++;
-      d.setDate(d.getDate() + 1);
-    }
-    return worked * perDay;
-  }
-}
-
-function calcPresentDays(employee, attendanceMap) {
-  if (!employee.attendance_enabled) return 0;
-  const start = employee.salary_start_date ? new Date(employee.salary_start_date) : null;
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  let count = 0;
-  let d = start ? new Date(start) : new Date(today.getFullYear(), today.getMonth(), 1);
-  while (d <= today) {
-    const key = d.toISOString().split("T")[0];
-    const status = attendanceMap[key];
-    if (status !== "absent") count++;
-    d.setDate(d.getDate() + 1);
-  }
-  return count;
-}
-
-function calcAbsentDays(employee, attendanceMap) {
-  if (!employee.attendance_enabled) return 0;
-  const start = employee.salary_start_date ? new Date(employee.salary_start_date) : null;
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  let count = 0;
-  let d = start ? new Date(start) : new Date(today.getFullYear(), today.getMonth(), 1);
-  while (d <= today) {
-    const key = d.toISOString().split("T")[0];
-    const status = attendanceMap[key];
-    if (status === "absent") count++;
-    d.setDate(d.getDate() + 1);
-  }
-  return count;
-}
-
-function calcPaidLeaveDays(employee, attendanceMap) {
-  if (!employee.attendance_enabled) return 0;
-  const start = employee.salary_start_date ? new Date(employee.salary_start_date) : null;
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  let count = 0;
-  let d = start ? new Date(start) : new Date(today.getFullYear(), today.getMonth(), 1);
-  while (d <= today) {
-    const key = d.toISOString().split("T")[0];
-    const status = attendanceMap[key];
-    if (status === "paid_leave") count++;
-    d.setDate(d.getDate() + 1);
-  }
-  return count;
-}
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function EmployeeSalarySummary() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [employee, setEmployee] = useState(null);
   const [attendanceData, setAttendanceData] = useState({});
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [paymentFilter, setPaymentFilter] = useState("month");
+
+  const now = new Date();
+  const selectedYear = Number(searchParams.get("year")) || now.getFullYear();
+  const rawMonth = Number(searchParams.get("month"));
+  const selectedMonth = rawMonth >= 1 && rawMonth <= 12 ? rawMonth - 1 : now.getMonth();
 
   const loadPayments = useCallback(async () => {
     const { data: pays } = await supabase
@@ -127,6 +52,13 @@ function EmployeeSalarySummary() {
     const channel = supabase
       .channel(`salary-summary-${id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "salary_payments", filter: `employee_id=eq.${id}` }, () => loadPayments())
+      .on("postgres_changes", { event: "*", schema: "public", table: "employee_attendance", filter: `employee_id=eq.${id}` }, () => {
+        supabase.from("employee_attendance").select("*").eq("employee_id", id).then(({ data }) => {
+          const map = {};
+          (data || []).forEach((a) => { map[a.date] = a.status; });
+          setAttendanceData(map);
+        });
+      })
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [id, loadPayments]);
@@ -147,12 +79,13 @@ function EmployeeSalarySummary() {
     );
   }
 
-  const salaryEarned = cumulativeDueSalary(employee, attendanceData);
-  const totalPayments = payments.reduce((sum, p) => sum + Number(p.amount), 0);
-  const currentDue = salaryEarned - totalPayments;
-  const presentDays = calcPresentDays(employee, attendanceData);
-  const absentDays = calcAbsentDays(employee, attendanceData);
-  const paidLeaveDays = calcPaidLeaveDays(employee, attendanceData);
+  const monthSalary = calculateMonthSalary(employee, attendanceData, selectedYear, selectedMonth);
+  const globalEarned = cumulativeDueSalary(employee, attendanceData);
+  const globalPayments = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const currentDue = globalEarned - globalPayments;
+  const monthPayments = monthlyPayments(payments, selectedYear, selectedMonth);
+  const totalPayments = monthPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const visiblePayments = paymentFilter === "all" ? payments : monthPayments;
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
@@ -173,10 +106,13 @@ function EmployeeSalarySummary() {
           <div className="w-14 h-14 rounded-full bg-[var(--primary-light)] border border-[var(--primary)]/20 flex items-center justify-center text-[var(--primary)] font-bold text-xl shrink-0">
             {employee.username[0]?.toUpperCase() || "?"}
           </div>
-          <div>
+          <div className="flex-1">
             <p className="text-[var(--text-primary)] font-bold text-lg">{employee.username}</p>
-            <p className="text-[var(--text-muted)] text-xs font-medium">Salary Summary</p>
+            <p className="text-[var(--text-muted)] text-xs font-medium">Salary Summary — {MONTHS[selectedMonth]} {selectedYear}</p>
           </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-[var(--primary-light)] text-[var(--primary)] shrink-0">
+            {MONTHS[selectedMonth]} {selectedYear}
+          </span>
         </div>
 
         {/* Salary Overview */}
@@ -192,19 +128,23 @@ function EmployeeSalarySummary() {
               </div>
               <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
                 <span className="text-sm text-[var(--text-secondary)] font-medium">Present Days</span>
-                <span className="text-sm font-bold text-[#2d6a4f]">{presentDays}</span>
+                <span className="text-sm font-bold text-[#2d6a4f]">{monthSalary.present}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
                 <span className="text-sm text-[var(--text-secondary)] font-medium">Absent Days</span>
-                <span className="text-sm font-bold text-[#e76f51]">{absentDays}</span>
+                <span className="text-sm font-bold text-[#e76f51]">{monthSalary.absent}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
                 <span className="text-sm text-[var(--text-secondary)] font-medium">Paid Leave</span>
-                <span className="text-sm font-bold text-[#636e72]">{paidLeaveDays}</span>
+                <span className="text-sm font-bold text-[#636e72]">{monthSalary.paidLeave}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
+                <span className="text-sm text-[var(--text-secondary)] font-medium">Half Days</span>
+                <span className="text-sm font-bold text-[#b45309]">{monthSalary.halfDay}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
                 <span className="text-sm text-[var(--text-secondary)] font-medium">Salary Earned</span>
-                <span className="text-sm font-bold text-[var(--primary)]">₹{Math.round(salaryEarned).toLocaleString()}</span>
+                <span className="text-sm font-bold text-[var(--primary)]">₹{Math.round(monthSalary.payableSalary).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
                 <span className="text-sm text-[var(--text-secondary)] font-medium">Total Payments Made</span>
@@ -231,12 +171,40 @@ function EmployeeSalarySummary() {
         {/* Payment History */}
         {employee.attendance_enabled && (
           <div className="card rounded-3xl p-6 shadow-md">
-            <h2 className="text-[var(--text-primary)] font-bold text-base mb-4">Payment History</h2>
-            {payments.length === 0 ? (
-              <p className="text-[var(--text-muted)] text-sm font-medium">No payments recorded yet.</p>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[var(--text-primary)] font-bold text-base">Payment History</h2>
+              <div className="flex items-center gap-1 bg-[var(--surface)] border border-[var(--border)] rounded-xl p-1">
+                <button
+                  onClick={() => setPaymentFilter("month")}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer outline-none ${
+                    paymentFilter === "month"
+                      ? "bg-[var(--primary)] text-white shadow-sm"
+                      : "text-[var(--text-secondary)] hover:text-[var(--primary)]"
+                  }`}
+                >
+                  Month
+                </button>
+                <button
+                  onClick={() => setPaymentFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer outline-none ${
+                    paymentFilter === "all"
+                      ? "bg-[var(--primary)] text-white shadow-sm"
+                      : "text-[var(--text-secondary)] hover:text-[var(--primary)]"
+                  }`}
+                >
+                  All
+                </button>
+              </div>
+            </div>
+            {visiblePayments.length === 0 ? (
+              <p className="text-[var(--text-muted)] text-sm font-medium">
+                {paymentFilter === "all"
+                  ? "No payments recorded yet."
+                  : `No payments in ${MONTHS[selectedMonth]} ${selectedYear}.`}
+              </p>
             ) : (
               <div className="space-y-3">
-                {payments.map((p) => (
+                {visiblePayments.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => navigate(`/admin/employees/${id}/payment/${p.id}`)}

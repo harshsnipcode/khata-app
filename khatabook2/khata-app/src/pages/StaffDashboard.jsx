@@ -1,78 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import { getMonthDateRange, calculateMonthSalary, cumulativeDueSalary } from "../lib/salary";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import FloatingButton from "../components/FloatingButton";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
-
-function getDaysInMonth(year, month) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function calcEmployeeSalary(employee, attendanceMap, year, month) {
-  if (!employee.attendance_enabled) return { payableSalary: 0, present: 0, absent: 0, paidLeave: 0 };
-
-  const daysInMonth = getDaysInMonth(year, month);
-  const amount = Number(employee.salary_amount) || 0;
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-
-  let present = 0, absent = 0, paidLeave = 0;
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateObj = new Date(year, month, d);
-    if (dateObj > today) continue;
-
-    const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const status = attendanceMap[key];
-    if (status === "absent") absent++;
-    else if (status === "paid_leave") paidLeave++;
-    else present++;
-  }
-
-  if (employee.salary_type === "monthly") {
-    const perDay = amount / daysInMonth;
-    return { payableSalary: (present + paidLeave) * perDay, present, absent, paidLeave };
-  } else {
-    return { payableSalary: (present + paidLeave) * amount, present, absent, paidLeave };
-  }
-}
-
-function cumulativeDue(employee, attendanceMap) {
-  if (!employee.attendance_enabled || !employee.salary_start_date) return 0;
-  const start = new Date(employee.salary_start_date);
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  if (start > today) return 0;
-
-  const amount = Number(employee.salary_amount) || 0;
-  const now = new Date();
-  const daysInMonth = getDaysInMonth(now.getFullYear(), now.getMonth());
-
-  if (employee.salary_type === "daily") {
-    let due = 0;
-    let d = new Date(start);
-    while (d <= today) {
-      const key = d.toISOString().split("T")[0];
-      const status = attendanceMap[key];
-      if (status !== "absent") due += amount;
-      d.setDate(d.getDate() + 1);
-    }
-    return due;
-  } else {
-    const perDay = amount / daysInMonth;
-    let worked = 0;
-    let d = new Date(start);
-    while (d <= today) {
-      const key = d.toISOString().split("T")[0];
-      const status = attendanceMap[key];
-      if (status !== "absent") worked++;
-      d.setDate(d.getDate() + 1);
-    }
-    return worked * perDay;
-  }
-}
 
 const PERMISSION_SHORT = { 1: "View", 2: "Party", 3: "Full" };
 
@@ -108,10 +41,7 @@ function StaffDashboard() {
     const { data: emps } = await supabase.from("employees").select("*").order("created_at", { ascending: false });
     setEmployees(emps || []);
 
-    const { start, end } = {
-      start: new Date(currentYear, currentMonth, 1),
-      end: new Date(currentYear, currentMonth, getDaysInMonth(currentYear, currentMonth)),
-    };
+    const { start, end } = getMonthDateRange(currentYear, currentMonth);
 
     const { data: att } = await supabase
       .from("employee_attendance")
@@ -152,11 +82,11 @@ function StaffDashboard() {
 
   const employeeSalaries = useMemo(() => {
     return employees.map((emp) => {
-      const due = cumulativeDue(emp, attendanceData[emp.id] || {});
+      const due = cumulativeDueSalary(emp, attendanceData[emp.id] || {});
       const paid = paymentsByEmployee[emp.id] || 0;
       return {
         ...emp,
-        salaryCalc: calcEmployeeSalary(emp, attendanceData[emp.id] || {}, currentYear, currentMonth),
+        salaryCalc: calculateMonthSalary(emp, attendanceData[emp.id] || {}, currentYear, currentMonth),
         cumulativeDue: due,
         adjustedDue: Math.max(0, due - paid),
       };
@@ -296,6 +226,7 @@ function StaffDashboard() {
                         >
                           <option value="">Present</option>
                           <option value="absent">Absent</option>
+                          <option value="half_day">Half Day</option>
                           <option value="paid_leave">Paid Leave</option>
                         </select>
                       </div>

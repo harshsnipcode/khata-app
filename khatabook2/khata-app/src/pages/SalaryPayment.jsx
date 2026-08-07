@@ -1,49 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
-
-function getDaysInMonth(year, month) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function isOnOrBeforeToday(d) {
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  return d <= today;
-}
-
-function cumulativeDueSalary(employee, attendanceMap) {
-  if (!employee.attendance_enabled || !employee.salary_start_date) return 0;
-  const start = new Date(employee.salary_start_date);
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  if (start > today) return 0;
-  const amount = Number(employee.salary_amount) || 0;
-  const now = new Date();
-  const daysInThisMonth = getDaysInMonth(now.getFullYear(), now.getMonth());
-  if (employee.salary_type === "daily") {
-    let due = 0;
-    let d = new Date(start);
-    while (d <= today) {
-      const key = d.toISOString().split("T")[0];
-      const status = attendanceMap[key];
-      if (status !== "absent") due += amount;
-      d.setDate(d.getDate() + 1);
-    }
-    return due;
-  } else {
-    const perDay = amount / daysInThisMonth;
-    let worked = 0;
-    let d = new Date(start);
-    while (d <= today) {
-      const key = d.toISOString().split("T")[0];
-      const status = attendanceMap[key];
-      if (status !== "absent") worked++;
-      d.setDate(d.getDate() + 1);
-    }
-    return worked * perDay;
-  }
-}
+import { cumulativeDueSalary } from "../lib/salary";
 
 function SalaryPayment() {
   const { id } = useParams();

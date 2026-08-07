@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import { getDaysInMonth, isOnOrBeforeToday, cumulativeDueSalary, calculateMonthSalary } from "../lib/salary";
 
 const PERMISSION_LABELS = {
   1: "View Entries & Send Reminders",
@@ -9,88 +10,6 @@ const PERMISSION_LABELS = {
 };
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-function getDaysInMonth(year, month) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function getMonthDateRange(year, month) {
-  const start = new Date(year, month, 1);
-  const end = new Date(year, month, getDaysInMonth(year, month));
-  return { start, end };
-}
-
-function isOnOrBeforeToday(d) {
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  return d <= today;
-}
-
-function cumulativeDueSalary(employee, attendanceMap) {
-  if (!employee.attendance_enabled || !employee.salary_start_date) return 0;
-
-  const start = new Date(employee.salary_start_date);
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  if (start > today) return 0;
-
-  const amount = Number(employee.salary_amount) || 0;
-  const now = new Date();
-  const daysInThisMonth = getDaysInMonth(now.getFullYear(), now.getMonth());
-
-  if (employee.salary_type === "daily") {
-    let due = 0;
-    let d = new Date(start);
-    while (d <= today) {
-      const key = d.toISOString().split("T")[0];
-      const status = attendanceMap[key];
-      if (status !== "absent") due += amount;
-      d.setDate(d.getDate() + 1);
-    }
-    return due;
-  } else {
-    const perDay = amount / daysInThisMonth;
-    let worked = 0;
-    let d = new Date(start);
-    while (d <= today) {
-      const key = d.toISOString().split("T")[0];
-      const status = attendanceMap[key];
-      if (status !== "absent") worked++;
-      d.setDate(d.getDate() + 1);
-    }
-    return worked * perDay;
-  }
-}
-
-function calculateSalary(employee, attendanceMap, year, month) {
-  if (!employee.attendance_enabled) return { totalSalary: 0, payableSalary: 0, present: 0, absent: 0, paidLeave: 0 };
-
-  const daysInMonth = getDaysInMonth(year, month);
-  const amount = Number(employee.salary_amount) || 0;
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-
-  let present = 0, absent = 0, paidLeave = 0;
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateObj = new Date(year, month, d);
-    if (dateObj > today) continue;
-
-    const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const status = attendanceMap[key];
-    if (status === "absent") absent++;
-    else if (status === "paid_leave") paidLeave++;
-    else present++;
-  }
-
-  if (employee.salary_type === "monthly") {
-    const perDay = amount / daysInMonth;
-    return { totalSalary: amount, payableSalary: (present + paidLeave) * perDay, present, absent, paidLeave };
-  } else {
-    const payable = (present + paidLeave) * amount;
-    return { totalSalary: payable, payableSalary: payable, present, absent, paidLeave };
-  }
-}
 
 function EmployeeDetails() {
   const { id } = useParams();
@@ -116,15 +35,12 @@ function EmployeeDetails() {
   }, [id]);
 
   const loadAttendance = useCallback(async () => {
-    const { start, end } = getMonthDateRange(currentYear, currentMonth);
     const { data } = await supabase
       .from("employee_attendance")
       .select("*")
-      .eq("employee_id", id)
-      .gte("date", start.toISOString().split("T")[0])
-      .lte("date", end.toISOString().split("T")[0]);
+      .eq("employee_id", id);
     setAttendance(data || []);
-  }, [id, currentYear, currentMonth]);
+  }, [id]);
 
   const loadPayments = useCallback(async () => {
     const { data } = await supabase
@@ -161,8 +77,8 @@ function EmployeeDetails() {
   const totalPayments = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const adjustedDue = cumulativeDue - totalPayments;
   const salaryData = employee
-    ? calculateSalary(employee, attendanceMap, currentYear, currentMonth)
-    : { totalSalary: 0, payableSalary: 0, present: 0, absent: 0, paidLeave: 0 };
+    ? calculateMonthSalary(employee, attendanceMap, currentYear, currentMonth)
+    : { totalSalary: 0, payableSalary: 0, present: 0, absent: 0, paidLeave: 0, halfDay: 0, worked: 0 };
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay();
@@ -282,7 +198,7 @@ function EmployeeDetails() {
               </p>
             </div>
             <button
-              onClick={() => navigate(`/admin/employees/${id}/summary`)}
+              onClick={() => navigate(`/admin/employees/${id}/summary?year=${currentYear}&month=${currentMonth + 1}`)}
               className="px-4 py-2 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--text-secondary)] font-bold text-xs uppercase tracking-wider hover:border-[var(--primary)] hover:text-[var(--primary)] transition cursor-pointer outline-none"
             >
               Summary
@@ -361,6 +277,7 @@ function EmployeeDetails() {
               let bg = "";
               if (explicitStatus === "absent") bg = "bg-[#fde8e2] text-[#e76f51]";
               else if (explicitStatus === "paid_leave") bg = "bg-[#e9ecef] text-[#636e72]";
+              else if (explicitStatus === "half_day") bg = "bg-[#fdecc8] text-[#b45309]";
               else if (explicitStatus === "present" || isDefaultPresent) bg = "bg-[#d8f3e3] text-[#2d6a4f]";
 
               return (
@@ -389,6 +306,10 @@ function EmployeeDetails() {
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-[#636e72]" />
               <span className="text-[10px] text-[var(--text-muted)] font-medium">Paid Leave</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#b45309]" />
+              <span className="text-[10px] text-[var(--text-muted)] font-medium">Half Day</span>
             </div>
           </div>
         </div>
@@ -423,6 +344,10 @@ function EmployeeDetails() {
               <div className="flex justify-between items-center py-2">
                 <span className="text-sm text-[var(--text-secondary)] font-medium">Paid Leave</span>
                 <span className="text-sm font-bold text-[#636e72]">{salaryData.paidLeave}</span>
+              </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="text-sm text-[var(--text-secondary)] font-medium">Half Day</span>
+                <span className="text-sm font-bold text-[#b45309]">{salaryData.halfDay}</span>
               </div>
             </div>
           </div>
@@ -467,6 +392,7 @@ function EmployeeDetails() {
               {[
                 { value: "present", label: "Present", color: "text-[#2d6a4f]", borderColor: "border-[#2d6a4f]" },
                 { value: "absent", label: "Absent", color: "text-[#e76f51]", borderColor: "border-[#e76f51]" },
+                { value: "half_day", label: "Half Day", color: "text-[#b45309]", borderColor: "border-[#b45309]" },
                 { value: "paid_leave", label: "Paid Leave", color: "text-[#636e72]", borderColor: "border-[#636e72]" },
               ].map((opt) => {
                 const explicitStatus = attendanceMap[selectedDate.dateStr];
