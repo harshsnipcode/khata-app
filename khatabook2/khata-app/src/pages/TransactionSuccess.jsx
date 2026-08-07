@@ -37,7 +37,7 @@ function TransactionSuccess() {
 
         <div className="grid gap-3 relative z-10">
           <button
-            onClick={() => navigate(`/customer/${id}`, { replace: true })}
+            onClick={() => navigate(-1)}
             className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black py-4.5 rounded-2xl text-xs uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-lg shadow-emerald-500/5 cursor-pointer outline-none"
           >
             View Customer

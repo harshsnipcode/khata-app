@@ -284,6 +284,7 @@ function TransactionEntry() {
         }
 
         navigate(`/customer/${id}/transaction/success`, {
+          replace: true,
           state: {
             amount: finalAmount,
             type,
