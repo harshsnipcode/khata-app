@@ -4,6 +4,9 @@ import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import ReportTabs from "../components/ReportTabs";
 import { localDateKey } from "../lib/dateKey";
 import { calculateProfitMetrics } from "../lib/profitReport";
+import { getSavedReportFilters, saveReportFilters } from "../lib/reportFilters";
+
+const REPORT_FILTERS_KEY = "profit-report-filters";
 
 function getDateStr(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -32,10 +35,16 @@ function ProfitReport() {
   const [productGroups, setProductGroups] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [groupBy, setGroupBy] = useState("products");
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(today);
+  const [savedFilters] = useState(() => getSavedReportFilters(REPORT_FILTERS_KEY, {
+    searchTerm: "",
+    groupBy: "products",
+    startDate: today,
+    endDate: today,
+  }));
+  const [searchTerm, setSearchTerm] = useState(savedFilters.searchTerm);
+  const [groupBy, setGroupBy] = useState(savedFilters.groupBy);
+  const [startDate, setStartDate] = useState(savedFilters.startDate);
+  const [endDate, setEndDate] = useState(savedFilters.endDate);
   const [showDurationModal, setShowDurationModal] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -56,6 +65,10 @@ function ProfitReport() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    saveReportFilters(REPORT_FILTERS_KEY, { searchTerm, groupBy, startDate, endDate });
+  }, [searchTerm, groupBy, startDate, endDate]);
 
   useEffect(() => {
     const channel = supabase

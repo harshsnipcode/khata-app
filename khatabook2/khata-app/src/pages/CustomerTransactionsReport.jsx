@@ -5,6 +5,9 @@ import ReportTabs from "../components/ReportTabs";
 import { localDateKey } from "../lib/dateKey";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
+import { getSavedReportFilters, saveReportFilters } from "../lib/reportFilters";
+
+const REPORT_FILTERS_KEY = "customer-transactions-report-filters";
 
 function formatINR(n) {
   return new Intl.NumberFormat("en-IN").format(Math.round(n));
@@ -23,15 +26,24 @@ function CustomerTransactionsReport() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [savedFilters] = useState(() => getSavedReportFilters(REPORT_FILTERS_KEY, {
+    searchTerm: "",
+    startDate: "",
+    endDate: "",
+    durationFilter: "single_day",
+    singleDay: getDateStr(new Date()),
+    paymentFilter: null,
+  }));
+
+  const [searchTerm, setSearchTerm] = useState(savedFilters.searchTerm);
+  const [startDate, setStartDate] = useState(savedFilters.startDate);
+  const [endDate, setEndDate] = useState(savedFilters.endDate);
   const [showDurationModal, setShowDurationModal] = useState(false);
-  const [durationFilter, setDurationFilter] = useState("single_day");
-  const [singleDay, setSingleDay] = useState(getDateStr(new Date()));
+  const [durationFilter, setDurationFilter] = useState(savedFilters.durationFilter);
+  const [singleDay, setSingleDay] = useState(savedFilters.singleDay);
 
   const [businessName] = useState(() => localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy");
-  const [paymentFilter, setPaymentFilter] = useState(null);
+  const [paymentFilter, setPaymentFilter] = useState(savedFilters.paymentFilter);
 
   const params = new URLSearchParams(location.search);
   const customerFilterId = Number(params.get("customerId")) || "";
@@ -48,6 +60,10 @@ function CustomerTransactionsReport() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    saveReportFilters(REPORT_FILTERS_KEY, { searchTerm, startDate, endDate, durationFilter, singleDay, paymentFilter });
+  }, [searchTerm, startDate, endDate, durationFilter, singleDay, paymentFilter]);
 
   useEffect(() => {
     const channel = supabase
