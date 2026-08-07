@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
-import { getMonthDateRange, calculateMonthSalary, cumulativeDueSalary } from "../lib/salary";
+import { calculateMonthSalary, cumulativeDueSalary } from "../lib/salary";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import FloatingButton from "../components/FloatingButton";
@@ -41,13 +41,9 @@ function StaffDashboard() {
     const { data: emps } = await supabase.from("employees").select("*").order("created_at", { ascending: false });
     setEmployees(emps || []);
 
-    const { start, end } = getMonthDateRange(currentYear, currentMonth);
-
     const { data: att } = await supabase
       .from("employee_attendance")
-      .select("*")
-      .gte("date", start.toISOString().split("T")[0])
-      .lte("date", end.toISOString().split("T")[0]);
+      .select("*");
 
     const { data: pays } = await supabase.from("salary_payments").select("employee_id, amount");
     const paymentMap = {};
@@ -66,7 +62,7 @@ function StaffDashboard() {
     setAttendanceData(map);
     setTodayAttendance(todayMap);
     setLoading(false);
-  }, [currentYear, currentMonth, todayStr]);
+  }, [todayStr]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
