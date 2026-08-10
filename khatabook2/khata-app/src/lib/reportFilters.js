@@ -1,3 +1,22 @@
+function getLocalDateKey(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function createDefaultCustomerTransactionsFilters(today = new Date()) {
+  const date = getLocalDateKey(today);
+  return {
+    searchTerm: "",
+    startDate: "",
+    endDate: "",
+    durationFilter: "single_day",
+    singleDay: date,
+    paymentFilter: null,
+  };
+}
+
 function getSavedReportFilters(key, defaults) {
   try {
     const raw = localStorage.getItem(key);
@@ -16,4 +35,4 @@ function saveReportFilters(key, filters) {
   }
 }
 
-export { getSavedReportFilters, saveReportFilters };
+export { getSavedReportFilters, saveReportFilters, createDefaultCustomerTransactionsFilters };

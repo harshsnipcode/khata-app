@@ -1,9 +1,15 @@
 export const REIMINDER_SESSION_STORAGE_KEY = "khata_bulk_reminder_session_v1";
 
-export function getReminderSessionSnapshot() {
-  if (typeof window === "undefined" || !window.sessionStorage) return null;
+function getSessionStorage() {
+  if (typeof globalThis !== "undefined" && globalThis.sessionStorage) return globalThis.sessionStorage;
+  return null;
+}
 
-  const raw = window.sessionStorage.getItem(REIMINDER_SESSION_STORAGE_KEY);
+export function getReminderSessionSnapshot() {
+  const storage = getSessionStorage();
+  if (!storage) return null;
+
+  const raw = storage.getItem(REIMINDER_SESSION_STORAGE_KEY);
   if (!raw) return null;
 
   try {
@@ -34,7 +40,8 @@ export function getReminderSessionSnapshot() {
 }
 
 export function saveReminderSessionSnapshot(snapshot) {
-  if (typeof window === "undefined" || !window.sessionStorage) return;
+  const storage = getSessionStorage();
+  if (!storage) return;
 
   const normalized = {
     storageKey: REIMINDER_SESSION_STORAGE_KEY,
@@ -50,10 +57,11 @@ export function saveReminderSessionSnapshot(snapshot) {
     startedAt: Number.isFinite(snapshot?.startedAt) ? snapshot.startedAt : Date.now(),
   };
 
-  window.sessionStorage.setItem(REIMINDER_SESSION_STORAGE_KEY, JSON.stringify(normalized));
+  storage.setItem(REIMINDER_SESSION_STORAGE_KEY, JSON.stringify(normalized));
 }
 
 export function clearReminderSessionSnapshot() {
-  if (typeof window === "undefined" || !window.sessionStorage) return;
-  window.sessionStorage.removeItem(REIMINDER_SESSION_STORAGE_KEY);
+  const storage = getSessionStorage();
+  if (!storage) return;
+  storage.removeItem(REIMINDER_SESSION_STORAGE_KEY);
 }

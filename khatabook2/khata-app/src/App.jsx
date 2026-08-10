@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { supabase } from "./lib/supabase";
 import { recordRouteChange } from "./lib/perf";
@@ -51,6 +51,21 @@ import ErrorBoundary from "./lib/ErrorBoundary";
 function AppShell() {
   const [ready, setReady] = useState(false);
   const location = useLocation();
+  const previousPathRef = useRef(null);
+
+  useEffect(() => {
+    const previousPath = previousPathRef.current;
+    const currentPath = location.pathname;
+
+    if (
+      (currentPath === "/admin/home" || currentPath === "/employee/home") &&
+      previousPath === "/admin/reports/customer-transactions"
+    ) {
+      sessionStorage.setItem("customer-transactions-reset-on-home-return", "1");
+    }
+
+    previousPathRef.current = currentPath;
+  }, [location.pathname]);
 
   useEffect(() => {
     const init = async () => {

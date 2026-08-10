@@ -5,9 +5,15 @@ import ReportTabs from "../components/ReportTabs";
 import { localDateKey } from "../lib/dateKey";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { getSavedReportFilters, saveReportFilters } from "../lib/reportFilters";
+import { getSavedReportFilters, saveReportFilters, createDefaultCustomerTransactionsFilters } from "../lib/reportFilters";
 
 const REPORT_FILTERS_KEY = "customer-transactions-report-filters";
+const RESET_ON_RETURN_HOME_KEY = "customer-transactions-reset-on-home-return";
+
+function goHomeAndMarkReset(navigate, route) {
+  sessionStorage.setItem(RESET_ON_RETURN_HOME_KEY, "1");
+  navigate(route);
+}
 
 function formatINR(n) {
   return new Intl.NumberFormat("en-IN").format(Math.round(n));
@@ -26,14 +32,18 @@ function CustomerTransactionsReport() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [savedFilters] = useState(() => getSavedReportFilters(REPORT_FILTERS_KEY, {
-    searchTerm: "",
-    startDate: "",
-    endDate: "",
-    durationFilter: "single_day",
-    singleDay: getDateStr(new Date()),
-    paymentFilter: null,
-  }));
+  const [savedFilters] = useState(() => {
+    const resetRequested = typeof sessionStorage !== "undefined" && sessionStorage.getItem(RESET_ON_RETURN_HOME_KEY) === "1";
+
+    if (resetRequested) {
+      const defaults = createDefaultCustomerTransactionsFilters(new Date());
+      saveReportFilters(REPORT_FILTERS_KEY, defaults);
+      sessionStorage.removeItem(RESET_ON_RETURN_HOME_KEY);
+      return defaults;
+    }
+
+    return getSavedReportFilters(REPORT_FILTERS_KEY, createDefaultCustomerTransactionsFilters(new Date()));
+  });
 
   const [searchTerm, setSearchTerm] = useState(savedFilters.searchTerm);
   const [startDate, setStartDate] = useState(savedFilters.startDate);
@@ -255,7 +265,7 @@ function CustomerTransactionsReport() {
       <div className="max-w-4xl mx-auto p-6 space-y-5 animate-fade-in">
         {/* Back */}
         <button
-          onClick={() => navigate("/admin/home")}
+          onClick={() => goHomeAndMarkReset(navigate, "/admin/home")}
           className="flex items-center gap-2 text-[var(--text-secondary)] text-sm font-semibold hover:text-[var(--text-primary)] transition cursor-pointer outline-none"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
