@@ -6,6 +6,11 @@ import CustomerCard from "../components/CustomerCard";
 import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
 import { getLedgerLink } from "../lib/appUrl";
+import {
+  getReminderSessionSnapshot,
+  saveReminderSessionSnapshot,
+  clearReminderSessionSnapshot,
+} from "../lib/reminderSession";
 
 export default function ReminderPage() {
   const navigate = useNavigate();
@@ -13,7 +18,8 @@ export default function ReminderPage() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [selectedIds, setSelectedIds] = useState(new Set());
+  const persisted = getReminderSessionSnapshot();
+  const [selectedIds, setSelectedIds] = useState(() => new Set(persisted?.selectedIds || []));
   const [selectMode, setSelectMode] = useState(false);
   const [balanceFilter, setBalanceFilter] = useState("pending");
   const [searchQuery, setSearchQuery] = useState("");
@@ -21,8 +27,8 @@ export default function ReminderPage() {
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
   const [session, setSession] = useState(null);
-  const [sessionIndex, setSessionIndex] = useState(0);
-  const [sessionDone, setSessionDone] = useState(false);
+  const [sessionIndex, setSessionIndex] = useState(() => persisted?.sessionIndex || 0);
+  const [sessionDone, setSessionDone] = useState(() => Boolean(persisted?.sessionDone));
 
   const businessName = localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy";
 
@@ -37,6 +43,38 @@ export default function ReminderPage() {
       setLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    const snapshot = getReminderSessionSnapshot();
+    if (!snapshot?.active || !snapshot.sessionQueue?.length) {
+      return;
+    }
+
+    const restoredQueue = snapshot.sessionQueue
+      .map((id) => customers.find((customer) => customer.id === id))
+      .filter(Boolean);
+
+    if (restoredQueue.length > 0) {
+      setSession({ queue: restoredQueue });
+      const nextIndex = Math.max(0, Math.min(snapshot.sessionIndex || 0, restoredQueue.length - 1));
+      setSessionIndex(nextIndex);
+      setSessionDone(Boolean(snapshot.sessionDone));
+    }
+  }, [customers]);
+
+  useEffect(() => {
+    const snapshot = getReminderSessionSnapshot();
+    const queueIds = session ? session.queue.map((customer) => customer.id) : [];
+
+    saveReminderSessionSnapshot({
+      active: Boolean(session),
+      selectedIds: [...selectedIds],
+      sessionQueue: queueIds,
+      sessionIndex,
+      sessionDone,
+      startedAt: snapshot?.startedAt || Date.now(),
+    });
+  }, [selectedIds, session, sessionIndex, sessionDone]);
 
   const balanceMap = useMemo(() => buildBalanceMap(transactions), [transactions]);
 
@@ -66,7 +104,8 @@ export default function ReminderPage() {
 
   const startSession = () => {
     const ordered = filteredCustomers.filter((c) => selectedIds.has(c.id));
-    setSession({ queue: ordered });
+    const nextQueue = ordered.map((customer) => customer);
+    setSession({ queue: nextQueue });
     setSessionIndex(0);
     setSessionDone(false);
   };
@@ -98,6 +137,8 @@ export default function ReminderPage() {
   };
 
   const nextCustomer = () => {
+    if (!session || !session.queue.length) return;
+
     if (sessionIndex + 1 >= session.queue.length) {
       setSessionDone(true);
     } else {
@@ -111,6 +152,7 @@ export default function ReminderPage() {
     setSessionDone(false);
     setSelectedIds(new Set());
     setSelectMode(false);
+    clearReminderSessionSnapshot();
   };
 
   const remaining = session ? session.queue.length - sessionIndex - 1 : 0;
