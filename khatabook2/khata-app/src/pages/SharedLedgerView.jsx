@@ -65,18 +65,10 @@ function SharedLedgerView() {
     load();
   }, [id]);
 
-  const totals = useMemo(() => {
-    return transactions.reduce(
-      (acc, txn) => {
-        if (txn.type === "got") acc.got += Number(txn.amount);
-        else acc.gave += Number(txn.amount);
-        return acc;
-      },
-      { got: 0, gave: 0 }
-    );
-  }, [transactions]);
-
-  const balance = totals.gave - totals.got;
+  const balance = transactions.reduce(
+    (acc, txn) => acc + (txn.type === "got" ? -Number(txn.amount) : Number(txn.amount)),
+    0
+  );
   const balanceLabel = balance >= 0 ? "You Have To Pay" : "You Will Give";
   const balanceAmount = Math.abs(balance);
 
@@ -181,17 +173,6 @@ function SharedLedgerView() {
             </p>
           </div>
 
-          {/* Summary */}
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-[var(--background)] border border-[var(--border)] p-4">
-              <p className="text-[var(--text-secondary)] text-[10px] font-black uppercase tracking-wider">Total Gave</p>
-              <p className="text-[var(--danger)] text-xl font-black mt-1">₹{new Intl.NumberFormat("en-IN").format(totals.gave)}</p>
-            </div>
-            <div className="rounded-2xl bg-[var(--background)] border border-[var(--border)] p-4">
-              <p className="text-[var(--text-secondary)] text-[10px] font-black uppercase tracking-wider">Total Received</p>
-              <p className="text-[var(--success)] text-xl font-black mt-1">₹{new Intl.NumberFormat("en-IN").format(totals.got)}</p>
-            </div>
-          </div>
         </div>
 
         {/* Transaction History */}
@@ -225,7 +206,7 @@ function SharedLedgerView() {
                             ))}
                           </div>
                         ) : (
-                          <p className="text-[var(--text-primary)] font-semibold text-sm mt-1.5">{itemCount > 0 ? `${itemCount} items` : "Entry"}</p>
+                          <p className="text-[var(--text-primary)] font-semibold text-sm mt-1.5">{itemCount > 0 ? `${itemCount} items` : (isGot ? "Payment" : "Entry")}</p>
                         )}
                         {txn.description && (
                           <p className="text-[10px] text-[var(--text-secondary)] font-medium mt-1 break-words">
