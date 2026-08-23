@@ -57,6 +57,12 @@ function ProductDetails() {
     return { stockValue };
   }, [product]);
 
+  const canEditEntries = can("edit_product");
+  const openEntryEditor = (t) => {
+    if (!canEditEntries) return;
+    navigate(`/product/${product.id}/${t.type === 'stock_in' ? 'stock-in' : 'stock-out'}/${t.id}/edit`);
+  };
+
   if (loading) return <div className="min-h-screen bg-[var(--background)] flex items-center justify-center text-[var(--text-secondary)] font-bold uppercase tracking-widest animate-pulse">Loading Product...</div>;
   if (!product) return <div className="min-h-screen bg-[var(--background)] p-6 text-[var(--danger)] font-bold">Product Not Found</div>;
 
@@ -136,7 +142,12 @@ function ProductDetails() {
                <div className="card border-dashed rounded-3xl p-12 text-center text-[var(--text-secondary)] font-bold uppercase tracking-widest">No transactions for this product</div>
              ) : (
                transactions.map(t => (
-                 <div key={t.id} className="card rounded-2xl p-4 flex items-center justify-between hover:card-hover transition shadow-sm">
+                 <div
+                   key={t.id}
+                   onClick={() => openEntryEditor(t)}
+                   role={canEditEntries ? "button" : undefined}
+                   className={`card rounded-2xl p-4 flex items-center justify-between hover:card-hover transition shadow-sm ${canEditEntries ? "cursor-pointer active:scale-[0.99]" : ""}`}
+                 >
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${t.type === 'stock_in' ? 'bg-[var(--primary-light)] text-[var(--primary)]' : 'bg-[var(--secondary)] text-[var(--danger)]'}`}>
                         {t.type === 'stock_in' ? '↑' : '↓'}

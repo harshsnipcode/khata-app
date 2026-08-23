@@ -8,10 +8,6 @@ export function normalizeImportName(value) {
     .toLocaleLowerCase();
 }
 
-export function isIgnoredOwnShopCustomer(value) {
-  return normalizeImportName(value).replace(/\s+/g, "") === "shivshankardairy";
-}
-
 export function normalizeProductName(value) {
   return normalizeImportName(value)
     .replace(/\u2044/g, "/")

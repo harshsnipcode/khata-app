@@ -4,11 +4,14 @@ import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/off
 import { requirePermission } from "../lib/permissions";
 
 function StockEntry() {
-  const { id } = useParams();
+  const { id, txId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const type = location.pathname.endsWith("/stock-in") ? "stock_in" : "stock_out";
+  const type = location.pathname.includes("/stock-in") ? "stock_in" : "stock_out";
+  const isEdit = Boolean(txId);
   const [product, setProduct] = useState(null);
+  const [entry, setEntry] = useState(null);
+  const [entryError, setEntryError] = useState("");
   const [quantity, setQuantity] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -24,9 +27,24 @@ function StockEntry() {
     fetchProduct();
   }, [id, type]);
 
+  useEffect(() => {
+    if (!txId) return;
+    const fetchEntry = async () => {
+      const { data, error } = await supabase.from("product_transactions").select("*").eq("id", txId).maybeSingle();
+      if (error || !data) {
+        setEntryError(error?.message || "Stock entry not found.");
+        return;
+      }
+      setEntry(data);
+      setQuantity(String(data.quantity));
+      setNotes(data.notes || "");
+    };
+    fetchEntry();
+  }, [txId]);
+
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!requirePermission("stock_entry")) return;
+    if (!requirePermission(isEdit ? "edit_product" : "stock_entry")) return;
     if (!quantity) {
       setError("Please enter quantity.");
       return;
@@ -35,9 +53,39 @@ function StockEntry() {
     setError("");
 
     try {
+      const qtyNum = Number(quantity);
+
+      if (isEdit) {
+        const oldQty = Number(entry.quantity);
+        const currentStock = Number(product.stock_quantity);
+
+        // Replace the old entry's stock effect with the new one.
+        // Stock In: New Stock = Current - Old + New
+        // Stock Out: New Stock = Current + Old - New
+        const newStock = entry.type === "stock_in"
+          ? currentStock - oldQty + qtyNum
+          : currentStock + oldQty - qtyNum;
+
+        // 1. Update the existing history record in place (no second card).
+        const { error: tError } = await offlineSupabase
+          .from("product_transactions")
+          .update({ quantity: qtyNum, notes })
+          .eq("id", txId);
+        if (tError) throw tError;
+
+        // 2. Apply only the difference to the product stock.
+        const { error: pError } = await offlineSupabase.from("products").update({
+          stock_quantity: newStock,
+          updated_at: new Date().toISOString()
+        }).eq("id", id);
+        if (pError) throw pError;
+
+        navigate(`/product/${id}`);
+        return;
+      }
+
       const user = await supabase.auth.getUser();
       const created_by = user?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
-      const qtyNum = Number(quantity);
       const priceNum = type === 'stock_in' ? Number(product.purchase_price) : Number(product.sale_price);
 
       // 1. Record Transaction
@@ -76,8 +124,18 @@ function StockEntry() {
 
   if (!product) return <div className="min-h-screen bg-[var(--background)] flex items-center justify-center text-[var(--text-secondary)] font-bold uppercase tracking-widest animate-pulse">Initializing...</div>;
 
+  if (isEdit && !entry) {
+    return (
+      <div className="min-h-screen bg-[var(--background)] flex items-center justify-center text-[var(--text-secondary)] font-bold uppercase tracking-widest animate-pulse">
+        {entryError ? <span className="text-[var(--danger)] animate-none">Stock entry not found</span> : "Loading Entry..."}
+      </div>
+    );
+  }
+
   const colorClass = type === 'stock_in' ? 'text-emerald-400' : 'text-rose-400';
-  const label = type === 'stock_in' ? 'Stock In (+)' : 'Stock Out (-)';
+  const label = isEdit
+    ? `Edit ${type === 'stock_in' ? 'Stock In (+)' : 'Stock Out (-)'}`
+    : type === 'stock_in' ? 'Stock In (+)' : 'Stock Out (-)';
 
   return (
     <div className="min-h-screen bg-[var(--background)] p-6 text-[var(--text-primary)] relative overflow-hidden select-none animate-fade-in">

@@ -155,6 +155,8 @@ function AppShell() {
       <Route path="/product/:id/edit" element={<EditProductPage />} />
       <Route path="/product/:id/stock-in" element={<StockEntry />} />
       <Route path="/product/:id/stock-out" element={<StockEntry />} />
+      <Route path="/product/:id/stock-in/:txId/edit" element={<StockEntry />} />
+      <Route path="/product/:id/stock-out/:txId/edit" element={<StockEntry />} />
       <Route path="/product/:id/stock-success" element={<StockSuccess />} />
       <Route path="/catalogue/reports" element={<InventoryReport />} />
       <Route path="/share/customer/:id" element={<SharedLedgerView />} />

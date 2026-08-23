@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as XLSX from "xlsx";
 import {
-  isIgnoredOwnShopCustomer,
   isCustomerSectionHeader,
   normalizeImportName,
   normalizeProductName,
@@ -45,23 +44,6 @@ test("validates headers without making matching case-sensitive", () => {
   assert.throws(() => parseImportMatrix([["Party", "P-1"]]), /First column/);
   assert.throws(() => parseImportMatrix([["Customer"]]), /product column/);
   assert.throws(() => parseImportMatrix([["Customer", "P-1", " p-1 "]]), /unique/);
-});
-
-test("recognizes the own-shop Excel customer exception", () => {
-  for (const value of [
-    "Shiv Shankar Dairy",
-    "SHIV SHANKAR DAIRY",
-    "shiv shankar dairy",
-    "SHIVSHANKARDAIRY",
-    "ShivShankarDairy",
-    "shivshankardairy",
-    " SHIV SHANKAR DAIRY ",
-  ]) {
-    assert.equal(isIgnoredOwnShopCustomer(value), true);
-  }
-
-  assert.equal(isIgnoredOwnShopCustomer("Shankar Dairy"), false);
-  assert.equal(isIgnoredOwnShopCustomer("Rahul"), false);
 });
 
 test("normalizes half-character product name variants", () => {
