@@ -9,11 +9,11 @@ test("recognizes TOTAL labels case-insensitively", () => {
   assert.equal(isTotalSummaryLabel("Grand Total"), false);
 });
 
-test("excludes the first block first data row and TOTAL rows only from the processing view", () => {
+test("keeps the first customer row and excludes TOTAL rows only from the processing view", () => {
   const parsed = {
     headers: ["CUSTOMER", "Aamras", "Paneer", "TOTAL"],
     rows: [
-      { rowNumber: 2, customerName: "Harsh Sharma", values: [2, 1, 3] },
+      { rowNumber: 2, customerName: "SHIV SHANKAR DAIRY", values: [2, 1, 3] },
       { rowNumber: 3, customerName: "Rahul Sharma", values: [5, 2, 7] },
       { rowNumber: 4, customerName: "TOTAL", values: [7, 3, 10] },
     ],
@@ -28,6 +28,7 @@ test("excludes the first block first data row and TOTAL rows only from the proce
   const processing = excludeTotalSummaries(parsed);
   assert.deepEqual(processing.productHeaders, ["Aamras", "Paneer"]);
   assert.deepEqual(processing.rows.map((row) => [row.customerName, ...row.values]), [
+    ["SHIV SHANKAR DAIRY", 2, 1],
     ["Rahul Sharma", 5, 2],
   ]);
 
@@ -66,6 +67,7 @@ test("excludes repeated customer section header rows from the processing view", 
   const processing = excludeTotalSummaries(parsed);
   assert.deepEqual(processing.productHeaders, ["Aamras", "Paneer"]);
   assert.deepEqual(processing.rows.map((row) => [row.customerName, ...row.values]), [
+    ["Harsh Sharma", 2, 1],
     ["Rahul Sharma", 5, 2],
     ["Priya Shah", 1, ""],
   ]);

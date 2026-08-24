@@ -3,6 +3,7 @@ import test from "node:test";
 import * as XLSX from "xlsx";
 import {
   isCustomerSectionHeader,
+  normalizeCustomerImportName,
   normalizeImportName,
   normalizeProductName,
   parseExcelWorkbook,
@@ -37,6 +38,9 @@ test("positive and negative numeric cells become quantities and invalid cells ar
 
 test("validates headers without making matching case-sensitive", () => {
   assert.equal(normalizeImportName("  Rahul   Dairy "), "rahul dairy");
+  for (const value of ["SHIV SHANKAR DAIRY", "Shiv Shankar Dairy", "SHIVSHANKARDAIRY", "ShivShankarDairy"]) {
+    assert.equal(normalizeCustomerImportName(value), "shivshankardairy");
+  }
   for (const value of ["CUSTOMER", "Customer", "customer", "CUSTOMERS", "Customers", "customers", "  customers  "]) {
     assert.equal(isCustomerSectionHeader(value), true);
   }

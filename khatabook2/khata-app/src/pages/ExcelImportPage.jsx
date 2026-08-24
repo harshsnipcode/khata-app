@@ -11,7 +11,7 @@ import { collectExcelRowItems } from "../lib/excelImportGrouping";
 import { excludeTotalSummaries } from "../lib/excelImportValidation";
 import {
   hashFile,
-  normalizeImportName,
+  normalizeCustomerImportName,
   normalizeProductName,
   parseExcelWorkbook,
 } from "../lib/excelImport";
@@ -126,7 +126,7 @@ function ExcelImportPage() {
       if (productResult.error) throw productResult.error;
       if (priceResult.error) throw priceResult.error;
 
-      const customerMap = new Map((customerResult.data || []).map((item) => [normalizeImportName(item.name), item]));
+      const customerMap = new Map((customerResult.data || []).map((item) => [normalizeCustomerImportName(item.name), item]));
       const productMap = new Map((productResult.data || []).map((item) => [normalizeProductName(item.name), item]));
       const priceMap = new Map((priceResult.data || []).map((item) => [
         `${item.customer_id}:${item.product_id}`,
@@ -145,7 +145,7 @@ function ExcelImportPage() {
       const unknownCustomers = [...new Set(
         importRows
           .map((row) => row.customerName)
-          .filter((name) => name && !customerMap.has(normalizeImportName(name))),
+          .filter((name) => name && !customerMap.has(normalizeCustomerImportName(name))),
       )];
       const errors = [];
       const processedCustomers = new Set();
@@ -155,7 +155,7 @@ function ExcelImportPage() {
       let totalQuantity = 0;
 
       for (const row of importRows) {
-        const customer = customerMap.get(normalizeImportName(row.customerName));
+        const customer = customerMap.get(normalizeCustomerImportName(row.customerName));
         const groupedRow = collectExcelRowItems({
           row,
           customer,

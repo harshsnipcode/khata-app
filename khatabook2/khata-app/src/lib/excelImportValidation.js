@@ -17,17 +17,12 @@ export function excludeTotalSummaries(parsed) {
   const includedColumnIndexes = sourceProductHeaders
     .map((header, index) => ({ header, index }))
     .filter(({ header }) => !isTotalSummaryLabel(header));
-  let firstBlockDataRowSkipped = false;
 
   return {
     productHeaders: includedColumnIndexes.map(({ header }) => header),
     rows: parsed.rows
       .filter((row) => {
         if (isCustomerSectionHeader(row.customerName)) return false;
-        if (!firstBlockDataRowSkipped) {
-          firstBlockDataRowSkipped = true;
-          return false;
-        }
         if (isTotalSummaryLabel(row.customerName)) return false;
         return true;
       })
