@@ -7,6 +7,7 @@ import {
   createTempId,
   deleteLocalRows,
   enqueueOperation,
+  generateUUID,
   getAll,
   isOnline,
   rewriteForeignKeys,
@@ -128,6 +129,10 @@ function refreshSelectCacheInBackground(ops) {
   }, 0);
 }
 
+function needsSyncOperationId(table) {
+  return table === "transactions" || table === "transaction_items";
+}
+
 function buildMutationRows(table, payload) {
   const rows = Array.isArray(payload) ? payload : [payload];
   const now = new Date().toISOString();
@@ -135,6 +140,9 @@ function buildMutationRows(table, payload) {
     ...row,
     id: row?.id ?? createTempId(),
     created_at: row?.created_at || now,
+    ...(needsSyncOperationId(table)
+      ? { sync_operation_id: row?.sync_operation_id || generateUUID() }
+      : {}),
     // Mark as an unsynced local edit so background server reads/snapshots
     // cannot overwrite it until the queued operation is confirmed.
     synced: false,

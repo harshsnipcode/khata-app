@@ -317,6 +317,37 @@ export async function purgeUnsupportedQueueOps() {
   return unsupported;
 }
 
+export async function ensureQueueInsertIdempotencyKeys() {
+  const queue = readQueue();
+  let changed = false;
+  const nextQueue = queue.map((item) => {
+    if (
+      item.method !== "insert" ||
+      (item.table !== "transactions" && item.table !== "transaction_items")
+    ) {
+      return item;
+    }
+
+    let itemChanged = false;
+    const payloadRows = Array.isArray(item.payload) ? item.payload : [item.payload];
+    const nextRows = payloadRows.map((row) => {
+      if (!row || typeof row !== "object" || row.sync_operation_id) return row;
+      changed = true;
+      itemChanged = true;
+      return { ...row, sync_operation_id: generateUUID() };
+    });
+
+    return {
+      ...item,
+      payload: Array.isArray(item.payload) ? nextRows : nextRows[0],
+      updated_at: itemChanged ? new Date().toISOString() : item.updated_at,
+    };
+  });
+
+  if (changed) writeQueue(nextQueue);
+  return nextQueue;
+}
+
 export function cancelQueuedDeletes(table, entityId) {
   const targetId = String(entityId);
   writeQueue(readQueue().filter((item) => {

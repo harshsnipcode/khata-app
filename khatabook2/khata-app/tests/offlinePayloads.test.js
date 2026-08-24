@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { sanitizeTablePayload, TABLE_COLUMNS } from "../src/lib/offline/tableSchemas.js";
 import {
+  ensureQueueInsertIdempotencyKeys,
   enqueueOperation,
   getAll,
   getPendingQueue,
@@ -34,6 +35,7 @@ test("transaction sync payload strips every local and unknown field", () => {
     updated_at: "not-in-the-checked-in-table",
     recycle_bin: true,
     local_uuid: "local-only",
+    sync_operation_id: "txn-op-1",
     synced: false,
     deleted_locally: false,
     __local_updated_at: "cache-only",
@@ -45,6 +47,7 @@ test("transaction sync payload strips every local and unknown field", () => {
     type: "gave",
     amount: 250,
     created_at: "2026-07-12T10:00:00.000Z",
+    sync_operation_id: "txn-op-1",
   });
 });
 
@@ -57,6 +60,7 @@ test("transaction item payload strips hydrated products and cache metadata", () 
     price: 99,
     products: { id: 3, name: "Tea" },
     local_uuid: "cache-row",
+    sync_operation_id: "item-op-1",
   });
 
   assert.deepEqual(payload, {
@@ -65,6 +69,7 @@ test("transaction item payload strips hydrated products and cache metadata", () 
     product_id: 3,
     quantity: 2,
     price: 99,
+    sync_operation_id: "item-op-1",
   });
 });
 
@@ -197,6 +202,38 @@ test("stale queue operations for unsupported tables are purged before sync", asy
   const remaining = await getPendingQueue();
   assert.equal(remaining.length, 1, "valid customer op survives the purge");
   assert.equal(remaining[0].table, "customers");
+});
+
+test("legacy pending transaction inserts receive idempotency keys before sync", async () => {
+  installLocalStorageMock();
+
+  enqueueOperation({
+    table: "transactions",
+    method: "insert",
+    payload: { id: -1, customer_id: 26, type: "got", amount: 100 },
+    filters: [],
+    options: {},
+    selectColumns: "*",
+  });
+  enqueueOperation({
+    table: "transaction_items",
+    method: "insert",
+    payload: [{ id: -2, transaction_id: -1, product_id: 3, quantity: 1, price: 100 }],
+    filters: [],
+    options: {},
+    selectColumns: "*",
+  });
+
+  const upgraded = await ensureQueueInsertIdempotencyKeys();
+
+  assert.equal(upgraded.length, 2);
+  assert.equal(typeof upgraded[0].payload.sync_operation_id, "string");
+  assert.equal(typeof upgraded[1].payload[0].sync_operation_id, "string");
+  assert.notEqual(upgraded[0].payload.sync_operation_id, upgraded[1].payload[0].sync_operation_id);
+
+  const stable = await ensureQueueInsertIdempotencyKeys();
+  assert.equal(stable[0].payload.sync_operation_id, upgraded[0].payload.sync_operation_id);
+  assert.equal(stable[1].payload[0].sync_operation_id, upgraded[1].payload[0].sync_operation_id);
 });
 
 test("server-empty import recycle snapshot clears only legacy excel_import entries", async () => {

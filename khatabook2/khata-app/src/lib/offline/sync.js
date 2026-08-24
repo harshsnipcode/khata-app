@@ -2,6 +2,7 @@ import { supabase } from "../supabase";
 import {
   OFFLINE_TABLES,
   SERVER_SNAPSHOT_REPLACE_TABLES,
+  ensureQueueInsertIdempotencyKeys,
   getPendingQueue,
   isOnline,
   purgeUnsupportedQueueOps,
@@ -26,6 +27,21 @@ function isTemporaryId(id) {
   return typeof id === "number" && id < 0;
 }
 
+function getInsertConflictColumn(table, payload) {
+  if (table !== "transactions" && table !== "transaction_items") return null;
+  const rows = Array.isArray(payload) ? payload : [payload];
+  return rows.length > 0 && rows.every((row) => row?.sync_operation_id)
+    ? "sync_operation_id"
+    : null;
+}
+
+function getOriginalRowForServerRow(originalRows, serverRow, index) {
+  if (serverRow?.sync_operation_id) {
+    return originalRows.find((row) => row?.sync_operation_id === serverRow.sync_operation_id) || originalRows[index];
+  }
+  return originalRows[index];
+}
+
 export function preparePayload(table, payload) {
   const rewritten = rewriteForeignKeys(payload);
   if (Array.isArray(rewritten)) return rewritten.map((row) => preparePayload(table, row));
@@ -45,12 +61,15 @@ async function executeOperation(operation) {
   if (operation.method === "insert") {
     const originalRows = Array.isArray(operation.payload) ? operation.payload : [operation.payload];
     const payload = preparePayload(operation.table, operation.payload);
-    query = supabase.from(operation.table).insert(payload).select(operation.selectColumns || "*");
+    const conflictColumn = getInsertConflictColumn(operation.table, payload);
+    query = conflictColumn
+      ? supabase.from(operation.table).upsert(payload, { onConflict: conflictColumn }).select(operation.selectColumns || "*")
+      : supabase.from(operation.table).insert(payload).select(operation.selectColumns || "*");
     const { data, error } = await query;
     if (error) throw error;
     const serverRows = Array.isArray(data) ? data : (data ? [data] : []);
     serverRows.forEach((serverRow, index) => {
-      const localId = originalRows[index]?.id;
+      const localId = getOriginalRowForServerRow(originalRows, serverRow, index)?.id;
       rewriteLocalId(operation.table, localId, serverRow);
     });
   // Confirmed by Supabase: authoritative write that overwrites the local
@@ -67,7 +86,7 @@ async function executeOperation(operation) {
     if (error) throw error;
     const serverRows = Array.isArray(data) ? data : (data ? [data] : []);
     serverRows.forEach((serverRow, index) => {
-      const localId = originalRows[index]?.id;
+      const localId = getOriginalRowForServerRow(originalRows, serverRow, index)?.id;
       rewriteLocalId(operation.table, localId, serverRow);
     });
     // Confirmed by Supabase: authoritative write that overwrites the local
@@ -159,6 +178,7 @@ export async function syncPendingData() {
         method: op.method,
       });
     }
+    await ensureQueueInsertIdempotencyKeys();
 
     const queue = await getPendingQueue();
     const startCount = queue.length;
