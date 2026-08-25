@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOfflineFirst, offlineSupabase } from "../lib/offline/offlineSupabase";
 import {
@@ -7,8 +7,8 @@ import {
   persistMatrixOrder,
 } from "../utils/customerOrdering";
 import { localDateKey } from "../lib/dateKey";
+import { normalizeProductName } from "../lib/excelImport";
 
-// Timezone-safe local date string helper
 const getTodayString = () => {
   const d = new Date();
   const year = d.getFullYear();
@@ -17,7 +17,6 @@ const getTodayString = () => {
   return `${year}-${month}-${day}`;
 };
 
-// Date formatter helper (timezone agnostic)
 const getFormattedDate = (dateStr) => {
   if (!dateStr) return "";
   const [year, month, day] = dateStr.split("-").map(Number);
@@ -111,7 +110,6 @@ function CataloguePreview() {
     transactionItems: [],
   });
 
-  // Fetch all required data once on mount
   useEffect(() => {
     const loadAllData = async () => {
       setLoading(true);
@@ -158,7 +156,6 @@ function CataloguePreview() {
     setOrderSaving(false);
   };
 
-  // Map customer lookups by ID and local_uuid, keyed in a stable string form.
   const customerMap = useMemo(() => {
     const map = new Map();
     data.customers.forEach((c) => {
@@ -170,7 +167,6 @@ function CataloguePreview() {
     return map;
   }, [data.customers]);
 
-  // Map product lookups by ID and local_uuid, keyed in a stable string form.
   const productMap = useMemo(() => {
     const map = new Map();
     data.products.forEach((p) => {
@@ -182,7 +178,6 @@ function CataloguePreview() {
     return map;
   }, [data.products]);
 
-  // Filter transactions for the selected date
   const filteredTxns = useMemo(() => {
     return data.transactions.filter((t) => {
       const txnDate = localDateKey(t.created_at || t.date);
@@ -190,7 +185,6 @@ function CataloguePreview() {
     });
   }, [data.transactions, selectedDate]);
 
-  // Map selected-date transactions by both numeric row ids and local_uuid IDs.
   const filteredTxnsMap = useMemo(() => {
     const map = new Map();
     filteredTxns.forEach((t) => {
@@ -202,8 +196,6 @@ function CataloguePreview() {
     return map;
   }, [filteredTxns]);
 
-  // Filter items belonging to transactions of the selected period, using the
-  // same normalized ID lookup that the grid builder uses.
   const dateItems = useMemo(() => {
     return data.transactionItems.filter((item) => {
       const itemTxnId = normalizeLookupKey(item.transaction_id);
@@ -212,55 +204,32 @@ function CataloguePreview() {
     });
   }, [data.transactionItems, filteredTxnsMap]);
 
-  // Build the distribution matrix from the COMPLETE customer/product lists,
-  // then merge in the selected date's transactions on top.
   const matrixData = useMemo(() => {
-    // grid[customerKey][productKey] = quantity sum
     const grid = {};
-
-    // 1. Start with every customer, every product quantity implicitly 0
-    // 2. Apply that day's transactions on top
     dateItems.forEach((item) => {
       const txn = filteredTxnsMap.get(normalizeLookupKey(item.transaction_id));
       if (!txn) return;
-
       const custKey = normalizeLookupKey(txn.customer_id);
       const cust = customerMap.get(custKey);
       if (!cust) return;
-
       const prodKey = normalizeLookupKey(item.product_id);
       const prod = productMap.get(prodKey);
       if (!prod) return;
-
       const rowCustomerKey = normalizeLookupKey(cust.id) || normalizeLookupKey(cust.local_uuid);
       const columnProductKey = normalizeLookupKey(prod.id) || normalizeLookupKey(prod.local_uuid);
-
       if (!grid[rowCustomerKey]) grid[rowCustomerKey] = {};
       grid[rowCustomerKey][columnProductKey] = (grid[rowCustomerKey][columnProductKey] || 0) + Number(item.quantity);
     });
-
-    // Include ALL customers, sorted by matrix_position
     const allCustomers = sortCustomersByMatrix(data.customers);
-
-    // Include ALL products, sorted alphabetically (same ordering as before)
-    const allProducts = [...data.products].sort((a, b) =>
-      (a.name || "").localeCompare(b.name || "")
-    );
-
-    return {
-      grid,
-      customers: allCustomers,
-      products: allProducts,
-    };
+    const allProducts = [...data.products].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    return { grid, customers: allCustomers, products: allProducts };
   }, [dateItems, filteredTxnsMap, customerMap, productMap, data.customers, data.products]);
 
-  // Calculate totals
   const totals = useMemo(() => {
     const { grid, customers, products } = matrixData;
-    const rowTotals = {}; // If not transposed: customerKey -> total. If transposed: productKey -> total
-    const colTotals = {}; // If not transposed: productKey -> total. If transposed: customerKey -> total
+    const rowTotals = {};
+    const colTotals = {};
     let grandTotal = 0;
-
     if (!isTransposed) {
       customers.forEach((c) => {
         const custKey = c.id || c.local_uuid;
@@ -288,16 +257,240 @@ function CataloguePreview() {
         grandTotal += pTotal;
       });
     }
-
     return { rowTotals, colTotals, grandTotal };
   }, [matrixData, isTransposed]);
 
   const isEmpty = matrixData.customers.length === 0 || matrixData.products.length === 0;
 
+  // ── Excel Stock In Import ─────────────────────────────────────────────
+  const fileInputRef = useRef(null);
+  const [excelImport, setExcelImport] = useState({
+    isOpen: false,
+    file: null,
+    preview: [],
+    importErrors: [],
+    confirmed: false,
+    saving: false,
+  });
+
+  const openExcelImport = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const closeExcelImport = useCallback(() => {
+    setExcelImport({ isOpen: false, file: null, preview: [], importErrors: [], confirmed: false, saving: false });
+  }, []);
+
+  const getProductPurchasePrice = useCallback((productId) => {
+    const product = data.products.find((p) => p.id === productId || p.local_uuid === productId);
+    return product ? Number(product.purchase_price) : 0;
+  }, [data.products]);
+
+  const doExcelStockInImport = useCallback(async (items, fileName) => {
+    if (items.length === 0) return;
+
+    const offline = offlineSupabase;
+    const userResult = await offline.auth.getUser();
+    const created_by = userResult?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
+
+    const transactionsToInsert = items.map((item) => ({
+      product_id: item.productId,
+      type: "stock_in",
+      quantity: item.totalStockIn,
+      price: getProductPurchasePrice(item.productId),
+      notes: "Excel Stock In Import",
+      created_by,
+    }));
+
+    const { error: txError } = await offline.from("product_transactions").insert(transactionsToInsert);
+    if (txError) throw txError;
+
+    for (const item of items) {
+      const { data: prod, error: fetchErr } = await offline
+        .from("products")
+        .select("stock_quantity")
+        .eq("id", item.productId)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const newStock = Number(prod.stock_quantity) + item.totalStockIn;
+      const { error: stockErr } = await offline.from("products").update({
+        stock_quantity: newStock,
+        updated_at: new Date().toISOString(),
+      }).eq("id", item.productId);
+      if (stockErr) throw stockErr;
+    }
+
+    const { error: historyError } = await offline.from("import_history").insert([{
+      filename: fileName || "Stock In Excel Import",
+      uploader: created_by,
+      file_hash: "stock-in-excel",
+      sheet_name: "Stock In",
+      parsed_preview: items.map((item) => ({
+        productName: item.productName,
+        qty: item.qty,
+        inven: item.inven,
+        totalStockIn: item.totalStockIn,
+      })),
+      import_statistics: {
+        productsImported: items.length,
+        totalStockIn: items.reduce((sum, item) => sum + item.totalStockIn, 0),
+        transactionsCreated: items.length,
+      },
+      validation_report: {},
+      status: "imported",
+    }]);
+    if (historyError) throw historyError;
+  }, [getProductPurchasePrice]);
+
+  const confirmExcelImport = useCallback(async () => {
+    if (!excelImport.preview || excelImport.preview.length === 0) return;
+    setExcelImport((prev) => ({ ...prev, saving: true }));
+    try {
+      await doExcelStockInImport(excelImport.preview, excelImport.file?.name);
+      setExcelImport((prev) => ({ ...prev, saving: false, confirmed: true }));
+      setTimeout(() => {
+        closeExcelImport();
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }, 1200);
+    } catch (err) {
+      setExcelImport((prev) => ({
+        ...prev,
+        saving: false,
+        importErrors: [...(prev.importErrors || []), err.message || "Import failed"],
+      }));
+    }
+  }, [excelImport.preview, excelImport.file, doExcelStockInImport, closeExcelImport]);
+
+  const cancelExcelImport = useCallback(() => {
+    closeExcelImport();
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [closeExcelImport]);
+
+  const handleFileSelect = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!/\.(xlsx|xls)$/i.test(file.name)) {
+      setExcelImport({ isOpen: true, file: null, preview: [], importErrors: ["Please upload an .xlsx or .xls file."], confirmed: false, saving: false });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const arrayBuffer = evt.target?.result;
+      if (!arrayBuffer) return;
+
+      let workbook, XLSX;
+      try {
+        XLSX = await import("xlsx");
+        workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+      } catch {
+        setExcelImport({ isOpen: true, file: null, preview: [], importErrors: ["The selected file is not a readable Excel workbook."], confirmed: false, saving: false });
+        return;
+      }
+
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        setExcelImport({ isOpen: true, file: null, preview: [], importErrors: ["Header row missing."], confirmed: false, saving: false });
+        return;
+      }
+      const worksheet = workbook.Sheets[sheetName];
+      const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, defval: null });
+
+      if (!rawData || rawData.length === 0) {
+        setExcelImport({ isOpen: true, file: null, preview: [], importErrors: ["The Excel file appears to be empty."], confirmed: false, saving: false });
+        return;
+      }
+
+      let headerRowIndex = -1;
+      for (let r = 0; r < Math.min(rawData.length, 10); r += 1) {
+        const row = rawData[r];
+        if (!row || row.length === 0) continue;
+        const hasStockIn = row.some((c) => String(c ?? "").trim().toLowerCase().replace(/[^a-z ]/g, "").includes("stock in"));
+        if (hasStockIn) { headerRowIndex = r; break; }
+      }
+
+      if (headerRowIndex === -1) {
+        setExcelImport({ isOpen: true, file: null, preview: [], importErrors: ['Could not find a "STOCK IN" column header in the first 10 rows.'], confirmed: false, saving: false });
+        return;
+      }
+
+      const headers = rawData[headerRowIndex];
+      const normH = (h) => String(h ?? "").trim().toLowerCase().replace(/[^a-z0-9 .]/g, "");
+      const stockInCol = headers.findIndex((h) => normH(h).includes("stock in"));
+      const qtyCol = headers.findIndex((h) => normH(h) === "qty");
+      const invenCol = headers.findIndex((h) => normH(h).replace(".", "") === "inven" || normH(h).includes("inven"));
+
+      const errors = [];
+      if (stockInCol === -1) errors.push('Could not find a "STOCK IN" column in the header row.');
+      if (qtyCol === -1) errors.push('Could not find a "QTY" column in the header row.');
+      if (invenCol === -1) errors.push('Could not find an "INVEN" or "INVEN." column in the header row.');
+      if (errors.length > 0) {
+        setExcelImport({ isOpen: true, file: null, preview: [], importErrors: errors, confirmed: false, saving: false });
+        return;
+      }
+
+      const preview = [];
+      const importErrors = [];
+
+      for (let i = headerRowIndex + 1; i < rawData.length; i += 1) {
+        const row = rawData[i];
+        if (!row || row.length === 0) continue;
+        const maxCol = Math.max(stockInCol, qtyCol, invenCol);
+        if (row.length <= maxCol && row.every((c) => c === null || c === undefined || String(c).trim() === "")) continue;
+
+        const rawStockIn = row[stockInCol];
+        if (rawStockIn === null || rawStockIn === undefined) continue;
+        const stockIn = String(rawStockIn).trim();
+        if (!stockIn) continue;
+
+        const productMatch = data.products.find(
+          (p) => normalizeProductName(p.name) === normalizeProductName(stockIn),
+        );
+        if (!productMatch) {
+          importErrors.push(`Product "${stockIn}" not found in catalogue`);
+          continue;
+        }
+
+        let qty = 0;
+        if (row[qtyCol] !== null && row[qtyCol] !== undefined) {
+          qty = Number(String(row[qtyCol]).replace(/,/g, "").trim());
+          if (isNaN(qty)) qty = 0;
+        }
+
+        let inven = 0;
+        if (row[invenCol] !== null && row[invenCol] !== undefined) {
+          inven = Number(String(row[invenCol]).replace(/,/g, "").trim());
+          if (isNaN(inven)) inven = 0;
+        }
+
+        preview.push({
+          productId: productMatch.id,
+          productName: productMatch.name,
+          productUnit: productMatch.unit || "LTR",
+          qty,
+          inven,
+          totalStockIn: qty + inven,
+        });
+      }
+
+      setExcelImport({
+        isOpen: true,
+        file,
+        preview,
+        importErrors: importErrors.length > 0 ? importErrors : undefined,
+        confirmed: false,
+        saving: false,
+      });
+    };
+    reader.readAsArrayBuffer(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [data.products]);
+
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col overflow-hidden select-none animate-fade-in">
       <div className="w-full flex flex-col flex-1 min-h-0 px-3 md:px-4 pt-3 md:pt-4 pb-2 md:pb-3 gap-2 md:gap-3">
-        
         {/* Header Section */}
         <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-2 shrink-0">
           <div className="space-y-0.5">
@@ -322,8 +515,8 @@ function CataloguePreview() {
           </button>
         </div>
 
-        {/* Toolbar: Date picker + Transpose button */}
-        <div className="flex items-center justify-end gap-2.5 bg-[var(--surface)] border border-[var(--border)] p-2 md:p-3 rounded-xl shadow-sm shrink-0">
+        {/* Toolbar */}
+        <div className="flex items-center justify-end gap-2 bg-[var(--surface)] border border-[var(--border)] p-2 md:p-3 rounded-xl shadow-sm shrink-0 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span className="text-[9px] md:text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Date:</span>
             <input
@@ -349,6 +542,14 @@ function CataloguePreview() {
             <span>📋</span>
             <span className="hidden xs:inline">Order</span>
           </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
         </div>
 
         {/* Matrix Container */}
@@ -370,19 +571,14 @@ function CataloguePreview() {
               <table className="min-w-full text-xs md:text-sm border-collapse">
                 <thead>
                   <tr className="bg-[var(--primary-light)] sticky top-0 z-30">
-                    {/* Top-Left Corner Header (Sticky left + top) */}
                     <th className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-left whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky left-0 top-0 z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                       {isTransposed ? "Product" : "Customer"}
                     </th>
-                    {/* Column Headers */}
                     {!isTransposed
                       ? matrixData.products.map((p) => {
                           const prodKey = p.id || p.local_uuid;
                           return (
-                            <th
-                              key={prodKey}
-                              className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20"
-                            >
+                            <th key={prodKey} className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20">
                               {p.name}
                             </th>
                           );
@@ -390,15 +586,11 @@ function CataloguePreview() {
                       : matrixData.customers.map((c) => {
                           const custKey = c.id || c.local_uuid;
                           return (
-                            <th
-                              key={custKey}
-                              className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20"
-                            >
+                            <th key={custKey} className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20">
                               {c.name}
                             </th>
                           );
                         })}
-                    {/* Row Totals Header */}
                     <th className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20">
                       TOTAL
                     </th>
@@ -410,24 +602,18 @@ function CataloguePreview() {
                         const custKey = c.id || c.local_uuid;
                         return (
                           <tr key={custKey} className="bg-[var(--surface)] hover:bg-slate-900/5 transition">
-                            {/* Sticky Left Customer Header cell */}
                             <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
                               {c.name}
                             </td>
-                            {/* Product cells */}
                             {matrixData.products.map((p) => {
                               const prodKey = p.id || p.local_uuid;
                               const qty = matrixData.grid[custKey]?.[prodKey] || 0;
                               return (
-                                <td
-                                  key={prodKey}
-                                  className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]"
-                                >
+                                <td key={prodKey} className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]">
                                   {qty || "-"}
                                 </td>
                               );
                             })}
-                            {/* Row Total cell */}
                             <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] whitespace-nowrap">
                               {totals.rowTotals[custKey] || 0}
                             </td>
@@ -438,24 +624,18 @@ function CataloguePreview() {
                         const prodKey = p.id || p.local_uuid;
                         return (
                           <tr key={prodKey} className="bg-[var(--surface)] hover:bg-slate-900/5 transition">
-                            {/* Sticky Left Product Header cell */}
                             <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
                               {p.name}
                             </td>
-                            {/* Customer cells */}
                             {matrixData.customers.map((c) => {
                               const custKey = c.id || c.local_uuid;
                               const qty = matrixData.grid[custKey]?.[prodKey] || 0;
                               return (
-                                <td
-                                  key={custKey}
-                                  className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]"
-                                >
+                                <td key={custKey} className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)]">
                                   {qty || "-"}
                                 </td>
                               );
                             })}
-                            {/* Row Total cell */}
                             <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] whitespace-nowrap">
                               {totals.rowTotals[prodKey] || 0}
                             </td>
@@ -465,19 +645,14 @@ function CataloguePreview() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-[var(--primary-light)] sticky bottom-0 z-30">
-                    {/* Sticky Left Bottom "TOTAL" cell */}
                     <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky left-0 bottom-0 z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
                       TOTAL
                     </td>
-                    {/* Column Totals cells */}
                     {!isTransposed
                       ? matrixData.products.map((p) => {
                           const prodKey = p.id || p.local_uuid;
                           return (
-                            <td
-                              key={prodKey}
-                              className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap"
-                            >
+                            <td key={prodKey} className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap">
                               {totals.colTotals[prodKey] || 0}
                             </td>
                           );
@@ -485,15 +660,11 @@ function CataloguePreview() {
                       : matrixData.customers.map((c) => {
                           const custKey = c.id || c.local_uuid;
                           return (
-                            <td
-                              key={custKey}
-                              className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap"
-                            >
+                            <td key={custKey} className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-right text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap">
                               {totals.colTotals[custKey] || 0}
                             </td>
                           );
                         })}
-                    {/* Grand Total cell */}
                     <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-black text-right text-[10px] md:text-sm bg-[var(--primary-light)] text-[var(--primary)] sticky bottom-0 z-20 whitespace-nowrap">
                       {totals.grandTotal}
                     </td>
@@ -503,7 +674,6 @@ function CataloguePreview() {
             </div>
           </div>
         )}
-        
       </div>
 
       {/* Order Modal */}
@@ -538,25 +708,15 @@ function CataloguePreview() {
                   onClick={() => setModalCustomer({ ...customer, position: index + 1 })}
                   className="w-full card rounded-xl px-3.5 py-3 flex items-center gap-3 text-left cursor-pointer active:scale-[0.98] transition-all duration-150"
                 >
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
-                    style={{ background: "#ebf6f5", color: "#5cbdb9" }}
-                  >
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0" style={{ background: "#ebf6f5", color: "#5cbdb9" }}>
                     {index + 1}
                   </div>
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0"
-                    style={{ background: "#ebf6f5", color: "#5cbdb9" }}
-                  >
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0" style={{ background: "#ebf6f5", color: "#5cbdb9" }}>
                     {(customer.name?.[0] || "?").toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate" style={{ color: "#2d3436" }}>
-                      {customer.name}
-                    </p>
-                    <p className="text-[10px] font-medium text-[var(--text-muted)]">
-                      Position #{index + 1}
-                    </p>
+                    <p className="font-semibold text-sm truncate" style={{ color: "#2d3436" }}>{customer.name}</p>
+                    <p className="text-[10px] font-medium text-[var(--text-muted)]">Position #{index + 1}</p>
                   </div>
                   <svg className="w-4 h-4 text-[var(--text-muted)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
@@ -583,6 +743,95 @@ function CataloguePreview() {
           onClose={() => setModalCustomer(null)}
           onSave={handleOrderSave}
         />
+      )}
+
+      {/* Excel Stock In Import Preview Modal */}
+      {excelImport.isOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4"
+          onClick={() => { if (!excelImport.saving && !excelImport.confirmed) cancelExcelImport(); }}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[85vh] card rounded-3xl p-6 shadow-2xl animate-scale-in flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-black uppercase tracking-wider text-[var(--text-primary)] mb-4 shrink-0">
+              Stock In Import Preview
+            </h2>
+
+            {excelImport.importErrors && excelImport.importErrors.length > 0 && (
+              <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl mb-4 shrink-0">
+                <p className="text-[10px] font-black uppercase text-rose-500 mb-2">Import Errors:</p>
+                <ul className="space-y-1 text-[var(--text-secondary)] text-xs max-h-32 overflow-auto">
+                  {excelImport.importErrors.map((err, i) => (
+                    <li key={i}>• {err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {excelImport.preview && excelImport.preview.length > 0 && !excelImport.confirmed && (
+              <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-auto border border-[var(--border)] rounded-2xl">
+                  <table className="min-w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-[var(--primary-light)] sticky top-0 z-10">
+                        <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[var(--primary)] border-b border-[var(--border)] text-left">Product</th>
+                        <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[var(--primary)] border-b border-[var(--border)] text-right">QTY</th>
+                        <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[var(--primary)] border-b border-[var(--border)] text-right">INVEN.</th>
+                        <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[var(--primary)] border-b border-[var(--border)] text-right">TOTAL STOCK IN</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {excelImport.preview.map((item, i) => (
+                        <tr key={i} className="bg-[var(--surface)] hover:bg-slate-900/5 transition">
+                          <td className="px-3 py-2 border-b border-[var(--border)] font-bold text-[var(--text-primary)]">{item.productName}</td>
+                          <td className="px-3 py-2 border-b border-[var(--border)] text-right">{item.qty}</td>
+                          <td className="px-3 py-2 border-b border-[var(--border)] text-right">{item.inven}</td>
+                          <td className="px-3 py-2 border-b border-[var(--border)] font-bold text-[var(--primary)] text-right">+{item.totalStockIn}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="shrink-0 flex items-center justify-between">
+                  <p className="text-[10px] font-black uppercase text-[var(--text-secondary)]">
+                    {excelImport.preview.length} products · Total: +{excelImport.preview.reduce((sum, item) => sum + item.totalStockIn, 0)} LTR
+                  </p>
+                </div>
+
+                <div className="flex gap-3 shrink-0">
+                  <button
+                    onClick={cancelExcelImport}
+                    disabled={excelImport.saving}
+                    className="flex-1 bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--border)] text-[var(--text-primary)] font-bold py-3 rounded-2xl transition active:scale-95 text-[10px] uppercase tracking-widest cursor-pointer outline-none disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmExcelImport}
+                    disabled={excelImport.saving || excelImport.importErrors?.length > 0}
+                    className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black py-3 rounded-2xl transition active:scale-95 text-[10px] uppercase tracking-widest cursor-pointer outline-none disabled:opacity-50"
+                  >
+                    {excelImport.saving ? "Importing..." : "Confirm Import"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {excelImport.preview && excelImport.preview.length === 0 && !excelImport.importErrors?.length && !excelImport.saving && (
+              <p className="text-center text-[var(--text-secondary)] text-sm py-8">No products found to import.</p>
+            )}
+
+            {excelImport.confirmed && (
+              <div className="text-center py-8">
+                <p className="text-emerald-500 font-black text-lg">Import completed successfully</p>
+                <p className="text-[var(--text-secondary)] text-xs mt-2">{excelImport.preview.length} products imported</p>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

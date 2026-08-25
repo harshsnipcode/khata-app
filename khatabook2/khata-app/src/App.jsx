@@ -46,6 +46,8 @@ import ExcelImportPage from "./pages/ExcelImportPage";
 import ExcelImportDetail from "./pages/ExcelImportDetail";
 import DownloadExcelPage from "./pages/DownloadExcelPage";
 import CataloguePreview from "./pages/CataloguePreview";
+import StockInExcelImportPage from "./pages/StockInExcelImportPage";
+import StockInExcelImportDetail from "./pages/StockInExcelImportDetail";
 import ErrorBoundary from "./lib/ErrorBoundary";
 
 function AppShell() {
@@ -150,6 +152,8 @@ function AppShell() {
 
       {/* Catalogue & Inventory */}
       <Route path="/catalogue/preview" element={<CataloguePreview />} />
+      <Route path="/admin/stock-in-excel" element={<AdminRoute><StockInExcelImportPage /></AdminRoute>} />
+      <Route path="/admin/stock-in-excel/:importId" element={<AdminRoute><StockInExcelImportDetail /></AdminRoute>} />
       <Route path="/catalogue/add" element={<AddProductPage />} />
       <Route path="/product/:id" element={<ProductDetails />} />
       <Route path="/product/:id/edit" element={<EditProductPage />} />
