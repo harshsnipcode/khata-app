@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ImportStatusBadge from "../components/ImportStatusBadge";
+import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import { deleteImportBatch, getImportActor } from "../lib/importReversal";
 
 function StockInExcelImportDetail() {
   const { importId } = useParams();
   const navigate = useNavigate();
   const [record, setRecord] = useState(null);
   const [error, setError] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteFromListConfirm, setShowDeleteFromListConfirm] = useState(false);
+  const [showDeleteAbandonedConfirm, setShowDeleteAbandonedConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deletingFromList, setDeletingFromList] = useState(false);
+  const [deletingAbandoned, setDeletingAbandoned] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     offlineSupabase
@@ -27,6 +36,72 @@ function StockInExcelImportDetail() {
     if (Array.isArray(record.parsed_preview)) return record.parsed_preview;
     try { return JSON.parse(record.parsed_preview); } catch { return []; }
   })();
+
+  const isDeleted = record?.status === "deleted";
+  const isProcessing = record?.status === "processing";
+  const canDelete = ["imported", "restored", "completed", "completed_with_errors"].includes(record?.status);
+
+  const handleDeleteImport = async () => {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      if (!navigator.onLine) {
+        throw new Error("Deleting a Stock In import requires an internet connection.");
+      }
+      await deleteImportBatch(importId, getImportActor());
+      navigate("/admin/stock-in-excel", { replace: true });
+    } catch (deleteFailure) {
+      setDeleteError(deleteFailure.message || "Unable to delete this import.");
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteFromList = async () => {
+    setDeletingFromList(true);
+    setDeleteError("");
+    try {
+      if (!navigator.onLine) {
+        throw new Error("Deleting an import from the list requires an internet connection.");
+      }
+      const { error: deleteHistoryError } = await supabase
+        .from("import_history")
+        .delete()
+        .eq("id", importId)
+        .eq("status", "deleted");
+      if (deleteHistoryError) throw deleteHistoryError;
+      navigate("/admin/stock-in-excel", { replace: true });
+    } catch (deleteFailure) {
+      setDeleteError(deleteFailure.message || "Unable to delete this import from the list.");
+      setDeletingFromList(false);
+    }
+  };
+
+  const handleDeleteAbandoned = async () => {
+    setDeletingAbandoned(true);
+    setDeleteError("");
+    try {
+      if (!navigator.onLine) {
+        throw new Error("Deleting an import requires an internet connection.");
+      }
+      const { data: linkedRows } = await supabase
+        .from("product_transactions")
+        .select("id")
+        .eq("import_history_id", importId);
+      if (linkedRows?.length) {
+        const rowIds = linkedRows.map((row) => row.id);
+        await supabase.from("product_transactions").delete().in("id", rowIds);
+      }
+      const { error: deleteError } = await supabase
+        .from("import_history")
+        .delete()
+        .eq("id", importId);
+      if (deleteError) throw deleteError;
+      navigate("/admin/stock-in-excel", { replace: true });
+    } catch (deleteFailure) {
+      setDeleteError(deleteFailure.message || "Unable to delete this import.");
+      setDeletingAbandoned(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)]">
@@ -64,7 +139,7 @@ function StockInExcelImportDetail() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <Info label="Products imported" value={stats.productsImported ?? 0} />
                 <Info label="Total stock added" value={`${stats.totalStockIn ?? 0} LTR`} />
-                <Info label="Transactions created" value={stats.transactionsCreated ?? 0} />
+                <Info label="Stock-in entries" value={stats.transactionsCreated ?? 0} />
               </div>
             </section>
 
@@ -103,9 +178,83 @@ function StockInExcelImportDetail() {
                 </div>
               </section>
             )}
+
+            <section className="rounded-3xl border border-rose-500/20 bg-rose-500/5 p-5">
+              <h2 className="font-black text-rose-600">Delete This Import</h2>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                {isProcessing
+                  ? "Remove this unfinished import from the history."
+                  : "Remove every Stock In created by this Excel import as one reversible batch."}
+              </p>
+              {isDeleted ? (
+                <>
+                  <p className="mt-4 text-sm font-bold text-[var(--text-secondary)]">This import has already been deleted.</p>
+                  <button onClick={() => setShowDeleteFromListConfirm(true)} className="mt-4 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wide cursor-pointer active:scale-95 transition">
+                    Delete from List
+                  </button>
+                </>
+              ) : isProcessing ? (
+                <>
+                  <p className="mt-4 text-sm text-[var(--text-secondary)]">This import never completed. You can remove it from the history.</p>
+                  <button onClick={() => setShowDeleteAbandonedConfirm(true)} className="mt-4 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wide cursor-pointer active:scale-95 transition">
+                    Delete Import
+                  </button>
+                </>
+              ) : canDelete ? (
+                <button onClick={() => setShowDeleteConfirm(true)} className="mt-4 px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wide cursor-pointer active:scale-95 transition">
+                  Delete This Import
+                </button>
+              ) : null}
+              {deleteError && <p className="mt-3 text-sm font-bold text-rose-600">{deleteError}</p>}
+            </section>
           </>
         )}
       </main>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] bg-black/50 p-4 flex items-center justify-center">
+          <div className="w-full max-w-md rounded-3xl bg-[var(--surface)] border border-[var(--border)] p-6 shadow-2xl">
+            <h2 className="text-lg font-black">Delete this imported Stock In file?</h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-2">This will roll back every Stock In entry and product-stock increase created by this import. It can be restored later from the Recycle Bin.</p>
+            <div className="flex justify-end gap-2 mt-6">
+              <button disabled={deleting} onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2.5 rounded-xl border border-[var(--border)] text-xs font-bold cursor-pointer disabled:opacity-50">Cancel</button>
+              <button disabled={deleting} onClick={handleDeleteImport} className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-black cursor-pointer disabled:opacity-50">
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteFromListConfirm && (
+        <div className="fixed inset-0 z-[100] bg-black/50 p-4 flex items-center justify-center">
+          <div className="w-full max-w-md rounded-3xl bg-[var(--surface)] border border-[var(--border)] p-6 shadow-2xl">
+            <h2 className="text-lg font-black">Delete this import from the list?</h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-2">This will permanently remove only this deleted import history record. The stock rollback already done will not change.</p>
+            <div className="flex justify-end gap-2 mt-6">
+              <button disabled={deletingFromList} onClick={() => setShowDeleteFromListConfirm(false)} className="px-4 py-2.5 rounded-xl border border-[var(--border)] text-xs font-bold cursor-pointer disabled:opacity-50">Cancel</button>
+              <button disabled={deletingFromList} onClick={handleDeleteFromList} className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-black cursor-pointer disabled:opacity-50">
+                {deletingFromList ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAbandonedConfirm && (
+        <div className="fixed inset-0 z-[100] bg-black/50 p-4 flex items-center justify-center">
+          <div className="w-full max-w-md rounded-3xl bg-[var(--surface)] border border-[var(--border)] p-6 shadow-2xl">
+            <h2 className="text-lg font-black">Delete abandoned import?</h2>
+            <p className="text-sm text-[var(--text-secondary)] mt-2">This import never completed. Deleting it will remove this unfinished import and any partial Stock In entries it created.</p>
+            <div className="flex justify-end gap-2 mt-6">
+              <button disabled={deletingAbandoned} onClick={() => setShowDeleteAbandonedConfirm(false)} className="px-4 py-2.5 rounded-xl border border-[var(--border)] text-xs font-bold cursor-pointer disabled:opacity-50">Cancel</button>
+              <button disabled={deletingAbandoned} onClick={handleDeleteAbandoned} className="px-4 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-black cursor-pointer disabled:opacity-50">
+                {deletingAbandoned ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

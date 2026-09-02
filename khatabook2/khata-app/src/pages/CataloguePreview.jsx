@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOfflineFirst, offlineSupabase } from "../lib/offline/offlineSupabase";
+import { generateUUID } from "../lib/offline/db";
 import {
   sortCustomersByMatrix,
   moveCustomerToMatrixPosition,
@@ -309,6 +310,32 @@ function CataloguePreview() {
     const userResult = await offline.auth.getUser();
     const created_by = userResult?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
 
+    // Create the import-history record up front so every created stock-in row
+    // can be linked back to it for reversible batch delete/restore, mirroring
+    // the normal Excel import lifecycle in /admin/excel.
+    const importHistoryId = generateUUID();
+    const { error: historyError } = await offline.from("import_history").insert([{
+      id: importHistoryId,
+      filename: fileName || "Stock In Excel Import",
+      uploader: created_by,
+      file_hash: "stock-in-excel",
+      sheet_name: "Stock In",
+      parsed_preview: items.map((item) => ({
+        productName: item.productName,
+        qty: item.qty,
+        inven: item.inven,
+        totalStockIn: item.totalStockIn,
+      })),
+      import_statistics: {
+        productsImported: items.length,
+        totalStockIn: items.reduce((sum, item) => sum + item.totalStockIn, 0),
+        transactionsCreated: items.length,
+      },
+      validation_report: {},
+      status: "imported",
+    }]);
+    if (historyError) throw historyError;
+
     const transactionsToInsert = items.map((item) => ({
       product_id: item.productId,
       type: "stock_in",
@@ -316,6 +343,7 @@ function CataloguePreview() {
       price: getProductPurchasePrice(item.productId),
       notes: "Excel Stock In Import",
       created_by,
+      import_history_id: importHistoryId,
     }));
 
     const { error: txError } = await offline.from("product_transactions").insert(transactionsToInsert);
@@ -336,27 +364,6 @@ function CataloguePreview() {
       }).eq("id", item.productId);
       if (stockErr) throw stockErr;
     }
-
-    const { error: historyError } = await offline.from("import_history").insert([{
-      filename: fileName || "Stock In Excel Import",
-      uploader: created_by,
-      file_hash: "stock-in-excel",
-      sheet_name: "Stock In",
-      parsed_preview: items.map((item) => ({
-        productName: item.productName,
-        qty: item.qty,
-        inven: item.inven,
-        totalStockIn: item.totalStockIn,
-      })),
-      import_statistics: {
-        productsImported: items.length,
-        totalStockIn: items.reduce((sum, item) => sum + item.totalStockIn, 0),
-        transactionsCreated: items.length,
-      },
-      validation_report: {},
-      status: "imported",
-    }]);
-    if (historyError) throw historyError;
   }, [getProductPurchasePrice]);
 
   const confirmExcelImport = useCallback(async () => {

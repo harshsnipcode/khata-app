@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import { generateUUID } from "../lib/offline/db";
 import ProductCard from "./ProductCard";
 import SearchBar from "./SearchBar";
 import ProductFilterModal from "./ProductFilterModal";
@@ -139,31 +140,12 @@ function CatalogueView({ isAdmin }) {
     const userResult = await supabase.auth.getUser();
     const created_by = userResult?.data?.user?.id || localStorage.getItem("khata_user") || "admin";
 
-    const transactionsToInsert = items.map((item) => ({
-      product_id: item.productId,
-      type: "stock_in",
-      quantity: item.totalStockIn,
-      price: Number(item.purchasePrice || 0),
-      notes: "Excel Stock In Import",
-      created_by,
-    }));
-
-    const { error: txError } = await supabase.from("product_transactions").insert(transactionsToInsert);
-    if (txError) throw txError;
-
-    for (const item of items) {
-      const { data: prod, error: fetchErr } = await supabase
-        .from("products").select("stock_quantity").eq("id", item.productId).single();
-      if (fetchErr) throw fetchErr;
-      const newStock = Number(prod.stock_quantity) + item.totalStockIn;
-      const { error: stockErr } = await supabase.from("products").update({
-        stock_quantity: newStock,
-        updated_at: new Date().toISOString(),
-      }).eq("id", item.productId);
-      if (stockErr) throw stockErr;
-    }
-
+    // Create the import-history record up front so every created stock-in row
+    // can be linked back to it for reversible batch delete/restore, mirroring
+    // the normal Excel import lifecycle in /admin/excel.
+    const importHistoryId = generateUUID();
     const { error: historyError } = await supabase.from("import_history").insert([{
+      id: importHistoryId,
       filename: fileName || "Stock In Excel Import",
       uploader: created_by,
       file_hash: "stock-in-excel",
@@ -183,6 +165,31 @@ function CatalogueView({ isAdmin }) {
       status: "imported",
     }]);
     if (historyError) throw historyError;
+
+    const transactionsToInsert = items.map((item) => ({
+      product_id: item.productId,
+      type: "stock_in",
+      quantity: item.totalStockIn,
+      price: Number(item.purchasePrice || 0),
+      notes: "Excel Stock In Import",
+      created_by,
+      import_history_id: importHistoryId,
+    }));
+
+    const { error: txError } = await supabase.from("product_transactions").insert(transactionsToInsert);
+    if (txError) throw txError;
+
+    for (const item of items) {
+      const { data: prod, error: fetchErr } = await supabase
+        .from("products").select("stock_quantity").eq("id", item.productId).single();
+      if (fetchErr) throw fetchErr;
+      const newStock = Number(prod.stock_quantity) + item.totalStockIn;
+      const { error: stockErr } = await supabase.from("products").update({
+        stock_quantity: newStock,
+        updated_at: new Date().toISOString(),
+      }).eq("id", item.productId);
+      if (stockErr) throw stockErr;
+    }
   }, []);
 
   const confirmExcelImport = useCallback(async () => {
