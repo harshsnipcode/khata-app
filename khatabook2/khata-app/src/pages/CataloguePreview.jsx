@@ -108,23 +108,26 @@ function CataloguePreview() {
     products: [],
     transactions: [],
     transactionItems: [],
+    productTransactions: [],
   });
 
   useEffect(() => {
     const loadAllData = async () => {
       setLoading(true);
       try {
-        const [custRes, prodRes, txnRes, itemRes] = await Promise.all([
+        const [custRes, prodRes, txnRes, itemRes, ptRes] = await Promise.all([
           useOfflineFirst("customers").getAll(),
           useOfflineFirst("products").getAll(),
           useOfflineFirst("transactions").getAll(),
           useOfflineFirst("transaction_items").getAll(),
+          useOfflineFirst("product_transactions").getAll(),
         ]);
         setData({
           customers: custRes.data || [],
           products: prodRes.data || [],
           transactions: txnRes.data || [],
           transactionItems: itemRes.data || [],
+          productTransactions: ptRes.data || [],
         });
       } catch (e) {
         console.error("Error loading matrix data:", e);
@@ -261,6 +264,19 @@ function CataloguePreview() {
   }, [matrixData, isTransposed]);
 
   const isEmpty = matrixData.customers.length === 0 || matrixData.products.length === 0;
+
+  const stockInByProduct = useMemo(() => {
+    const map = {};
+    data.productTransactions.forEach((pt) => {
+      if (pt.type !== "stock_in") return;
+      const txnDate = localDateKey(pt.created_at);
+      if (txnDate !== selectedDate) return;
+      const prodKey = normalizeLookupKey(pt.product_id);
+      if (!prodKey) return;
+      map[prodKey] = (map[prodKey] || 0) + Number(pt.quantity || 0);
+    });
+    return map;
+  }, [data.productTransactions, selectedDate]);
 
   // ── Excel Stock In Import ─────────────────────────────────────────────
   const fileInputRef = useRef(null);
@@ -670,6 +686,85 @@ function CataloguePreview() {
                     </td>
                   </tr>
                 </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Second Matrix — Stock In / Stock Out / Difference */}
+        {!loading && !isEmpty && (
+          <div className="card rounded-2xl min-h-0 flex flex-col p-0 overflow-hidden shadow-sm shrink-0">
+            <div className="px-3 py-2 md:px-4 md:py-3 border-b border-[var(--border)]">
+              <h2 className="text-[10px] md:text-xs font-black uppercase tracking-wider text-[var(--primary)]">
+                Stock Summary
+              </h2>
+            </div>
+            <div className="overflow-auto border border-[var(--border)] rounded-2xl">
+              <table className="min-w-full text-xs md:text-sm border-collapse">
+                <thead>
+                  <tr className="bg-[var(--primary-light)] sticky top-0 z-30">
+                    <th className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-left whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky left-0 top-0 z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                      {isTransposed ? "Product" : "Product"}
+                    </th>
+                    {matrixData.products.map((p) => {
+                      const prodKey = p.id || p.local_uuid;
+                      return (
+                        <th key={prodKey} className="px-2.5 py-2 md:px-4 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b border-r border-[var(--border)] text-right whitespace-nowrap bg-[var(--primary-light)] text-[var(--primary)] sticky top-0 z-20">
+                          {p.name}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Stock In row */}
+                  <tr className="bg-[var(--surface)] hover:bg-slate-900/5 transition">
+                    <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
+                      Stock In
+                    </td>
+                    {matrixData.products.map((p) => {
+                      const prodKey = p.id || p.local_uuid;
+                      const val = stockInByProduct[prodKey] || 0;
+                      return (
+                        <td key={prodKey} className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)] font-medium">
+                          {val}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  {/* Stock Out row */}
+                  <tr className="bg-[var(--surface)] hover:bg-slate-900/5 transition">
+                    <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
+                      Stock Out
+                    </td>
+                    {matrixData.products.map((p) => {
+                      const prodKey = p.id || p.local_uuid;
+                      const val = totals.colTotals[prodKey] || 0;
+                      return (
+                        <td key={prodKey} className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] text-[var(--text-primary)] font-medium">
+                          {val}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  {/* Difference row */}
+                  <tr className="bg-[var(--surface)] hover:bg-slate-900/5 transition">
+                    <td className="px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] font-bold text-[10px] md:text-sm bg-[var(--surface)] text-[var(--text-primary)] sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
+                      Difference
+                    </td>
+                    {matrixData.products.map((p) => {
+                      const prodKey = p.id || p.local_uuid;
+                      const stockIn = stockInByProduct[prodKey] || 0;
+                      const stockOut = totals.colTotals[prodKey] || 0;
+                      const diff = stockIn - stockOut;
+                      return (
+                        <td key={prodKey} className={`px-2.5 py-2 md:px-4 md:py-3 border-b border-r border-[var(--border)] text-right text-[10px] md:text-sm whitespace-nowrap bg-[var(--surface)] font-bold ${diff === 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                          {diff}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
               </table>
             </div>
           </div>
