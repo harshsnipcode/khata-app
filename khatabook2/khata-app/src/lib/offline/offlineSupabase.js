@@ -123,7 +123,7 @@ function hasUsableCachedResult(result) {
 function refreshSelectCacheInBackground(ops) {
   setTimeout(async () => {
     try {
-      const result = await executeOnlinePaginated(ops);
+      const result = await executeOnline(ops);
       if (!result.error) await refreshCacheAfterOnlineResult(ops, result.data);
     } catch {}
   }, 0);
@@ -256,7 +256,7 @@ function createQueryBuilder(table, method, payload, options = {}) {
           }
         }
         try {
-          const result = await executeOnlinePaginated(ops);
+          const result = await executeOnline(ops);
           if (!result.error) await refreshCacheAfterOnlineResult(ops, result.data);
           return result;
         } catch {
@@ -303,58 +303,6 @@ async function executeOnline(ops) {
     error: result.error?.message || null,
   });
   return result;
-}
-
-// Fetch a single, unpaginated, unfiltered select across ALL rows using
-// pagination, so it never stops at the REST default 1000-row page limit.
-// Used for background cache refreshes of full-table snapshots. A plain
-// `executeOnline` would truncate the offline cache to 1000 rows for large
-// tables (e.g. transactions / transaction_items / product_transactions),
-// which caused the catalogue preview to show missing/blank data after a
-// reload or remount.
-async function executeOnlinePaginated(ops) {
-  if (
-    ops.method !== "select" ||
-    ops.single ||
-    ops.maybeSingle ||
-    ops.range !== null ||
-    ops.limit !== null ||
-    ops.filters.length > 0 ||
-    (ops.selectColumns && ops.selectColumns !== "*")
-  ) {
-    return await executeOnline(ops);
-  }
-
-  const pageSize = 1000;
-  const allRows = [];
-  let error = null;
-  for (let from = 0; ; from += pageSize) {
-    const query = supabase.from(ops.table).select(ops.selectColumns || "*");
-    const { data, error: pageError } = await query.range(from, from + pageSize - 1);
-    if (pageError) {
-      error = pageError;
-      break;
-    }
-    allRows.push(...(data || []));
-    if (!data || data.length < pageSize) break;
-  }
-
-  recordQueryTiming({
-    source: "online",
-    table: ops.table,
-    method: ops.method,
-    filters: [],
-    order: null,
-    range: { from: 0, to: allRows.length - 1 },
-    limit: null,
-    single: false,
-    maybeSingle: false,
-    durationMs: 0,
-    rowCount: allRows.length,
-    error: error?.message || null,
-  });
-
-  return { data: error ? null : allRows, error };
 }
 
 async function refreshCacheAfterOnlineResult(ops, data) {
