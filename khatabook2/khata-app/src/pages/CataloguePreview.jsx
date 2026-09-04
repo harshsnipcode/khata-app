@@ -1,7 +1,15 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useOfflineFirst, offlineSupabase } from "../lib/offline/offlineSupabase";
-import { generateUUID } from "../lib/offline/db";
+import { supabase } from "../lib/supabase";
+import { offlineSupabase } from "../lib/offline/offlineSupabase";
+import {
+  SERVER_SNAPSHOT_REPLACE_TABLES,
+  generateUUID,
+  getAll,
+  isOnline,
+  replaceFetchedData,
+  saveFetchedData,
+} from "../lib/offline/db";
 import {
   sortCustomersByMatrix,
   moveCustomerToMatrixPosition,
@@ -95,6 +103,48 @@ function normalizeLookupKey(value) {
   return String(value);
 }
 
+const PREVIEW_TABLES = [
+  "customers",
+  "products",
+  "transactions",
+  "transaction_items",
+  "product_transactions",
+];
+
+const PAGE_SIZE = 1000;
+
+async function fetchOnlineTableSnapshot(table) {
+  const rows = [];
+  for (let from = 0; isOnline(); from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+async function loadPreviewTable(table) {
+  const cachedRows = await getAll(table);
+  if (!isOnline()) return cachedRows;
+
+  try {
+    const onlineRows = await fetchOnlineTableSnapshot(table);
+    if (SERVER_SNAPSHOT_REPLACE_TABLES.has(table)) {
+      await replaceFetchedData(table, onlineRows, { protectUnsynced: true });
+    } else {
+      await saveFetchedData(table, onlineRows, { protectUnsynced: true });
+    }
+    return await getAll(table);
+  } catch (error) {
+    if (cachedRows.length > 0) return cachedRows;
+    throw error;
+  }
+}
+
 function CataloguePreview() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -112,32 +162,54 @@ function CataloguePreview() {
     productTransactions: [],
   });
 
-  useEffect(() => {
-    const loadAllData = async () => {
-      setLoading(true);
-      try {
-        const [custRes, prodRes, txnRes, itemRes, ptRes] = await Promise.all([
-          useOfflineFirst("customers").getAll(),
-          useOfflineFirst("products").getAll(),
-          useOfflineFirst("transactions").getAll(),
-          useOfflineFirst("transaction_items").getAll(),
-          useOfflineFirst("product_transactions").getAll(),
-        ]);
-        setData({
-          customers: custRes.data || [],
-          products: prodRes.data || [],
-          transactions: txnRes.data || [],
-          transactionItems: itemRes.data || [],
-          productTransactions: ptRes.data || [],
-        });
-      } catch (e) {
-        console.error("Error loading matrix data:", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadAllData();
+  const loadAllData = useCallback(async ({ showSpinner = true } = {}) => {
+    if (showSpinner) setLoading(true);
+    try {
+      const [
+        customers,
+        products,
+        transactions,
+        transactionItems,
+        productTransactions,
+      ] = await Promise.all(PREVIEW_TABLES.map(loadPreviewTable));
+      setData({
+        customers,
+        products,
+        transactions,
+        transactionItems,
+        productTransactions,
+      });
+    } catch (e) {
+      console.error("Error loading matrix data:", e);
+    } finally {
+      if (showSpinner) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadAllData();
+
+    const handleRefresh = () => {
+      void loadAllData({ showSpinner: false });
+    };
+    window.addEventListener("online", handleRefresh);
+    window.addEventListener("sync-status", handleRefresh);
+
+    const channel = offlineSupabase
+      .channel("catalogue-preview-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, handleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "products" }, handleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, handleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transaction_items" }, handleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "product_transactions" }, handleRefresh)
+      .subscribe();
+
+    return () => {
+      window.removeEventListener("online", handleRefresh);
+      window.removeEventListener("sync-status", handleRefresh);
+      offlineSupabase.removeChannel(channel);
+    };
+  }, [loadAllData]);
 
   const openOrderModal = async () => {
     const { data } = await offlineSupabase
@@ -289,10 +361,6 @@ function CataloguePreview() {
     confirmed: false,
     saving: false,
   });
-
-  const openExcelImport = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
 
   const closeExcelImport = useCallback(() => {
     setExcelImport({ isOpen: false, file: null, preview: [], importErrors: [], confirmed: false, saving: false });
