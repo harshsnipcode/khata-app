@@ -4,9 +4,10 @@ import {
   SERVER_SNAPSHOT_REPLACE_TABLES,
   ensureQueueInsertIdempotencyKeys,
   getPendingQueue,
-  isOnline,
+isOnline,
   purgeUnsupportedQueueOps,
   removeQueueItem,
+  removeLocalRows,
   replaceFetchedData,
   rewriteFilters,
   rewriteForeignKeys,
@@ -25,6 +26,14 @@ function emitStatus(status, detail = {}) {
 
 function isTemporaryId(id) {
   return typeof id === "number" && id < 0;
+}
+
+function filterMatches(row, filter) {
+  const value = row?.[filter.column];
+  if (filter.operator === "eq") return String(value) === String(filter.value);
+  if (filter.operator === "neq") return String(value) !== String(filter.value);
+  if (filter.operator === "in") return Array.isArray(filter.value) && filter.value.map(String).includes(String(value));
+  return true;
 }
 
 function getInsertConflictColumn(table, payload) {
@@ -112,6 +121,10 @@ async function executeOperation(operation) {
     for (const filter of filters) query = query[filter.operator](filter.column, filter.value);
     const { error } = await query;
     if (error) throw error;
+    // Supabase confirmed the delete. Remove the local rows so the tombstone does
+    // not linger (or resurrect via an insert-confirm snapshot) and so the next
+    // snapshot can garbage-collect them.
+    removeLocalRows(operation.table, (row) => filters.every((filter) => filterMatches(row, filter)));
   }
 }
 
@@ -151,6 +164,10 @@ export async function refreshOfflineSnapshot() {
   try {
     for (const table of OFFLINE_TABLES) {
       if (!isOnline()) break;
+      // The global recycle_bin is synced via the embedded-queue upserts and read
+      // directly from the server by RecycleBinPage. Pulling the whole table (with
+      // large original_data blobs) on every snapshot is expensive; skip it.
+      if (table === "recycle_bin") continue;
       await fetchTableSnapshot(table);
     }
   } catch (error) {

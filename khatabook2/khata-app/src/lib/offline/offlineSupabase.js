@@ -15,6 +15,7 @@ import {
   saveFetchedData,
   upsertLocalRows,
   getCache,
+  readQueue,
 } from "./db";
 
 function normalizeComparable(value) {
@@ -120,12 +121,24 @@ function hasUsableCachedResult(result) {
   return result.data !== null && result.data !== undefined;
 }
 
+// While a table has unsynced pending mutations (e.g. an offline delete that has
+// not reached the server yet), the server is guaranteed to be stale relative to
+// this device. An empty local cache is then authoritative: falling through to an
+// online read would resurrect rows the user has deleted but that still exist on
+// the server. Treat the local cache as usable until the queue for that table
+// fully drains.
+function hasPendingTableOps(table) {
+  return readQueue().some((op) => op.table === table);
+}
+
 function refreshSelectCacheInBackground(ops) {
   setTimeout(async () => {
     try {
       const result = await executeOnline(ops);
       if (!result.error) await refreshCacheAfterOnlineResult(ops, result.data);
-    } catch {}
+    } catch {
+      // Background refreshes are best-effort; the cache stays usable if they fail.
+    }
   }, 0);
 }
 
@@ -250,8 +263,9 @@ function createQueryBuilder(table, method, payload, options = {}) {
       if (isOnline()) {
         if (ops.method === "select") {
           const cached = await executeOffline(ops);
-          if (hasUsableCachedResult(cached)) {
-            refreshSelectCacheInBackground(ops);
+          const canServeFromCache = hasUsableCachedResult(cached) || hasPendingTableOps(ops.table);
+          if (canServeFromCache) {
+            if (hasUsableCachedResult(cached)) refreshSelectCacheInBackground(ops);
             return cached;
           }
         }

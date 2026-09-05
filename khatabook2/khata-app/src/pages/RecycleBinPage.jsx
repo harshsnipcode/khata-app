@@ -54,7 +54,10 @@ function RecycleBinPage() {
     // is keyed by the same local_uuid (id). Local storage is only an offline
     // mirror/fallback.
     const [globalRecycleResult, batchResult, localData] = await Promise.all([
-      supabase.from("recycle_bin").select("*").order("deleted_at", { ascending: false }),
+      supabase
+        .from("recycle_bin")
+        .select("id, entity_type, entity_id, entity_name, deleted_at, deleted_by, restore_deadline")
+        .order("deleted_at", { ascending: false }),
       offlineSupabase.from("import_batch_recycle_bin").select("*").order("deleted_at", { ascending: false }),
       getRecycleBin(),
     ]);
@@ -157,6 +160,7 @@ function RecycleBinPage() {
     let rawOriginalData = null;
     let entityType = "transactions";
     let rawItemDebug = {};
+    let restoreSource = targetItem;
     try {
       rawItem = await db.table('recycle_bin').get(local_uuid);
       console.log("RAW RECYCLE ITEM");
@@ -177,9 +181,25 @@ function RecycleBinPage() {
         });
       } else if (targetItem) {
         // The record may only exist in the GLOBAL recycle bin (a different
-        // device deleted it). Target the snapshot held in the global row.
+        // device deleted it). The list query deliberately skips the heavy
+        // original_data blob, so fetch it lazily, only when restoring.
         entityType = targetItem.entity_type || entityType;
-        rawOriginalData = targetItem.original_data || {};
+        rawOriginalData = targetItem.original_data || null;
+        if (!rawOriginalData || (typeof rawOriginalData === "object" && Object.keys(rawOriginalData).length === 0)) {
+          console.log("[RecycleBin] STEP 1 — Lazily loading original_data from global row");
+          const { data: lazyRow, error: lazyError } = await supabase
+            .from("recycle_bin")
+            .select("original_data")
+            .eq("id", local_uuid)
+            .maybeSingle();
+          if (!lazyError && lazyRow?.original_data) {
+            rawOriginalData = lazyRow.original_data;
+            restoreSource = { ...targetItem, original_data: rawOriginalData };
+            console.log("[RecycleBin] STEP 1 — original_data loaded lazily from global row");
+          } else if (lazyError) {
+            console.error("[RecycleBin] STEP 1 — Lazy original_data fetch failed:", lazyError);
+          }
+        }
         console.log("[RecycleBin] STEP 1 — Raw recycle bin item sourced from global row");
         console.log(rawOriginalData);
       } else {
@@ -193,7 +213,7 @@ function RecycleBinPage() {
     // When the record is only in the GLOBAL table (not this device's local
     // mirror), pass the loaded item so the restore data is available. The
     // local store is updated when there is a matching mirror entry.
-    let result = await restoreFromRecycleBin(local_uuid, rawItem ? undefined : targetItem);
+    let result = await restoreFromRecycleBin(local_uuid, rawItem ? undefined : restoreSource);
     // Self-heal when the caller's id does not match the stored local_uuid but
     // STEP 1 located the raw entry (matches by local_uuid, id, or entity_id).
     if (!result.success && rawItem && rawItem.local_uuid && rawItem.local_uuid !== local_uuid) {

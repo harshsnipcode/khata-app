@@ -3,6 +3,7 @@ const CACHE_KEY = `${STORAGE_PREFIX}:cache`;
 const QUEUE_KEY = `${STORAGE_PREFIX}:queue`;
 const META_KEY = `${STORAGE_PREFIX}:meta`;
 const RECYCLE_KEY = `${STORAGE_PREFIX}:recycle_bin`;
+const RECYCLE_INDEX_KEY = `${RECYCLE_KEY}:index`;
 
 export const OFFLINE_TABLES = [
   "customers",
@@ -438,11 +439,94 @@ export function rewriteFilters(filters = [], ownTable = null) {
 }
 
 function readRecycleBinRaw() {
+  // New per-item storage: a cheap index of local_uuids plus one key per entry,
+  // so appending/deleting a single recycle-bin entry does not re-serialize the
+  // whole history (which embeds large original_data blobs) on every delete.
+  const index = readJson(RECYCLE_INDEX_KEY, null);
+  if (Array.isArray(index)) {
+    const items = index
+      .map((id) => readJson(`${RECYCLE_KEY}:item:${id}`, null))
+      .filter(Boolean);
+    // Migrate any leftover entries that were written by older builds under the
+    // single-array key until the next full rewrite clears them.
+    const legacy = readJson(RECYCLE_KEY, []);
+    if (legacy.length) {
+      const seen = new Set(items.map((entry) => String(entry.local_uuid)));
+      for (const entry of legacy) {
+        if (entry && !seen.has(String(entry.local_uuid))) items.push(entry);
+      }
+    }
+    return items;
+  }
   return readJson(RECYCLE_KEY, []);
 }
 
 function writeRecycleBinRaw(items) {
-  writeJson(RECYCLE_KEY, items);
+  // Full rewrite: used only by reconcile/cleanup-style operations that process
+  // the entire set in the background, not by the per-delete hot path.
+  const index = [];
+  for (const item of items) {
+    const id = String(item?.local_uuid);
+    if (!id || id === "undefined" || id === "null") continue;
+    index.push(id);
+    writeJson(`${RECYCLE_KEY}:item:${id}`, item);
+  }
+  writeJson(RECYCLE_INDEX_KEY, index);
+  writeJson(RECYCLE_KEY, []);
+}
+
+function appendRecycleBinItem(item) {
+  const id = String(item?.local_uuid);
+  if (!id || id === "undefined" || id === "null") return;
+  writeJson(`${RECYCLE_KEY}:item:${id}`, item);
+  const index = readJson(RECYCLE_INDEX_KEY, []);
+  if (!Array.isArray(index)) {
+    // Migrate the legacy single-array entries into the new per-item shape.
+    const legacy = readJson(RECYCLE_KEY, []);
+    const migrated = legacy
+      .filter((entry) => entry && String(entry.local_uuid) !== id)
+      .map((entry) => {
+        writeJson(`${RECYCLE_KEY}:item:${String(entry.local_uuid)}`, entry);
+        return String(entry.local_uuid);
+      });
+    writeJson(RECYCLE_KEY, []);
+    writeJson(RECYCLE_INDEX_KEY, [id, ...migrated]);
+    return;
+  }
+  if (!index.includes(id)) {
+    writeJson(RECYCLE_INDEX_KEY, [id, ...index]);
+  }
+}
+
+function putRecycleBinItem(item) {
+  const id = String(item?.local_uuid);
+  if (!id || id === "undefined" || id === "null") return;
+  writeJson(`${RECYCLE_KEY}:item:${id}`, item);
+  const index = readJson(RECYCLE_INDEX_KEY, null);
+  if (Array.isArray(index)) {
+    if (!index.includes(id)) writeJson(RECYCLE_INDEX_KEY, [id, ...index]);
+    return;
+  }
+  const legacy = readJson(RECYCLE_KEY, []);
+  writeJson(RECYCLE_INDEX_KEY, [id, ...legacy.filter((entry) => entry && String(entry.local_uuid) !== id).map((entry) => String(entry.local_uuid))]);
+  writeJson(RECYCLE_KEY, []);
+}
+
+function removeRecycleBinItem(id) {
+  const key = String(id);
+  if (key === "undefined" || key === "null") return;
+  const index = readJson(RECYCLE_INDEX_KEY, null);
+  if (Array.isArray(index)) {
+    writeJson(RECYCLE_INDEX_KEY, index.filter((entry) => entry !== key));
+  }
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem(`${RECYCLE_KEY}:item:${key}`);
+  }
+  // Keep the legacy array in sync for older readers/tests that still read it.
+  const legacy = readJson(RECYCLE_KEY, []);
+  if (legacy.length) {
+    writeJson(RECYCLE_KEY, legacy.filter((entry) => entry && String(entry.local_uuid) !== key));
+  }
 }
 
 // Reconciles the local recycle-bin mirror with the authoritative server rows.
@@ -513,7 +597,16 @@ function scheduleSyncIfOnline() {
 }
 
 export function clearRecycleBinCache() {
-  writeRecycleBinRaw([]);
+  if (typeof localStorage !== "undefined") {
+    const index = readJson(RECYCLE_INDEX_KEY, []);
+    for (const id of Array.isArray(index) ? index : []) {
+      localStorage.removeItem(`${RECYCLE_KEY}:item:${id}`);
+    }
+    localStorage.removeItem(RECYCLE_INDEX_KEY);
+    localStorage.removeItem(RECYCLE_KEY);
+  } else {
+    writeRecycleBinRaw([]);
+  }
 }
 
 export async function moveToRecycleBin(entityType, entityId, entityName, originalData, deletedBy) {
@@ -528,7 +621,10 @@ export async function moveToRecycleBin(entityType, entityId, entityName, origina
     original_data: JSON.stringify(originalData || {}),
     restore_deadline: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString(),
   };
-  writeRecycleBinRaw([item, ...readRecycleBinRaw()]);
+  // Append the single entry without re-serializing the whole recycle-bin
+  // history: each delete only writes its own original_data blob plus a tiny
+  // id index, so delete stays fast as the recycle bin grows.
+  appendRecycleBinItem(item);
 
   // Persist globally through the offline queue. The upsert uses the local_uuid
   // as the primary key (id) so retries are idempotent and never create
@@ -607,7 +703,7 @@ export async function restoreFromRecycleBin(local_uuid, suppliedItem = null) {
     }
 
     const removedKey = item.local_uuid || local_uuid;
-    writeRecycleBinRaw(rawItems.filter((entry) => entry.local_uuid !== removedKey));
+    removeRecycleBinItem(removedKey);
 
     // Queue the global removal so the restored record disappears from every
     // device once the delete operation syncs to Supabase.
@@ -632,7 +728,7 @@ export async function restoreFromRecycleBin(local_uuid, suppliedItem = null) {
 }
 
 export async function permanentlyDeleteFromRecycleBin(local_uuid) {
-  writeRecycleBinRaw(readRecycleBinRaw().filter((entry) => entry.local_uuid !== local_uuid));
+  removeRecycleBinItem(local_uuid);
 
   // Queue the global removal so the record disappears from every device once
   // the delete operation syncs to Supabase.
@@ -672,8 +768,7 @@ export const db = {
       },
       async put(row) {
         if (tableName === "recycle_bin") {
-          const items = readRecycleBinRaw().filter((item) => item.local_uuid !== row.local_uuid);
-          writeRecycleBinRaw([row, ...items]);
+          putRecycleBinItem(row);
           return row.local_uuid;
         }
         upsertLocalRows(tableName, [row]);
@@ -681,7 +776,7 @@ export const db = {
       },
       async delete(id) {
         if (tableName === "recycle_bin") {
-          writeRecycleBinRaw(readRecycleBinRaw().filter((item) => item.local_uuid !== id && item.id !== id));
+          removeRecycleBinItem(id);
           return;
         }
         removeLocalRows(tableName, (row) => row.local_uuid === id || row.id === id);
@@ -689,7 +784,9 @@ export const db = {
       async bulkDelete(ids) {
         const idSet = new Set(ids.map(String));
         if (tableName === "recycle_bin") {
-          writeRecycleBinRaw(readRecycleBinRaw().filter((item) => !idSet.has(String(item.local_uuid)) && !idSet.has(String(item.id))));
+          readRecycleBinRaw()
+            .filter((item) => idSet.has(String(item.local_uuid)) || idSet.has(String(item.id)))
+            .forEach((item) => removeRecycleBinItem(item.local_uuid));
           return;
         }
         removeLocalRows(tableName, (row) => idSet.has(String(row.local_uuid)) || idSet.has(String(row.id)));
@@ -708,7 +805,9 @@ export const db = {
               },
               async delete() {
                 if (tableName === "recycle_bin") {
-                  writeRecycleBinRaw(readRecycleBinRaw().filter((row) => row[column] !== value));
+                  readRecycleBinRaw()
+                    .filter((row) => row[column] === value)
+                    .forEach((item) => removeRecycleBinItem(item.local_uuid));
                   return;
                 }
                 removeLocalRows(tableName, (row) => row[column] === value);
