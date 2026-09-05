@@ -18,6 +18,7 @@ export const OFFLINE_TABLES = [
   "business_settings",
   "import_history",
   "import_batch_recycle_bin",
+  "recycle_bin",
 ];
 
 export const SERVER_SNAPSHOT_REPLACE_TABLES = new Set([
@@ -32,6 +33,7 @@ export const SERVER_SNAPSHOT_REPLACE_TABLES = new Set([
   "salary_payments",
   "import_history",
   "import_batch_recycle_bin",
+  "recycle_bin",
 ]);
 
 const FOREIGN_KEYS = ["customer_id", "transaction_id", "product_id", "employee_id", "group_id"];
@@ -144,6 +146,10 @@ export async function initDB() {
 
 export async function saveFetchedData(table, rows, { protectUnsynced = false } = {}) {
   if (!OFFLINE_TABLES.includes(table) || !Array.isArray(rows)) return;
+  if (table === "recycle_bin") {
+    writeRecycleBinRaw(reconcileRecycleBinFromServer(rows, { protectUnsynced }));
+    return;
+  }
   const currentCache = getCache();
   const byKey = new Map(
     dedupeRows(table, currentCache[table] || []).map((row) => [normalizedRowKey(table, row), { ...row }]),
@@ -170,6 +176,10 @@ export async function saveFetchedData(table, rows, { protectUnsynced = false } =
 
 export async function replaceFetchedData(table, rows, { protectUnsynced = false } = {}) {
   if (!OFFLINE_TABLES.includes(table) || !Array.isArray(rows)) return;
+  if (table === "recycle_bin") {
+    writeRecycleBinRaw(reconcileRecycleBinFromServer(rows, { protectUnsynced }));
+    return;
+  }
   const currentCache = getCache();
   const previousRows = dedupeRows(table, currentCache[table] || []);
   const previousByKey = new Map(previousRows.map((row) => [normalizedRowKey(table, row), row]));
@@ -205,6 +215,7 @@ export async function replaceFetchedData(table, rows, { protectUnsynced = false 
 }
 
 export async function getAll(table) {
+  if (table === "recycle_bin") return getRecycleBin();
   return dedupeRows(table, getCache()[table] || []).filter((row) => !row.deleted_locally);
 }
 
@@ -434,6 +445,73 @@ function writeRecycleBinRaw(items) {
   writeJson(RECYCLE_KEY, items);
 }
 
+// Reconciles the local recycle-bin mirror with the authoritative server rows.
+// Server rows win (Supabase is the source of truth). When protectUnsynced is
+// set, locally-deleted entries that still have a pending queue operation are
+// preserved so an offline deletion is not clobbered before it syncs.
+function reconcileRecycleBinFromServer(rows = [], { protectUnsynced = false } = {}) {
+  const localItems = readRecycleBinRaw();
+  const pendingOps = readQueue().filter((op) => op.table === "recycle_bin");
+  const serverByKey = new Map();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const key = String(row.id ?? row.local_uuid ?? "");
+    if (!key) continue;
+    serverByKey.set(key, row);
+  }
+
+  const nextItems = [];
+  const seen = new Set();
+
+  for (const [key, row] of serverByKey) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    nextItems.push({
+      local_uuid: row.local_uuid || row.id,
+      entity_type: row.entity_type,
+      entity_id: String(row.entity_id ?? ""),
+      entity_name: row.entity_name,
+      deleted_at: row.deleted_at,
+      deleted_by: row.deleted_by,
+      original_data: typeof row.original_data === "string"
+        ? row.original_data
+        : JSON.stringify(row.original_data || {}),
+      restore_deadline: row.restore_deadline,
+    });
+  }
+
+  if (protectUnsynced) {
+    for (const entry of localItems) {
+      const key = String(entry.local_uuid || entry.id || "");
+      if (!key || seen.has(key)) continue;
+      const pending = pendingOps.some((op) => {
+        if (op.method === "upsert") {
+          const payloadRow = Array.isArray(op.payload) ? op.payload[0] : op.payload;
+          return String(payloadRow?.id ?? "") === key;
+        }
+        if (op.method === "delete") {
+          return (op.filters || []).some((filter) => filter.column === "id" && String(filter.value) === key);
+        }
+        return false;
+      });
+      if (pending) {
+        seen.add(key);
+        nextItems.push(entry);
+      }
+    }
+  }
+
+  return nextItems;
+}
+
+function scheduleSyncIfOnline() {
+  if (typeof window === "undefined") return;
+  if (!isOnline()) return;
+  setTimeout(() => {
+    window.dispatchEvent(new Event("khata-sync-request"));
+  }, 0);
+}
+
 export function clearRecycleBinCache() {
   writeRecycleBinRaw([]);
 }
@@ -451,6 +529,28 @@ export async function moveToRecycleBin(entityType, entityId, entityName, origina
     restore_deadline: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString(),
   };
   writeRecycleBinRaw([item, ...readRecycleBinRaw()]);
+
+  // Persist globally through the offline queue. The upsert uses the local_uuid
+  // as the primary key (id) so retries are idempotent and never create
+  // duplicates. When online it syncs; when offline it waits and retries.
+  enqueueOperation({
+    table: "recycle_bin",
+    method: "upsert",
+    payload: {
+      id: item.local_uuid,
+      entity_type: item.entity_type,
+      entity_id: item.entity_id,
+      entity_name: item.entity_name,
+      deleted_at: item.deleted_at,
+      deleted_by: item.deleted_by,
+      original_data: originalData || {},
+      restore_deadline: item.restore_deadline,
+    },
+    options: { onConflict: "id" },
+    filters: [],
+    selectColumns: "*",
+  });
+  scheduleSyncIfOnline();
   return item;
 }
 
@@ -465,10 +565,10 @@ export async function getRecycleBin() {
     .sort((a, b) => new Date(b.deleted_at) - new Date(a.deleted_at));
 }
 
-export async function restoreFromRecycleBin(local_uuid) {
+export async function restoreFromRecycleBin(local_uuid, suppliedItem = null) {
   try {
     const rawItems = readRecycleBinRaw();
-    const item = rawItems.find(
+    const item = suppliedItem || rawItems.find(
       (entry) =>
         entry.local_uuid === local_uuid ||
         (entry.id !== undefined && entry.id !== null && String(entry.id) === String(local_uuid)) ||
@@ -478,7 +578,7 @@ export async function restoreFromRecycleBin(local_uuid) {
 
     const originalData = typeof item.original_data === "string"
       ? JSON.parse(item.original_data || "{}")
-      : item.original_data;
+      : item.original_data || {};
     const entityType = item.entity_type;
     let data = originalData;
 
@@ -506,7 +606,20 @@ export async function restoreFromRecycleBin(local_uuid) {
       upsertLocalRows(entityType, [originalData]);
     }
 
-    writeRecycleBinRaw(rawItems.filter((entry) => entry.local_uuid !== local_uuid));
+    const removedKey = item.local_uuid || local_uuid;
+    writeRecycleBinRaw(rawItems.filter((entry) => entry.local_uuid !== removedKey));
+
+    // Queue the global removal so the restored record disappears from every
+    // device once the delete operation syncs to Supabase.
+    enqueueOperation({
+      table: "recycle_bin",
+      method: "delete",
+      payload: null,
+      filters: [{ column: "id", operator: "eq", value: removedKey }],
+      options: {},
+      selectColumns: "*",
+    });
+    scheduleSyncIfOnline();
     return {
       success: true,
       entityType,
@@ -520,6 +633,18 @@ export async function restoreFromRecycleBin(local_uuid) {
 
 export async function permanentlyDeleteFromRecycleBin(local_uuid) {
   writeRecycleBinRaw(readRecycleBinRaw().filter((entry) => entry.local_uuid !== local_uuid));
+
+  // Queue the global removal so the record disappears from every device once
+  // the delete operation syncs to Supabase.
+  enqueueOperation({
+    table: "recycle_bin",
+    method: "delete",
+    payload: null,
+    filters: [{ column: "id", operator: "eq", value: local_uuid }],
+    options: {},
+    selectColumns: "*",
+  });
+  scheduleSyncIfOnline();
   return { success: true };
 }
 

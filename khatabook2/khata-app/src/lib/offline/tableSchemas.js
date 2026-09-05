@@ -14,6 +14,7 @@ export const TABLE_COLUMNS = Object.freeze({
   business_settings: ["id", "settings", "updated_at"],
   import_history: ["id", "filename", "uploaded_at", "uploader", "file_hash", "sheet_name", "parsed_preview", "import_statistics", "validation_report", "status", "is_reimport", "source_import_id"],
   import_batch_recycle_bin: ["id", "import_history_id", "filename", "transaction_count", "deleted_at", "deleted_by", "restore_deadline"],
+  recycle_bin: ["id", "entity_type", "entity_id", "entity_name", "deleted_at", "deleted_by", "original_data", "restore_deadline"],
 });
 
 export function sanitizeTablePayload(table, payload) {

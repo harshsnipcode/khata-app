@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 import { offlineSupabase } from "../lib/offline/offlineSupabase";
 import db, { getRecycleBin, restoreFromRecycleBin, permanentlyDeleteFromRecycleBin, cleanupRecycleBin } from "../lib/offline/db";
 import { permanentlyDeleteImportBatch, restoreImportBatch, getImportActor } from "../lib/importReversal";
@@ -44,19 +45,54 @@ function RecycleBinPage() {
   const [actionMsg, setActionMsg] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  const getHomePath = () => {
-    const r = localStorage.getItem("khata_role");
-    if (r === "admin") return "/admin/home";
-    if (r === "employee") return "/employee/home";
-    return "/";
-  };
-
-  const loadItems = async () => {
+  const loadItems = useCallback(async () => {
     setLoading(true);
-    const [localData, batchResult] = await Promise.all([
-      getRecycleBin(),
+
+    // The global Supabase recycle_bin table is the source of truth. It mirrors
+    // the exact schema used by the manual recycle bin (entity_type, entity_id,
+    // entity_name, deleted_at, deleted_by, original_data, restore_deadline) and
+    // is keyed by the same local_uuid (id). Local storage is only an offline
+    // mirror/fallback.
+    const [globalRecycleResult, batchResult, localData] = await Promise.all([
+      supabase.from("recycle_bin").select("*").order("deleted_at", { ascending: false }),
       offlineSupabase.from("import_batch_recycle_bin").select("*").order("deleted_at", { ascending: false }),
+      getRecycleBin(),
     ]);
+
+    let generalItems;
+    if (globalRecycleResult.error) {
+      // Database not configured yet or currently offline: fall back to the
+      // local mirror so the recycle bin remains usable.
+      if (globalRecycleResult.error.code !== "42P01") {
+        console.warn("[RecycleBin] Global recycle_bin fetch failed; using local mirror:", globalRecycleResult.error.message || globalRecycleResult.error);
+      }
+      generalItems = localData;
+    } else {
+      const globalItems = (globalRecycleResult.data || []).map((item) => ({
+        local_uuid: item.id,
+        entity_type: item.entity_type,
+        entity_id: item.entity_id,
+        entity_name: item.entity_name,
+        deleted_at: item.deleted_at,
+        deleted_by: item.deleted_by,
+        restore_deadline: item.restore_deadline,
+        server_managed: true,
+        original_data: item.original_data || {},
+      }));
+
+      // Merge local-only entries that have not synced to the server yet
+      // (offline deletions still pending in the queue). Dedupe by id so the
+      // same deleted record is never shown twice.
+      const globalKeys = new Set(globalItems.map((item) => String(item.local_uuid)));
+      for (const localEntry of localData) {
+        if (!globalKeys.has(String(localEntry.local_uuid))) {
+          globalItems.push(localEntry);
+        }
+      }
+      globalItems.sort((a, b) => new Date(b.deleted_at) - new Date(a.deleted_at));
+      generalItems = globalItems;
+    }
+
     const batchData = batchResult.error ? [] : (batchResult.data || []).map((item) => ({
       local_uuid: `excel-import:${item.id}`,
       entity_type: "excel_import",
@@ -71,18 +107,33 @@ function RecycleBinPage() {
         transaction_count: item.transaction_count,
       },
     }));
-    const data = [...localData, ...batchData];
+    const data = [...generalItems, ...batchData];
     // Sort by deleted_at descending
     data.sort((a, b) => new Date(b.deleted_at) - new Date(a.deleted_at));
     setItems(data);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     loadItems();
     // Run cleanup on mount
     cleanupRecycleBin();
-  }, []);
+  }, [loadItems]);
+
+  // Realtime (supplementary). Changes made on any device (delete, restore,
+  // permanent delete) are reflected here live. The fetch above remains the
+  // source of truth.
+  useEffect(() => {
+    const channel = supabase
+      .channel("recycle-bin-global")
+      .on("postgres_changes", { event: "*", schema: "public", table: "recycle_bin" }, () => loadItems())
+      .on("postgres_changes", { event: "*", schema: "public", table: "import_batch_recycle_bin" }, () => loadItems())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel).catch?.(() => {});
+    };
+  }, [loadItems]);
 
   const handleRestore = async (local_uuid) => {
     const targetItem = items.find((item) => item.local_uuid === local_uuid);
@@ -124,6 +175,13 @@ function RecycleBinPage() {
           originalDataCustomerIdType: typeof rawOriginalData.customer_id,
           originalDataHasCustomerId: 'customer_id' in rawOriginalData,
         });
+      } else if (targetItem) {
+        // The record may only exist in the GLOBAL recycle bin (a different
+        // device deleted it). Target the snapshot held in the global row.
+        entityType = targetItem.entity_type || entityType;
+        rawOriginalData = targetItem.original_data || {};
+        console.log("[RecycleBin] STEP 1 — Raw recycle bin item sourced from global row");
+        console.log(rawOriginalData);
       } else {
         console.error(`[RecycleBin] STEP 1 — Raw recycle bin item NOT FOUND for local_uuid: ${local_uuid}`);
       }
@@ -132,7 +190,10 @@ function RecycleBinPage() {
     }
 
     // ── STEP 2: Run restoreFromRecycleBin ──
-    let result = await restoreFromRecycleBin(local_uuid);
+    // When the record is only in the GLOBAL table (not this device's local
+    // mirror), pass the loaded item so the restore data is available. The
+    // local store is updated when there is a matching mirror entry.
+    let result = await restoreFromRecycleBin(local_uuid, rawItem ? undefined : targetItem);
     // Self-heal when the caller's id does not match the stored local_uuid but
     // STEP 1 located the raw entry (matches by local_uuid, id, or entity_id).
     if (!result.success && rawItem && rawItem.local_uuid && rawItem.local_uuid !== local_uuid) {

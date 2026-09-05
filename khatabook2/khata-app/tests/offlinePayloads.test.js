@@ -88,6 +88,7 @@ test("all offline sync tables have explicit checked-in schema allowlists", () =>
     "business_settings",
     "import_history",
     "import_batch_recycle_bin",
+    "recycle_bin",
   ];
 
   assert.deepEqual(Object.keys(TABLE_COLUMNS).sort(), expectedTables.sort());
@@ -179,8 +180,16 @@ test("stale queue operations for unsupported tables are purged before sync", asy
 
   enqueueOperation({
     table: "recycle_bin",
+    method: "upsert",
+    payload: { id: "10000000-0000-4000-8000-000000000001", entity_type: "transactions" },
+    filters: [],
+    options: { onConflict: "id" },
+    selectColumns: "*",
+  });
+  enqueueOperation({
+    table: "ghost_legacy_table",
     method: "insert",
-    payload: { local_uuid: "legacy", entity_type: "transactions" },
+    payload: { id: 1 },
     filters: [],
     options: {},
     selectColumns: "*",
@@ -196,12 +205,13 @@ test("stale queue operations for unsupported tables are purged before sync", asy
 
   const dropped = await purgeUnsupportedQueueOps();
 
-  assert.equal(dropped.length, 1, "only the unsupported recycle_bin op is dropped");
-  assert.equal(dropped[0].table, "recycle_bin");
+  assert.equal(dropped.length, 1, "only the unsupported ghost table op is dropped");
+  assert.equal(dropped[0].table, "ghost_legacy_table");
 
   const remaining = await getPendingQueue();
-  assert.equal(remaining.length, 1, "valid customer op survives the purge");
-  assert.equal(remaining[0].table, "customers");
+  assert.equal(remaining.length, 2, "recycle_bin and customer ops survive the purge");
+  assert.equal(remaining[0].table, "recycle_bin");
+  assert.equal(remaining[1].table, "customers");
 });
 
 test("legacy pending transaction inserts receive idempotency keys before sync", async () => {
