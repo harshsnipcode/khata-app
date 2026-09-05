@@ -425,6 +425,10 @@ function RecycleBinPage() {
               const originalData = item.original_data || {};
               const amount = originalData?.amount;
               const transactionCount = originalData?.transaction_count;
+              const displayName =
+                item.entity_type === "transactions"
+                  ? item.entity_name.replace(/^Transaction #\d+ - /, "")
+                  : item.entity_name;
 
               return (
                 <div
@@ -438,7 +442,7 @@ function RecycleBinPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-bold text-[var(--text-primary)] truncate">
-                          {item.entity_name}
+                          {displayName}
                         </p>
                         <span className={`shrink-0 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
                           item.entity_type === "transactions" ? "bg-[var(--secondary)] text-[var(--danger)]" :
