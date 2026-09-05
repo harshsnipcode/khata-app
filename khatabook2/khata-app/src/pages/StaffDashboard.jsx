@@ -84,13 +84,13 @@ function StaffDashboard() {
         ...emp,
         salaryCalc: calculateMonthSalary(emp, attendanceData[emp.id] || {}, currentYear, currentMonth),
         cumulativeDue: due,
-        adjustedDue: Math.max(0, due - paid),
+        adjustedDue: due - paid,
       };
     });
   }, [employees, attendanceData, currentYear, currentMonth, paymentsByEmployee]);
 
   const totalDue = useMemo(() => {
-    return employeeSalaries.reduce((sum, emp) => sum + (emp.adjustedDue || 0), 0);
+    return employeeSalaries.reduce((sum, emp) => sum + Math.max(0, emp.adjustedDue || 0), 0);
   }, [employeeSalaries]);
 
   const filteredEmployees = useMemo(() => {
@@ -207,7 +207,8 @@ function StaffDashboard() {
                       </div>
                       <div className="flex items-center gap-3 mt-2">
                         <span className="text-xs text-[var(--text-secondary)] font-medium">
-                          Due: <span className="font-bold text-[var(--primary)]">₹{Math.round(emp.adjustedDue || 0).toLocaleString()}</span>
+                          {emp.adjustedDue < 0 ? "Advance: " : "Due: "}
+                          <span className="font-bold text-[var(--primary)]">₹{Math.round(Math.abs(emp.adjustedDue || 0)).toLocaleString()}</span>
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text-muted)] font-medium">
                           {emp.permissions_enabled ? PERMISSION_SHORT[emp.permission_level] || "Custom" : "Default"}

@@ -229,8 +229,8 @@ function EmployeeDetails() {
               </p>
             </div>
             <div className="bg-[var(--primary-light)] border border-[var(--primary)]/20 rounded-2xl p-4">
-              <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider mb-1">Total Due</p>
-              <p className="text-[var(--primary)] text-lg font-bold">₹{Math.max(0, Math.round(adjustedDue)).toLocaleString()}</p>
+              <p className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider mb-1">{adjustedDue < 0 ? "Advance" : "Total Due"}</p>
+              <p className="text-[var(--primary)] text-lg font-bold">₹{Math.max(0, Math.round(Math.abs(adjustedDue))).toLocaleString()}</p>
             </div>
           </div>
         </div>
