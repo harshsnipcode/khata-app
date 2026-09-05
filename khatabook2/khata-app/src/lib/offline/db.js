@@ -77,6 +77,24 @@ function writeMeta(meta) {
   writeJson(META_KEY, meta);
 }
 
+export function getSyncWatermark(table) {
+  const meta = readMeta();
+  return meta.syncWatermarks?.[table] || null;
+}
+
+export function setSyncWatermark(table, timestamp) {
+  if (!timestamp) return;
+  const meta = readMeta();
+  meta.syncWatermarks ||= {};
+  if (
+    !meta.syncWatermarks[table] ||
+    new Date(timestamp).getTime() > new Date(meta.syncWatermarks[table]).getTime()
+  ) {
+    meta.syncWatermarks[table] = timestamp;
+    writeMeta(meta);
+  }
+}
+
 export function createTempId() {
   const meta = readMeta();
   const id = meta.nextTempId || -1;

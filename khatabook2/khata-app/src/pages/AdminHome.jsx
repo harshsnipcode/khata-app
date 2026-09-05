@@ -11,7 +11,8 @@ import CatalogueView from "../components/CatalogueView";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
 import { splitByTodayActivity } from "../lib/transactionOrder";
-import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
+import { buildBalanceMap } from "../lib/customerBalance";
+import { useLiveTransactions } from "../lib/liveSync";
 import ActivityDivider from "../components/ActivityDivider";
 
 
@@ -101,9 +102,10 @@ function AdminHome() {
 
 
   const [customers,     setCustomers]   = useState([]);
-  const [transactions,  setTransactions]= useState([]);
   const [employees,     setEmployees]   = useState([]);
-  const [loading,       setLoading]     = useState(true);
+  const [baseLoading,   setBaseLoading] = useState(true);
+  const { transactions, initialLoading: transactionsLoading } = useLiveTransactions();
+  const loading = baseLoading || transactionsLoading;
 
   // Search / filter / sort
   const [searchTerm,   setSearchTerm]   = useState("");
@@ -128,37 +130,42 @@ function AdminHome() {
     sessionStorage.setItem("khata_admin_sort_type", sortType);
   }, [filterType, sortType]);
 
-  /* ── data loading ── */
-  const load = useCallback(async () => {
-    setLoading(true);
-    const [custRes, txnData, empRes] = await Promise.all([
-      supabase.from("customers").select("*").order("created_at", { ascending: false }),
-      fetchAllTransactions(),
-      supabase.from("employees").select("*").order("created_at", { ascending: false }),
-    ]);
-    setCustomers(custRes.data || []);
-    setTransactions(txnData || []);
-    setEmployees(empRes.data || []);
-    setLoading(false);
+  /* ── data loading ──
+     Customers and employees reload independently. Transactions are handled by
+     useLiveTransactions() (cache-first read + realtime merge + delta catch-up),
+     so a single transaction change no longer re-downloads the whole table. */
+  const loadCustomers = useCallback(async () => {
+    try {
+      const { data } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
+      setCustomers(data || []);
+    } finally {
+      setBaseLoading(false);
+    }
+  }, []);
+
+  const loadEmployees = useCallback(async () => {
+    try {
+      const { data } = await supabase.from("employees").select("*").order("created_at", { ascending: false });
+      setEmployees(data || []);
+    } finally {
+      setBaseLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    const run = async () => {
-      await load();
-    };
-    run();
+    loadCustomers();
+    loadEmployees();
 
     const channel = supabase
       .channel("admin-home-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "employees" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, () => loadCustomers())
+      .on("postgres_changes", { event: "*", schema: "public", table: "employees" }, () => loadEmployees())
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [load]);
+  }, [loadCustomers, loadEmployees]);
 
   useEffect(() => {
     supabase

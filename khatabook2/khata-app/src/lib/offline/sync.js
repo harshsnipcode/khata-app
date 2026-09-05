@@ -4,7 +4,8 @@ import {
   SERVER_SNAPSHOT_REPLACE_TABLES,
   ensureQueueInsertIdempotencyKeys,
   getPendingQueue,
-isOnline,
+  getSyncWatermark,
+  isOnline,
   purgeUnsupportedQueueOps,
   removeQueueItem,
   removeLocalRows,
@@ -13,11 +14,35 @@ isOnline,
   rewriteForeignKeys,
   rewriteLocalId,
   saveFetchedData,
+  setSyncWatermark,
 } from "./db";
 import { sanitizeTablePayload } from "./tableSchemas";
 
 let syncing = false;
 let refreshingSnapshot = false;
+
+// Per-table timestamp watermark used by the incremental snapshot. A snapshot
+// pulled for a warm cache requests only rows newer than the last confirmed
+// checkpoint instead of re-downloading the whole table, so a drained sync queue
+// no longer re-pulls the entire database after a single change.
+//
+// Tables NOT listed here keep the previous full snapshot behaviour.
+const SYNC_TIME_COLUMNS = Object.freeze({
+  customers: ["created_at", "updated_at"],
+  product_groups: ["created_at", "updated_at"],
+  products: ["created_at", "updated_at"],
+  transactions: ["activity_at"],
+  transaction_items: ["created_at"],
+  customer_product_prices: ["created_at", "updated_at"],
+  product_transactions: ["created_at"],
+  salary_payments: ["created_at"],
+  import_history: ["uploaded_at", "deleted_at", "restored_at"],
+  import_batch_recycle_bin: ["deleted_at"],
+});
+
+// If an incremental pull ever exceeds this many rows it is treated as an
+// anomaly and falls back to a full re-pull, keeping the watermark exact.
+const INCREMENTAL_CAP = 10000;
 
 function emitStatus(status, detail = {}) {
   if (typeof window === "undefined") return;
@@ -128,7 +153,60 @@ async function executeOperation(operation) {
   }
 }
 
+function maxTimestampInRow(row, columns) {
+  let max = null;
+  for (const column of columns) {
+    const value = row?.[column];
+    if (value && (!max || new Date(value).getTime() > new Date(max).getTime())) max = value;
+  }
+  return max;
+}
+
+function maxTimestampInRows(rows, columns) {
+  let max = null;
+  for (const row of rows || []) {
+    const value = maxTimestampInRow(row, columns);
+    if (value && (!max || new Date(value).getTime() > new Date(max).getTime())) max = value;
+  }
+  return max;
+}
+
+async function fetchTableDelta(table, columns) {
+  const watermark = getSyncWatermark(table);
+  if (!watermark) return null;
+  const orFilter = columns.map((column) => `${column}.gt.${watermark}`).join(",");
+  const { data, error } = await supabase
+    .from(table)
+    .select("*")
+    .or(orFilter)
+    .limit(INCREMENTAL_CAP + 1);
+  if (error) throw error;
+  const rows = Array.isArray(data) ? data : [];
+  if (rows.length > INCREMENTAL_CAP) return null;
+  return rows;
+}
+
 async function fetchTableSnapshot(table) {
+  const columns = SYNC_TIME_COLUMNS[table];
+
+  if (columns) {
+    const delta = await fetchTableDelta(table, columns);
+    if (delta !== null) {
+      if (delta.length === 0) {
+        // Nothing changed on the server since the last checkpoint. The existing
+        // cache is already current, so skip the write entirely.
+        return;
+      }
+      await saveFetchedData(table, delta, { protectUnsynced: true });
+      const watermark = maxTimestampInRows(delta, columns);
+      if (watermark) setSyncWatermark(table, watermark);
+      console.info("[OfflineSync] Incremental snapshot", { table, rows: delta.length });
+      return;
+    }
+    // No watermark yet (cold cache) or the delta maxed out the cap: fall back
+    // to a full re-pull below so this table's checkpoint stays exact.
+  }
+
   const pageSize = 1000;
   const rows = [];
   for (let from = 0; isOnline(); from += pageSize) {
@@ -145,9 +223,13 @@ async function fetchTableSnapshot(table) {
   }
   if (SERVER_SNAPSHOT_REPLACE_TABLES.has(table)) {
     await replaceFetchedData(table, rows, { protectUnsynced: true });
-    return;
+  } else {
+    await saveFetchedData(table, rows, { protectUnsynced: true });
   }
-  await saveFetchedData(table, rows, { protectUnsynced: true });
+  if (columns) {
+    const watermark = maxTimestampInRows(rows, columns);
+    if (watermark) setSyncWatermark(table, watermark);
+  }
 }
 
 export async function refreshOfflineSnapshot() {
