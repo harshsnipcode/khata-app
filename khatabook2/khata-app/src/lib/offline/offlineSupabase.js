@@ -3,7 +3,6 @@ import { recordQueryTiming } from "../perf";
 import { sanitizeTablePayload } from "./tableSchemas";
 import {
   OFFLINE_TABLES,
-  SERVER_SNAPSHOT_REPLACE_TABLES,
   createTempId,
   deleteLocalRows,
   enqueueOperation,
@@ -11,7 +10,6 @@ import {
   getAll,
   isOnline,
   rewriteForeignKeys,
-  replaceFetchedData,
   saveFetchedData,
   upsertLocalRows,
   getCache,
@@ -324,17 +322,11 @@ async function refreshCacheAfterOnlineResult(ops, data) {
     // This is a server READ refreshing the cache, not a confirmed write, so it
     // must never overwrite a local edit that is still pending in the queue.
     const rows = Array.isArray(data) ? data : (data ? [data] : []);
-    // Only a complete, unpaginated server snapshot may replace the offline
-    // cache. Paginated reads must merge instead so a partial page can never
-    // truncate the cached transactions (and skew customer balances).
-    const canSafelyReplace = SERVER_SNAPSHOT_REPLACE_TABLES.has(ops.table)
-      && ops.filters.length === 0
-      && ops.range === null
-      && (rows.length === 0 || !ops.selectColumns || ops.selectColumns === "*");
-    if (canSafelyReplace) {
-      await replaceFetchedData(ops.table, rows, { protectUnsynced: true });
-      return;
-    }
+    // Ordinary route reads are not authoritative global snapshots. They may be
+    // filtered, capped by PostgREST defaults, served from a stale cache, or be
+    // one page of a larger dataset, so they must only repair/extend the shared
+    // cache. Authoritative replacement is reserved for the dedicated snapshot
+    // sync paths that paginate and prove completeness before deleting rows.
     await saveFetchedData(ops.table, rows, { protectUnsynced: true });
     return;
   }

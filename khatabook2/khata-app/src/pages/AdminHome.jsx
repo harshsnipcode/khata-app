@@ -11,7 +11,7 @@ import FilterModal from "../components/FilterModal";
 import CatalogueView from "../components/CatalogueView";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
-import { getAll, removeLocalRows, replaceFetchedData } from "../lib/offline/db";
+import { getAll, isOnline, removeLocalRows, replaceFetchedData } from "../lib/offline/db";
 import { splitByTodayActivity } from "../lib/transactionOrder";
 import { buildBalanceMap } from "../lib/customerBalance";
 import { useLiveTransactions } from "../lib/liveSync";
@@ -19,6 +19,24 @@ import ActivityDivider from "../components/ActivityDivider";
 
 
 /* ── helpers ─────────────────────────────────────────── */
+
+const CUSTOMER_PAGE_SIZE = 1000;
+
+async function fetchAllCustomersSnapshot() {
+  if (!isOnline()) return null;
+  const rows = [];
+  for (let from = 0; isOnline(); from += CUSTOMER_PAGE_SIZE) {
+    const { data, error } = await supabaseClient
+      .from("customers")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, from + CUSTOMER_PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < CUSTOMER_PAGE_SIZE) return rows;
+  }
+  return null;
+}
 
 function applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType) {
   // 1. Search
@@ -143,11 +161,9 @@ function AdminHome() {
       setBaseLoading(false);
     }
     try {
-      const { data: serverRows } = await supabaseClient
-        .from("customers")
-        .select("*")
-        .order("created_at", { ascending: false });
-      await replaceFetchedData("customers", serverRows || [], { protectUnsynced: true });
+      const serverRows = await fetchAllCustomersSnapshot();
+      if (!serverRows) return;
+      await replaceFetchedData("customers", serverRows, { protectUnsynced: true });
       setCustomers(await getAll("customers"));
     } catch {
       /* Offline or transient fetch failure – the cache already painted. */

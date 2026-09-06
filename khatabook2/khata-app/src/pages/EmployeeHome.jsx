@@ -12,7 +12,7 @@ import { supabase as supabaseClient } from "../lib/supabase";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { can } from "../lib/permissions";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
-import { getAll, removeLocalRows, replaceFetchedData } from "../lib/offline/db";
+import { getAll, isOnline, removeLocalRows, replaceFetchedData } from "../lib/offline/db";
 import { splitByTodayActivity } from "../lib/transactionOrder";
 import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
 import ActivityDivider from "../components/ActivityDivider";
@@ -20,6 +20,24 @@ import ActivityDivider from "../components/ActivityDivider";
 
 
 /* ── helpers (shared logic, identical to AdminHome) ──── */
+
+const CUSTOMER_PAGE_SIZE = 1000;
+
+async function fetchAllCustomersSnapshot() {
+  if (!isOnline()) return null;
+  const rows = [];
+  for (let from = 0; isOnline(); from += CUSTOMER_PAGE_SIZE) {
+    const { data, error } = await supabaseClient
+      .from("customers")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, from + CUSTOMER_PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < CUSTOMER_PAGE_SIZE) return rows;
+  }
+  return null;
+}
 
 function applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType) {
   let list = customers.filter((c) => {
@@ -116,19 +134,14 @@ function EmployeeHome() {
   /* ── data loading ── */
   const load = useCallback(async () => {
     setLoading(true);
-    const customerQuery = supabaseClient
-      .from("customers")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .catch(() => ({ error: { message: "offline" } }));
     const [custRes, txnData] = await Promise.all([
-      customerQuery,
+      fetchAllCustomersSnapshot().catch(() => null),
       fetchAllTransactions(),
     ]);
-    if (custRes.error) {
+    if (!custRes) {
       setCustomers(await getAll("customers"));
     } else {
-      await replaceFetchedData("customers", custRes.data || [], { protectUnsynced: true });
+      await replaceFetchedData("customers", custRes, { protectUnsynced: true });
       setCustomers(await getAll("customers"));
     }
     setTransactions(txnData || []);

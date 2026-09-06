@@ -264,3 +264,57 @@ test("HYPOTHESIS: online-first SELECT resurrects a pending offline delete when l
   const returnedIds = (Array.isArray(data) ? data : data ? [data] : []).map((r) => r.id);
   assert.deepEqual(returnedIds, [], "the pending offline delete must NOT be returned by an online-first read");
 });
+
+test("ordinary limited transaction reads never replace the global transaction cache", async () => {
+  installLocalStorageMock();
+  serverData.transactions = [
+    { id: 1, customer_id: 10, type: "gave", amount: 100, created_at: "2026-08-03T03:00:00Z" },
+    { id: 2, customer_id: 11, type: "got", amount: 50, created_at: "2026-08-03T02:00:00Z" },
+    { id: 3, customer_id: 12, type: "gave", amount: 75, created_at: "2026-08-03T01:00:00Z" },
+  ];
+
+  await db.replaceFetchedData("transactions", serverData.transactions);
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+
+  const { data } = await offlineSupabase
+    .from("transactions")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  assert.deepEqual((data || []).map((row) => row.id), [1], "the route read still returns its requested page");
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.deepEqual(
+    (await db.getAll("transactions")).map((row) => row.id).sort(),
+    [1, 2, 3],
+    "a limited route read must merge, not replace the shared transaction cache",
+  );
+});
+
+test("customer ledger transaction reads merge without deleting unrelated cached transactions", async () => {
+  installLocalStorageMock();
+  serverData.transactions = [
+    { id: 1, customer_id: 10, type: "gave", amount: 100, created_at: "2026-08-03T03:00:00Z" },
+    { id: 2, customer_id: 11, type: "got", amount: 50, created_at: "2026-08-03T02:00:00Z" },
+    { id: 3, customer_id: 12, type: "gave", amount: 75, created_at: "2026-08-03T01:00:00Z" },
+  ];
+
+  await db.replaceFetchedData("transactions", serverData.transactions);
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+
+  const { data } = await offlineSupabase
+    .from("transactions")
+    .select("*")
+    .eq("customer_id", 11)
+    .order("created_at", { ascending: true });
+  assert.deepEqual((data || []).map((row) => row.id), [2]);
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.deepEqual(
+    (await db.getAll("transactions")).map((row) => row.id).sort(),
+    [1, 2, 3],
+    "a customer-specific ledger read must not become a global snapshot",
+  );
+});
