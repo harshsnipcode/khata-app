@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import { getAll, saveFetchedData, removeLocalRows, resolveServerId } from "./offline/db";
+import { getAll, saveFetchedData, removeLocalRows, resolveServerId, isOnline, readQueue } from "./offline/db";
 
 const TABLE = "transactions";
 const DELTA_PAGE_SIZE = 1000;
@@ -209,11 +209,12 @@ export function useLiveTransactions() {
         // only grow or refresh the cache, never shrink it — even a partial or
         // empty payload is harmless here.
         await saveFetchedData(TABLE, full, { protectUnsynced: true });
-        // Subtractive step only under a live-proven complete snapshot: drop
-        // previously-synced rows the server no longer has (deletions realtime
-        // could not deliver while this view was unmounted). Absence from an
-        // unproven payload is never treated as a deletion.
-        if (complete) {
+        // Subtractive step only under a live-proven complete snapshot AND
+        // only while genuinely online: drop previously-synced rows the server
+        // no longer has (deletions realtime could not deliver while this view
+        // was unmounted). Absence from an unproven, offline, or stale payload
+        // is never treated as a deletion.
+        if (complete && isOnline()) {
           await removeLocalRows(TABLE, (row) => {
             if (!row || row.synced !== true || row.deleted_locally) return false;
             const key = resolvedIdKey(row);
@@ -256,7 +257,15 @@ export function useLiveTransactions() {
         const cached = await getAll(TABLE);
         const cache = cacheDigest(cached);
         const server = await fetchServerDigest();
-        if (!isCacheCurrent(cache, server)) {
+        // An offline DELETE (or any other queued local mutation) makes the
+        // digest report a spurious deficit: the server still counts a row this
+        // device already considers gone, so it is NOT server authority until
+        // that queue has drained. Never run the authoritative full-snapshot
+        // reconcile while offline or while operations for this table are
+        // pending; the additive delta below still makes forward progress and
+        // the queued DELETE is what actually removes the row server-side.
+        const hasPendingOps = readQueue().some((op) => op.table === TABLE);
+        if (isOnline() && !hasPendingOps && !isCacheCurrent(cache, server)) {
           const full = await paginateAllTransactions();
           let after = null;
           try {
