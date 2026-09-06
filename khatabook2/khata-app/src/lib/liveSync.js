@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import { getAll, saveFetchedData, removeLocalRows } from "./offline/db";
+import { getAll, saveFetchedData, replaceFetchedData, removeLocalRows } from "./offline/db";
 
 const TABLE = "transactions";
 const DELTA_PAGE_SIZE = 1000;
@@ -34,6 +34,23 @@ let catchUpRunning = false;
 let baselinePromise = null;
 let lastCatchUpAt = 0;
 
+// Serializes every cache mutation (realtime merges, realtime deletes, and the
+// full reconciliation) so a background reconcile can never interleave with a
+// live event and clobber a row that arrived after its snapshot was taken.
+let cacheLock = Promise.resolve();
+function withCacheLock(fn) {
+  const run = cacheLock.then(fn, fn);
+  cacheLock = run.catch(() => {});
+  return run;
+}
+
+function isRealServerId(id) {
+  if (id === undefined || id === null || id === "") return false;
+  if (typeof id === "number") return id >= 0;
+  if (typeof id === "string") return !/^-\d+$/.test(id);
+  return true;
+}
+
 function rowTimestamp(row) {
   return row?.activity_at || row?.created_at || null;
 }
@@ -45,6 +62,42 @@ function maxTimestamp(rows) {
     if (ts && (!max || new Date(ts).getTime() > new Date(max).getTime())) max = ts;
   }
   return max;
+}
+
+async function fetchServerDigest() {
+  const { data: newest, error: maxError } = await supabase
+    .from(TABLE)
+    .select("activity_at, created_at")
+    .order("activity_at", { ascending: false })
+    .limit(1);
+  if (maxError) throw maxError;
+  const { count, error: countError } = await supabase
+    .from(TABLE)
+    .select("id", { count: "exact", head: true });
+  if (countError) throw countError;
+  return { serverMax: maxTimestamp(newest || []), serverCount: count ?? 0 };
+}
+
+function cacheDigest(rows) {
+  const seenIds = new Set();
+  let cacheMax = null;
+  for (const row of rows || []) {
+    if (!row || row.deleted_locally) continue;
+    if (isRealServerId(row.id)) seenIds.add(String(row.id));
+    const ts = rowTimestamp(row);
+    if (ts && (!cacheMax || new Date(ts).getTime() > new Date(cacheMax).getTime())) cacheMax = ts;
+  }
+  return { cacheMax, cacheCount: seenIds.size };
+}
+
+// The cache is server-current when it accounts for at least as many real
+// server ids as the server has AND holds its newest row. A surplus happens
+// naturally when unsynced local rows exist; only a deficit (or a newer server
+// max) means reconciliation must download more.
+function isCacheCurrent(cache, server) {
+  if (server.serverCount === 0) return cache.cacheCount === 0;
+  if (cache.cacheCount < server.serverCount) return false;
+  return !!cache.cacheMax && new Date(cache.cacheMax).getTime() >= new Date(server.serverMax).getTime();
 }
 
 function mergeRows(existing, incoming) {
@@ -115,8 +168,32 @@ export function useLiveTransactions() {
 
     async function commit(rows) {
       if (!rows || rows.length === 0) return;
-      await saveFetchedData(TABLE, rows, { protectUnsynced: true });
-      if (active) setTransactions((prev) => mergeRows(prev, rows));
+      await withCacheLock(async () => {
+        await saveFetchedData(TABLE, rows, { protectUnsynced: true });
+        if (active) setTransactions((prev) => mergeRows(prev, rows));
+      });
+    }
+
+    async function commitFull(rows) {
+      const serverIds = new Set(
+        (rows || [])
+          .map((row) => (row?.id === undefined || row?.id === null ? null : String(row.id)))
+          .filter(Boolean),
+      );
+      await withCacheLock(async () => {
+        // Replace the cache with the authoritative server snapshot, then drop
+        // previously-synced rows the server no longer has (deletions realtime
+        // could not deliver while this view was unmounted). protectUnsynced
+        // keeps any pending local edits intact through the replace.
+        await replaceFetchedData(TABLE, rows, { protectUnsynced: true });
+        await removeLocalRows(TABLE, (row) => {
+          if (!row || row.synced !== true || row.deleted_locally) return false;
+          const id = row.id;
+          if (id === undefined || id === null || id === "") return false;
+          return !serverIds.has(String(id));
+        });
+        if (active) setTransactions(await getAll(TABLE));
+      });
     }
 
     function ensureBaseline() {
@@ -142,6 +219,22 @@ export function useLiveTransactions() {
       try {
         await ensureBaseline();
         if (!watermark) return; // baseline is not confirmed yet; retry next trigger
+        // Completeness check: the delta only ever asks for activity_at > the
+        // cached watermark, so rows at or below it that are missing or stale
+        // (older gaps, silent edits, non-RPC updates) can never be recovered by
+        // the delta alone. A cheap server digest (newest row + exact count)
+        // proves whether the cache holds the complete server set; when it
+        // cannot, pull the full history once in the background and move on.
+        const cached = await getAll(TABLE);
+        const cache = cacheDigest(cached);
+        const server = await fetchServerDigest();
+        if (!isCacheCurrent(cache, server)) {
+          const full = await paginateAllTransactions();
+          await commitFull(full);
+          const max = maxTimestamp(full);
+          if (max) watermark = max;
+          return;
+        }
         const { rows, hitCap } = await fetchTransactionsSince(watermark);
         if (hitCap) {
           // The delta hit the page cap, meaning the watermark boundary may not
@@ -199,8 +292,10 @@ export function useLiveTransactions() {
       .on("postgres_changes", { event: "DELETE", schema: "public", table: TABLE }, (payload) => {
         const id = payload?.old_record?.id ?? payload?.old?.id;
         if (id === undefined || id === null) return;
-        removeLocalRows(TABLE, (row) => String(row.id) === String(id));
-        if (active) setTransactions((prev) => prev.filter((row) => String(row.id) !== String(id)));
+        withCacheLock(async () => {
+          await removeLocalRows(TABLE, (row) => String(row.id) === String(id));
+          if (active) setTransactions((prev) => prev.filter((row) => String(row.id) !== String(id)));
+        });
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") catchUp();
