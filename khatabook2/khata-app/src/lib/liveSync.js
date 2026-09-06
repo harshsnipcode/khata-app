@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import { getAll, saveFetchedData, replaceFetchedData, removeLocalRows } from "./offline/db";
+import { getAll, saveFetchedData, removeLocalRows, resolveServerId } from "./offline/db";
 
 const TABLE = "transactions";
 const DELTA_PAGE_SIZE = 1000;
@@ -100,6 +100,32 @@ function isCacheCurrent(cache, server) {
   return !!cache.cacheMax && new Date(cache.cacheMax).getTime() >= new Date(server.serverMax).getTime();
 }
 
+function resolvedIdKey(row) {
+  const id = row?.id;
+  if (id === undefined || id === null || id === "") return null;
+  return String(resolveServerId(TABLE, id));
+}
+
+// A fetched snapshot may only be used to REMOVE local rows when it is proven
+// to be the complete, current server set. Proof: the number of distinct real
+// server ids in the snapshot must exactly equal the live server count (served
+// via HTTP HEAD, which the service worker can never satisfy offline) AND the
+// snapshot's newest row timestamp must equal the live server max. Any
+// divergence in either direction (empty, partial, stale, or silently altered
+// payloads) fails the proof and forbids deletion.
+function snapshotIsComplete(full, server) {
+  if (!server) return false;
+  const fullIds = new Set();
+  for (const row of full || []) {
+    const key = resolvedIdKey(row);
+    if (key) fullIds.add(key);
+  }
+  if (fullIds.size !== (server.serverCount ?? 0)) return false;
+  const fullMax = maxTimestamp(full);
+  if (!fullMax || !server.serverMax) return fullMax === server.serverMax;
+  return new Date(fullMax).getTime() === new Date(server.serverMax).getTime();
+}
+
 function mergeRows(existing, incoming) {
   const indexed = new Map();
   const extras = [];
@@ -174,24 +200,26 @@ export function useLiveTransactions() {
       });
     }
 
-    async function commitFull(rows) {
-      const serverIds = new Set(
-        (rows || [])
-          .map((row) => (row?.id === undefined || row?.id === null ? null : String(row.id)))
-          .filter(Boolean),
-      );
+    async function reconcileFull(full, server) {
+      const serverKeys = new Set((full || []).map(resolvedIdKey).filter(Boolean));
+      const complete = snapshotIsComplete(full, server);
       await withCacheLock(async () => {
-        // Replace the cache with the authoritative server snapshot, then drop
+        // Additive repair first: merge the snapshot into the cache
+        // (protectUnsynced keeps pending local edits intact). This step can
+        // only grow or refresh the cache, never shrink it — even a partial or
+        // empty payload is harmless here.
+        await saveFetchedData(TABLE, full, { protectUnsynced: true });
+        // Subtractive step only under a live-proven complete snapshot: drop
         // previously-synced rows the server no longer has (deletions realtime
-        // could not deliver while this view was unmounted). protectUnsynced
-        // keeps any pending local edits intact through the replace.
-        await replaceFetchedData(TABLE, rows, { protectUnsynced: true });
-        await removeLocalRows(TABLE, (row) => {
-          if (!row || row.synced !== true || row.deleted_locally) return false;
-          const id = row.id;
-          if (id === undefined || id === null || id === "") return false;
-          return !serverIds.has(String(id));
-        });
+        // could not deliver while this view was unmounted). Absence from an
+        // unproven payload is never treated as a deletion.
+        if (complete) {
+          await removeLocalRows(TABLE, (row) => {
+            if (!row || row.synced !== true || row.deleted_locally) return false;
+            const key = resolvedIdKey(row);
+            return !!key && !serverKeys.has(key);
+          });
+        }
         if (active) setTransactions(await getAll(TABLE));
       });
     }
@@ -230,9 +258,17 @@ export function useLiveTransactions() {
         const server = await fetchServerDigest();
         if (!isCacheCurrent(cache, server)) {
           const full = await paginateAllTransactions();
-          await commitFull(full);
+          let after = null;
+          try {
+            // Live re-proof after the download closes the "table changed mid
+            // fetch" race; a null digest means unproven -> merge-only below.
+            after = await fetchServerDigest();
+          } catch {
+            after = null;
+          }
+          await reconcileFull(full, after);
           const max = maxTimestamp(full);
-          if (max) watermark = max;
+          if (after && snapshotIsComplete(full, after) && max) watermark = max;
           return;
         }
         const { rows, hitCap } = await fetchTransactionsSince(watermark);
