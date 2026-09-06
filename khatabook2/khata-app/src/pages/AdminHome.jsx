@@ -10,6 +10,7 @@ import FilterModal from "../components/FilterModal";
 import CatalogueView from "../components/CatalogueView";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
+import { removeLocalRows } from "../lib/offline/db";
 import { splitByTodayActivity } from "../lib/transactionOrder";
 import { buildBalanceMap } from "../lib/customerBalance";
 import { useLiveTransactions } from "../lib/liveSync";
@@ -158,7 +159,17 @@ function AdminHome() {
 
     const channel = supabase
       .channel("admin-home-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, () => loadCustomers())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "customers" }, () => loadCustomers())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "customers" }, () => loadCustomers())
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "customers" }, (payload) => {
+        const deletedId = payload?.old_record?.id ?? payload?.old?.id;
+        if (deletedId === undefined || deletedId === null) {
+          loadCustomers();
+          return;
+        }
+        removeLocalRows("customers", (row) => String(row.id) === String(deletedId));
+        setCustomers((prev) => prev.filter((customer) => String(customer.id) !== String(deletedId)));
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "employees" }, () => loadEmployees())
       .subscribe();
 

@@ -11,6 +11,7 @@ import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/off
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { can } from "../lib/permissions";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
+import { removeLocalRows } from "../lib/offline/db";
 import { splitByTodayActivity } from "../lib/transactionOrder";
 import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
 import ActivityDivider from "../components/ActivityDivider";
@@ -131,7 +132,17 @@ function EmployeeHome() {
 
     const channel = supabase
       .channel("employee-home-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, () => load())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "customers" }, () => load())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "customers" }, () => load())
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "customers" }, (payload) => {
+        const deletedId = payload?.old_record?.id ?? payload?.old?.id;
+        if (deletedId === undefined || deletedId === null) {
+          load();
+          return;
+        }
+        removeLocalRows("customers", (row) => String(row.id) === String(deletedId));
+        setCustomers((prev) => prev.filter((customer) => String(customer.id) !== String(deletedId)));
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
       .subscribe();
 
