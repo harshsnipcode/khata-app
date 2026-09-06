@@ -8,10 +8,11 @@ import SearchBar from "../components/SearchBar";
 import FilterModal from "../components/FilterModal";
 import CatalogueView from "../components/CatalogueView";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import { supabase as supabaseClient } from "../lib/supabase";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { can } from "../lib/permissions";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
-import { removeLocalRows } from "../lib/offline/db";
+import { getAll, removeLocalRows, replaceFetchedData } from "../lib/offline/db";
 import { splitByTodayActivity } from "../lib/transactionOrder";
 import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
 import ActivityDivider from "../components/ActivityDivider";
@@ -115,11 +116,21 @@ function EmployeeHome() {
   /* ── data loading ── */
   const load = useCallback(async () => {
     setLoading(true);
+    const customerQuery = supabaseClient
+      .from("customers")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .catch(() => ({ error: { message: "offline" } }));
     const [custRes, txnData] = await Promise.all([
-      supabase.from("customers").select("*").order("created_at", { ascending: false }),
+      customerQuery,
       fetchAllTransactions(),
     ]);
-    setCustomers(custRes.data || []);
+    if (custRes.error) {
+      setCustomers(await getAll("customers"));
+    } else {
+      await replaceFetchedData("customers", custRes.data || [], { protectUnsynced: true });
+      setCustomers(await getAll("customers"));
+    }
     setTransactions(txnData || []);
     setLoading(false);
   }, []);

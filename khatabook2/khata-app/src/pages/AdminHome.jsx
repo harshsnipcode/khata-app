@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import { supabase as supabaseClient } from "../lib/supabase";
 import Header from "../components/Header";
 import Navbar from "../components/Navbar";
 import SummaryCard from "../components/SummaryCard";
@@ -10,7 +11,7 @@ import FilterModal from "../components/FilterModal";
 import CatalogueView from "../components/CatalogueView";
 import useSwipeNavigation from "../hooks/useSwipeNavigation";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
-import { removeLocalRows } from "../lib/offline/db";
+import { getAll, removeLocalRows, replaceFetchedData } from "../lib/offline/db";
 import { splitByTodayActivity } from "../lib/transactionOrder";
 import { buildBalanceMap } from "../lib/customerBalance";
 import { useLiveTransactions } from "../lib/liveSync";
@@ -137,10 +138,19 @@ function AdminHome() {
      so a single transaction change no longer re-downloads the whole table. */
   const loadCustomers = useCallback(async () => {
     try {
-      const { data } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
-      setCustomers(data || []);
+      setCustomers(await getAll("customers"));
     } finally {
       setBaseLoading(false);
+    }
+    try {
+      const { data: serverRows } = await supabaseClient
+        .from("customers")
+        .select("*")
+        .order("created_at", { ascending: false });
+      await replaceFetchedData("customers", serverRows || [], { protectUnsynced: true });
+      setCustomers(await getAll("customers"));
+    } catch {
+      /* Offline or transient fetch failure – the cache already painted. */
     }
   }, []);
 
