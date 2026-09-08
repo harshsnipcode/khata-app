@@ -30,6 +30,7 @@ async function fetchAllCustomersSnapshot() {
       .from("customers")
       .select("*")
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(from, from + CUSTOMER_PAGE_SIZE - 1);
     if (error) throw error;
     rows.push(...(data || []));

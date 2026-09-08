@@ -5,6 +5,7 @@ import { getAll, saveFetchedData, removeLocalRows, resolveServerId, isOnline, re
 const TABLE = "transactions";
 const DELTA_PAGE_SIZE = 1000;
 const MAX_DELTA_PAGES = 5;
+const MAX_FULL_RECONCILE_ATTEMPTS = 3;
 const CATCH_UP_MIN_GAP_MS = 15_000;
 
 // Column projection for delta queries. The offline cache keeps its full rows
@@ -159,12 +160,33 @@ async function paginateAllTransactions() {
       .from(TABLE)
       .select("*")
       .order("created_at", { ascending: false })
+      // A range query must have a total order. Offline batches often contain
+      // rows with the same created_at, and ordering only by that column lets
+      // PostgREST move tied rows between pages across reloads.
+      .order("id", { ascending: false })
       .range(from, from + DELTA_PAGE_SIZE - 1);
     if (error) throw error;
     rows.push(...(data || []));
     if (!data || data.length < DELTA_PAGE_SIZE) break;
   }
   return rows;
+}
+
+async function fetchCompleteTransactionsSnapshot() {
+  let full = [];
+  let server = null;
+  for (let attempt = 0; attempt < MAX_FULL_RECONCILE_ATTEMPTS; attempt += 1) {
+    full = await paginateAllTransactions();
+    try {
+      server = await fetchServerDigest();
+    } catch {
+      server = null;
+    }
+    if (server && snapshotIsComplete(full, server)) {
+      return { full, server };
+    }
+  }
+  return { full, server };
 }
 
 async function fetchTransactionsSince(since) {
@@ -176,6 +198,7 @@ async function fetchTransactionsSince(since) {
       .select(DELTA_COLUMNS)
       .gt("activity_at", since)
       .order("activity_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(from, from + DELTA_PAGE_SIZE - 1);
     if (error) throw error;
     rows.push(...(data || []));
@@ -266,15 +289,10 @@ export function useLiveTransactions() {
         // the queued DELETE is what actually removes the row server-side.
         const hasPendingOps = readQueue().some((op) => op.table === TABLE);
         if (isOnline() && !hasPendingOps && !isCacheCurrent(cache, server)) {
-          const full = await paginateAllTransactions();
-          let after = null;
-          try {
-            // Live re-proof after the download closes the "table changed mid
-            // fetch" race; a null digest means unproven -> merge-only below.
-            after = await fetchServerDigest();
-          } catch {
-            after = null;
-          }
+          // Re-read a bounded number of times if the server changes during a
+          // paginated fetch. This also makes a tied timestamp batch converge
+          // in this one reconciliation instead of relying on reloads.
+          const { full, server: after } = await fetchCompleteTransactionsSnapshot();
           await reconcileFull(full, after);
           const max = maxTimestamp(full);
           if (after && snapshotIsComplete(full, after) && max) watermark = max;
