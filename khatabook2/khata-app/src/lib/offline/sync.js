@@ -173,7 +173,10 @@ function maxTimestampInRows(rows, columns) {
 
 async function fetchTableDelta(table, columns) {
   const watermark = getSyncWatermark(table);
-  if (!watermark) return null;
+  if (!watermark) {
+    console.info("[Diag:sync] fetchTableDelta | table=" + table + " | syncWatermark=null | rowsReturned=0 | null=true");
+    return null;
+  }
   const orFilter = columns.map((column) => `${column}.gt.${watermark}`).join(",");
   const { data, error } = await supabase
     .from(table)
@@ -182,6 +185,7 @@ async function fetchTableDelta(table, columns) {
     .limit(INCREMENTAL_CAP + 1);
   if (error) throw error;
   const rows = Array.isArray(data) ? data : [];
+  console.info("[Diag:sync] fetchTableDelta | table=" + table + " | syncWatermark=" + watermark + " | rowsReturned=" + rows.length + " | null=false");
   if (rows.length > INCREMENTAL_CAP) return null;
   return rows;
 }
@@ -239,6 +243,7 @@ export async function refreshOfflineSnapshot() {
   // in the queue. Doing so risks overwriting pending edits with stale server
   // data before they have been persisted to Supabase.
   const pending = await getPendingQueue();
+  console.info("[Diag:sync] snapshot refresh | pendingCount=" + pending.length + " | skipped=" + (pending.length > 0));
   if (pending.length > 0) {
     console.info("[OfflineSync] Snapshot refresh skipped; pending operations:", pending.length);
     return;

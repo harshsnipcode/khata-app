@@ -280,6 +280,7 @@ export function useLiveTransactions() {
         const cached = await getAll(TABLE);
         const cache = cacheDigest(cached);
         const server = await fetchServerDigest();
+        console.info("[Diag:liveSync] server digest | serverMax=" + (server?.serverMax ?? "null") + " | serverCount=" + (server?.serverCount ?? "null") + " | serverError=null");
         // An offline DELETE (or any other queued local mutation) makes the
         // digest report a spurious deficit: the server still counts a row this
         // device already considers gone, so it is NOT server authority until
@@ -288,7 +289,9 @@ export function useLiveTransactions() {
         // pending; the additive delta below still makes forward progress and
         // the queued DELETE is what actually removes the row server-side.
         const hasPendingOps = readQueue().some((op) => op.table === TABLE);
-        if (isOnline() && !hasPendingOps && !isCacheCurrent(cache, server)) {
+        const cacheCurrent = isCacheCurrent(cache, server);
+        console.info("[Diag:liveSync] path decision | hasPendingOps=" + hasPendingOps + " | cacheCurrent=" + cacheCurrent + " | path=" + (isOnline() && !hasPendingOps && !cacheCurrent ? "full-reconcile" : "delta"));
+        if (isOnline() && !hasPendingOps && !cacheCurrent) {
           // Re-read a bounded number of times if the server changes during a
           // paginated fetch. This also makes a tied timestamp batch converge
           // in this one reconciliation instead of relying on reloads.
@@ -299,6 +302,7 @@ export function useLiveTransactions() {
           return;
         }
         const { rows, hitCap } = await fetchTransactionsSince(watermark);
+        const wmBefore = watermark;
         if (hitCap) {
           // The delta hit the page cap, meaning the watermark boundary may not
           // be clean. Pull the full history once rather than risk skipping rows
@@ -307,6 +311,7 @@ export function useLiveTransactions() {
           await commit(full);
           const max = maxTimestamp(full);
           if (max) watermark = max;
+          console.info("[Diag:liveSync] delta result | rowsReturned=" + rows.length + " | hitCap=" + hitCap + " | watermarkBefore=" + wmBefore + " | watermarkAfter=" + watermark);
           return;
         }
         await commit(rows);
@@ -314,7 +319,9 @@ export function useLiveTransactions() {
         if (max && new Date(max).getTime() > new Date(watermark).getTime()) {
           watermark = max;
         }
+        console.info("[Diag:liveSync] delta result | rowsReturned=" + rows.length + " | hitCap=" + hitCap + " | watermarkBefore=" + wmBefore + " | watermarkAfter=" + watermark);
       } catch (error) {
+        console.warn("[Diag:liveSync] catch-up failed | watermark=" + watermark + " | error=" + (error?.message || error));
         console.warn("[LiveSync] catch-up failed; will retry later", error?.message || error);
       } finally {
         catchUpRunning = false;
@@ -332,6 +339,7 @@ export function useLiveTransactions() {
         const seed = maxTimestamp(cached);
         if (seed) watermark = seed;
       }
+      console.info("[Diag:liveSync] start seed | watermark=" + watermark + " | cacheCount=" + cached.length + " | cacheMax=" + maxTimestamp(cached));
       if (!watermark) {
         try {
           await ensureBaseline();

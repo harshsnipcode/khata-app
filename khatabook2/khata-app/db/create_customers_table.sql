@@ -10,3 +10,4 @@ CREATE TABLE IF NOT EXISTS public.customers (
 );
 
 CREATE INDEX IF NOT EXISTS customers_created_at_idx ON public.customers(created_at DESC);
+  
