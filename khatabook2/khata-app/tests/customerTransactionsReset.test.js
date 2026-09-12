@@ -31,6 +31,19 @@ test("home navigation reuses already-loaded customer transactions without refetc
   assert.ok(ledgerTransactions.every((txn) => String(txn.customer_id) === "28"));
 });
 
+test("customer ledger snapshot drops rows already marked deleted locally", () => {
+  const transactions = [
+    { id: 10, customer_id: 29, type: "gave", amount: 100, deleted_locally: true },
+    { id: 11, customer_id: 29, type: "got", amount: 50 },
+    { id: 12, customer_id: 30, type: "gave", amount: 200 },
+  ];
+
+  const ledgerTransactions = filterCustomerTransactionsForLedger(29, transactions);
+
+  assert.deepEqual(ledgerTransactions.map((txn) => txn.id), [11]);
+  assert.equal(ledgerTransactions.length, 1);
+});
+
 test("online transaction refresh should not block on pending queue entries", () => {
   assert.equal(shouldSkipSnapshotRefresh(1), false);
   assert.equal(shouldSkipSnapshotRefresh(10), false);

@@ -14,9 +14,19 @@ const PAGE_SIZE = 1000;
  *   - balance = gave - got
  */
 
+function isDeletedTransaction(txn) {
+  return !!(
+    txn?.deleted_locally ||
+    txn?.deleted_at ||
+    txn?.is_deleted ||
+    txn?.deleted_by
+  );
+}
+
 export function summarizeTransactions(transactions) {
   return (transactions || []).reduce(
     (acc, txn) => {
+      if (isDeletedTransaction(txn)) return acc;
       if (txn.type === "got") acc.got += Number(txn.amount);
       else acc.gave += Number(txn.amount);
       return acc;
@@ -33,6 +43,7 @@ export function balanceFromTransactions(transactions) {
 export function buildBalanceMap(transactions) {
   const map = {};
   for (const txn of transactions || []) {
+    if (isDeletedTransaction(txn)) continue;
     if (txn.customer_id === undefined || txn.customer_id === null) continue;
     if (!map[txn.customer_id]) map[txn.customer_id] = 0;
     if (txn.type === "got") map[txn.customer_id] -= Number(txn.amount);

@@ -1,6 +1,10 @@
 export function filterCustomerTransactionsForLedger(customerId, transactions = []) {
   const id = String(customerId);
-  return (transactions || []).filter((txn) => String(txn?.customer_id) === id);
+  return (transactions || []).filter((txn) => {
+    if (String(txn?.customer_id) !== id) return false;
+    if (txn?.deleted_locally) return false;
+    return true;
+  });
 }
 
 export function createCustomerLedgerNavigationState(customer, transactions = []) {

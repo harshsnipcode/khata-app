@@ -72,8 +72,8 @@ function CustomerDetails() {
       }
 
       // Fetch transaction items for each transaction
-      let transactionsWithItems = transactionResult.data || [];
-      
+      let transactionsWithItems = (transactionResult.data || []).filter((txn) => !txn?.deleted_locally && !txn?.deleted_at && !txn?.is_deleted);
+
       if (transactionsWithItems.length > 0) {
         const itemsResult = await supabase
           .from("transaction_items")
