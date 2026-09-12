@@ -103,9 +103,11 @@ function CustomerDetails() {
 
     if (useNavigationSnapshot) {
       hydrateNavigationSnapshot();
-      setTimeout(() => {
-        load(true);
-      }, 0);
+      // The home screen already owns the customer transactions in memory. When a
+      // snapshot is present we intentionally skip the initial refetch so the
+      // ledger renders immediately from that cached data instead of waiting on a
+      // second network call. Realtime subscriptions below will still refresh the
+      // route if the customer data changes after the first paint.
     } else {
       load();
     }
