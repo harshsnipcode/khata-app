@@ -237,6 +237,10 @@ async function fetchTableSnapshot(table) {
   }
 }
 
+export function canRefreshSnapshot({ online = isOnline(), syncing = false, refreshing = false, allowWhileSyncing = false } = {}) {
+  return !!online && !refreshing && (allowWhileSyncing || !syncing);
+}
+
 export function shouldSkipSnapshotRefresh(pendingCount) {
   // A pending queue does not mean the snapshot must be skipped: we protect
   // unsynced local edits with `protectUnsynced: true` while merging the server
@@ -245,14 +249,10 @@ export function shouldSkipSnapshotRefresh(pendingCount) {
   return false;
 }
 
-export async function refreshOfflineSnapshot() {
-  if (!isOnline() || refreshingSnapshot || syncing) return;
+export async function refreshOfflineSnapshot({ allowWhileSyncing = false } = {}) {
+  if (!canRefreshSnapshot({ online: isOnline(), syncing, refreshing: refreshingSnapshot, allowWhileSyncing })) return;
   const pending = await getPendingQueue();
-  console.info("[Diag:sync] snapshot refresh | pendingCount=" + pending.length + " | skipped=" + shouldSkipSnapshotRefresh(pending.length));
-  if (shouldSkipSnapshotRefresh(pending.length)) {
-    console.info("[OfflineSync] Snapshot refresh skipped; pending operations:", pending.length);
-    return;
-  }
+  console.info("[Diag:sync] snapshot refresh | pendingCount=" + pending.length + " | allowWhileSyncing=" + allowWhileSyncing);
   refreshingSnapshot = true;
   try {
     for (const table of OFFLINE_TABLES) {
@@ -303,6 +303,9 @@ export async function syncPendingData() {
         await executeOperation(operation);
         // Remove from the queue ONLY after Supabase confirmed the write.
         await removeQueueItem(operation.id);
+        if (isOnline()) {
+          await refreshOfflineSnapshot({ allowWhileSyncing: true });
+        }
         succeeded += 1;
         console.info("[OfflineSync] Operation succeeded", {
           queueId: operation.id,

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createDefaultCustomerTransactionsFilters } from "../src/lib/reportFilters.js";
 import { filterCustomerTransactionsForLedger } from "../src/lib/customerLedgerNavigation.js";
-import { shouldSkipSnapshotRefresh } from "../src/lib/offline/sync.js";
+import { canRefreshSnapshot, shouldSkipSnapshotRefresh } from "../src/lib/offline/sync.js";
 
 test("customer transactions reset defaults pick the local single-day date and clear search", () => {
   const date = new Date(2026, 7, 10, 13, 0, 0);
@@ -35,4 +35,6 @@ test("online transaction refresh should not block on pending queue entries", () 
   assert.equal(shouldSkipSnapshotRefresh(1), false);
   assert.equal(shouldSkipSnapshotRefresh(10), false);
   assert.equal(shouldSkipSnapshotRefresh(0), false);
+  assert.equal(canRefreshSnapshot({ online: true, syncing: true, refreshing: false, allowWhileSyncing: true }), true);
+  assert.equal(canRefreshSnapshot({ online: true, syncing: true, refreshing: false, allowWhileSyncing: false }), false);
 });
