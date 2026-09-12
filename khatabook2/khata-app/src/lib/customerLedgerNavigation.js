@@ -1,0 +1,31 @@
+export function filterCustomerTransactionsForLedger(customerId, transactions = []) {
+  const id = String(customerId);
+  return (transactions || []).filter((txn) => String(txn?.customer_id) === id);
+}
+
+export function createCustomerLedgerNavigationState(customer, transactions = []) {
+  if (!customer || customer.id === undefined || customer.id === null) return null;
+  return {
+    customerId: customer.id,
+    customer,
+    transactions: filterCustomerTransactionsForLedger(customer.id, transactions),
+  };
+}
+
+export function getCustomerLedgerNavigationState(locationState) {
+  const entry = locationState?.customerLedger;
+  if (!entry) return null;
+
+  const customerId = entry.customerId ?? entry.customer?.id ?? null;
+  if (customerId === null || customerId === undefined) return null;
+
+  const transactions = Array.isArray(entry.transactions)
+    ? entry.transactions
+    : filterCustomerTransactionsForLedger(customerId, entry.transactions || []);
+
+  return {
+    customerId,
+    customer: entry.customer || null,
+    transactions,
+  };
+}

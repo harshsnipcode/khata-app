@@ -1,0 +1,18 @@
+- generic [ref=e4]:
+  - generic [ref=e6]:
+    - heading "Shiv Shankar Dairy" [level=1] [ref=e7]
+    - paragraph [ref=e8]: Staff Portal
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Username
+      - textbox "Enter username" [ref=e17]
+    - generic [ref=e18]:
+      - generic [ref=e19]: Password
+      - generic [ref=e20]:
+        - textbox "••••••••" [ref=e25]
+        - button [ref=e26] [cursor=pointer]
+    - button "Login" [ref=e30] [cursor=pointer]
+  - paragraph [ref=e31]:
+    - text: Admin?
+    - link "Login here" [ref=e32] [cursor=pointer]:
+      - /url: /admin

@@ -15,6 +15,7 @@ import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "
 import { getAll, isOnline, removeLocalRows, replaceFetchedData } from "../lib/offline/db";
 import { splitByTodayActivity } from "../lib/transactionOrder";
 import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
+import { createCustomerLedgerNavigationState, filterCustomerTransactionsForLedger } from "../lib/customerLedgerNavigation";
 import ActivityDivider from "../components/ActivityDivider";
 
 
@@ -38,6 +39,17 @@ async function fetchAllCustomersSnapshot() {
     if (!data || data.length < CUSTOMER_PAGE_SIZE) return rows;
   }
   return null;
+}
+
+function getLatestCustomerTimestamp(customer, lastActivityMap) {
+  const values = [
+    lastActivityMap?.[customer?.id],
+    customer?.updated_at,
+    customer?.created_at,
+  ].filter((value) => value && !Number.isNaN(new Date(value).getTime()));
+
+  if (values.length === 0) return null;
+  return new Date(Math.max(...values.map((value) => new Date(value).getTime()))).toISOString();
 }
 
 function applyFilterAndSort(customers, balanceMap, lastActivityMap, searchTerm, filterType, sortType) {
@@ -273,6 +285,11 @@ function EmployeeHome() {
     return splitByTodayActivity(displayedCustomers, lastActivityMap);
   }, [displayedCustomers, lastActivityMap, collectionMode]);
 
+  const handleCustomerNavigate = useCallback((customer) => {
+    const ledgerState = createCustomerLedgerNavigationState(customer, filterCustomerTransactionsForLedger(customer.id, transactions));
+    navigate(`/customer/${customer.id}`, { state: { customerLedger: ledgerState } });
+  }, [navigate, transactions]);
+
   const reloadCollectionOrder = useCallback(() => {
     resetCollectionQueue();
     setCollectionQueue([]);
@@ -385,8 +402,9 @@ function EmployeeHome() {
                           id={customer.id}
                           initial={customer.name?.[0]?.toUpperCase()}
                           name={customer.name}
-                          time={lastActivityMap[customer.id] || customer.created_at}
+                          time={getLatestCustomerTimestamp(customer, lastActivityMap)}
                           balance={balanceMap[customer.id] ?? 0}
+                          onClick={() => handleCustomerNavigate(customer)}
                         />
                       ))}
 
@@ -398,8 +416,9 @@ function EmployeeHome() {
                           id={customer.id}
                           initial={customer.name?.[0]?.toUpperCase()}
                           name={customer.name}
-                          time={lastActivityMap[customer.id] || customer.created_at}
+                          time={getLatestCustomerTimestamp(customer, lastActivityMap)}
                           balance={balanceMap[customer.id] ?? 0}
+                          onClick={() => handleCustomerNavigate(customer)}
                         />
                       ))}
                     </>
@@ -410,8 +429,9 @@ function EmployeeHome() {
                         id={customer.id}
                         initial={customer.name?.[0]?.toUpperCase()}
                         name={customer.name}
-                        time={lastActivityMap[customer.id] || customer.created_at}
+                        time={getLatestCustomerTimestamp(customer, lastActivityMap)}
                         balance={balanceMap[customer.id] ?? 0}
+                        onClick={() => handleCustomerNavigate(customer)}
                       />
                     ))
                   ))}

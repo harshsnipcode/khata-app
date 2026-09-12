@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { addRunningBalanceFromOldestDisplayed, groupLedgerByBusinessDate } from "../lib/transactionOrder";
@@ -7,6 +7,7 @@ import { localDateKey } from "../lib/dateKey";
 import { can } from "../lib/permissions";
 import { summarizeTransactions } from "../lib/customerBalance";
 import { getLedgerLink } from "../lib/appUrl";
+import { getCustomerLedgerNavigationState } from "../lib/customerLedgerNavigation";
 
 function getHomePath() {
   try {
@@ -33,6 +34,7 @@ function DateSeparator({ dateStr }) {
 
 function CustomerDetails() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [customer, setCustomer] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -40,8 +42,20 @@ function CustomerDetails() {
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
+    const navState = getCustomerLedgerNavigationState(location.state);
+    const useNavigationSnapshot = !!navState && String(navState.customerId) === String(id);
+
+    const hydrateNavigationSnapshot = () => {
+      if (!useNavigationSnapshot) return false;
+      setCustomer(navState.customer || null);
+      setTransactions(navState.transactions || []);
+      setLoading(false);
+      setLoadError("");
+      return true;
+    };
+
+    const load = async (silent = false) => {
+      if (!silent) setLoading(true);
       setLoadError("");
 
       const [customerResult, transactionResult] = await Promise.all([
@@ -87,7 +101,14 @@ function CustomerDetails() {
       setLoading(false);
     };
 
-    load();
+    if (useNavigationSnapshot) {
+      hydrateNavigationSnapshot();
+      setTimeout(() => {
+        load(true);
+      }, 0);
+    } else {
+      load();
+    }
 
     const channel = supabase
       .channel(`customer-details-${id}`)
@@ -99,7 +120,7 @@ function CustomerDetails() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id]);
+  }, [id, location.state]);
 
   const totals = useMemo(() => summarizeTransactions(transactions), [transactions]);
 

@@ -1,8 +1,13 @@
 import { useNavigate } from "react-router-dom";
 
 function timeAgo(dateStr) {
+  if (!dateStr) return "just now";
+
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) return "just now";
+
   const now = Date.now();
-  const then = new Date(dateStr).getTime();
+  const then = parsed.getTime();
   const diffMs = now - then;
   if (diffMs < 0) return "just now";
   const days = Math.floor(diffMs / 86400000);
