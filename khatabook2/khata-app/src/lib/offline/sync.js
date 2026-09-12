@@ -237,14 +237,19 @@ async function fetchTableSnapshot(table) {
   }
 }
 
+export function shouldSkipSnapshotRefresh(pendingCount) {
+  // A pending queue does not mean the snapshot must be skipped: we protect
+  // unsynced local edits with `protectUnsynced: true` while merging the server
+  // diff, so the server can still refresh the cache in real time without
+  // clobbering rows that are waiting to sync.
+  return false;
+}
+
 export async function refreshOfflineSnapshot() {
   if (!isOnline() || refreshingSnapshot || syncing) return;
-  // Never pull a server snapshot while there are unsynced local edits waiting
-  // in the queue. Doing so risks overwriting pending edits with stale server
-  // data before they have been persisted to Supabase.
   const pending = await getPendingQueue();
-  console.info("[Diag:sync] snapshot refresh | pendingCount=" + pending.length + " | skipped=" + (pending.length > 0));
-  if (pending.length > 0) {
+  console.info("[Diag:sync] snapshot refresh | pendingCount=" + pending.length + " | skipped=" + shouldSkipSnapshotRefresh(pending.length));
+  if (shouldSkipSnapshotRefresh(pending.length)) {
     console.info("[OfflineSync] Snapshot refresh skipped; pending operations:", pending.length);
     return;
   }

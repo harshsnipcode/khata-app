@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createDefaultCustomerTransactionsFilters } from "../src/lib/reportFilters.js";
 import { filterCustomerTransactionsForLedger } from "../src/lib/customerLedgerNavigation.js";
+import { shouldSkipSnapshotRefresh } from "../src/lib/offline/sync.js";
 
 test("customer transactions reset defaults pick the local single-day date and clear search", () => {
   const date = new Date(2026, 7, 10, 13, 0, 0);
@@ -28,4 +29,10 @@ test("home navigation reuses already-loaded customer transactions without refetc
   assert.deepEqual(ledgerTransactions.map((txn) => txn.id), [1, 3, 4]);
   assert.equal(ledgerTransactions.length, 3);
   assert.ok(ledgerTransactions.every((txn) => String(txn.customer_id) === "28"));
+});
+
+test("online transaction refresh should not block on pending queue entries", () => {
+  assert.equal(shouldSkipSnapshotRefresh(1), false);
+  assert.equal(shouldSkipSnapshotRefresh(10), false);
+  assert.equal(shouldSkipSnapshotRefresh(0), false);
 });
