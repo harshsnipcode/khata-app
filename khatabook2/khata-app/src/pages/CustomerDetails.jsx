@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
+import { getAll } from "../lib/offline/db";
 import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { addRunningBalanceFromOldestDisplayed, groupLedgerByBusinessDate } from "../lib/transactionOrder";
 import { localDateKey } from "../lib/dateKey";
@@ -45,10 +46,37 @@ function CustomerDetails() {
     const navState = getCustomerLedgerNavigationState(location.state);
     const useNavigationSnapshot = !!navState && String(navState.customerId) === String(id);
 
-    const hydrateNavigationSnapshot = () => {
+    const hydrateNavigationSnapshot = async () => {
       if (!useNavigationSnapshot) return false;
+
+      const cachedItems = await getAll("transaction_items");
+      const cachedProducts = await getAll("products");
+      const itemsByTransaction = {};
+      for (const item of cachedItems || []) {
+        const key = String(item?.transaction_id);
+        if (!key || key === "undefined") continue;
+        const product = (cachedProducts || []).find((row) => String(row?.id) === String(item?.product_id));
+        const hydratedItem = {
+          ...item,
+          products: product ? { name: product.name, unit: product.unit, ...product } : item.products || null,
+        };
+        if (!itemsByTransaction[key]) itemsByTransaction[key] = [];
+        itemsByTransaction[key].push(hydratedItem);
+      }
+
+      const hydratedTransactions = (navState.transactions || []).map((txn) => ({
+        ...txn,
+        items: (itemsByTransaction[String(txn?.id)] || []).map((item) => ({
+          ...item,
+          products: item.products || ((cachedProducts || []).find((row) => String(row?.id) === String(item?.product_id)) ? {
+            name: (cachedProducts || []).find((row) => String(row?.id) === String(item?.product_id))?.name,
+            unit: (cachedProducts || []).find((row) => String(row?.id) === String(item?.product_id))?.unit,
+          } : null),
+        })),
+      }));
+
       setCustomer(navState.customer || null);
-      setTransactions(navState.transactions || []);
+      setTransactions(hydratedTransactions);
       setLoading(false);
       setLoadError("");
       return true;
@@ -102,7 +130,7 @@ function CustomerDetails() {
     };
 
     if (useNavigationSnapshot) {
-      hydrateNavigationSnapshot();
+      void hydrateNavigationSnapshot();
       // The home screen already owns the customer transactions in memory. When a
       // snapshot is present we intentionally skip the initial refetch so the
       // ledger renders immediately from that cached data instead of waiting on a
