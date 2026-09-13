@@ -183,8 +183,16 @@ function EmployeeHome() {
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
       .subscribe();
 
+    const onCacheUpdated = async (event) => {
+      const tables = event?.detail?.tables || [];
+      if (tables.includes("customers")) setCustomers(await getAll("customers"));
+      if (tables.includes("transactions")) setTransactions(await getAll("transactions"));
+    };
+    window.addEventListener("offline-cache-updated", onCacheUpdated);
+
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener("offline-cache-updated", onCacheUpdated);
     };
   }, [load]);
 

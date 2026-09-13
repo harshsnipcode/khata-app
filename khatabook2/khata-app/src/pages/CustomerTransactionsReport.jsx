@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import ReportTabs from "../components/ReportTabs";
 import { localDateKey } from "../lib/dateKey";
+import { getAll } from "../lib/offline/db";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { getSavedReportFilters, saveReportFilters, createDefaultCustomerTransactionsFilters } from "../lib/reportFilters";
@@ -80,7 +81,18 @@ function CustomerTransactionsReport() {
       .channel("reports-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => loadData())
       .subscribe();
-    return () => supabase.removeChannel(channel);
+
+    const onCacheUpdated = async (event) => {
+      const tables = event?.detail?.tables || [];
+      if (tables.includes("transactions")) setTransactions(await getAll("transactions"));
+      if (tables.includes("customers")) setCustomers(await getAll("customers"));
+    };
+    window.addEventListener("offline-cache-updated", onCacheUpdated);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener("offline-cache-updated", onCacheUpdated);
+    };
   }, [loadData]);
 
   const now = new Date();

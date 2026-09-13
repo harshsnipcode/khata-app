@@ -150,8 +150,18 @@ function dedupeRows(table, rows = []) {
   return [...byStableKey.values(), ...withoutStableKey];
 }
 
-function writeCache(cache) {
+function dispatchCacheUpdated(tables) {
+  if (typeof window === "undefined") return;
+  const changedTables = Array.isArray(tables) ? tables.filter(Boolean) : [tables].filter(Boolean);
+  if (changedTables.length === 0) return;
+  window.dispatchEvent(new CustomEvent("offline-cache-updated", {
+    detail: { tables: changedTables },
+  }));
+}
+
+function writeCache(cache, tables) {
   writeJson(CACHE_KEY, cache);
+  dispatchCacheUpdated(tables);
 }
 
 export async function initDB() {
@@ -191,7 +201,7 @@ export async function saveFetchedData(table, rows, { protectUnsynced = false } =
       deleted_locally: false,
     });
   }
-  writeCache({ ...currentCache, [table]: Array.from(byKey.values()) });
+  writeCache({ ...currentCache, [table]: Array.from(byKey.values()) }, table);
 }
 
 export async function replaceFetchedData(table, rows, { protectUnsynced = false } = {}) {
@@ -225,7 +235,7 @@ export async function replaceFetchedData(table, rows, { protectUnsynced = false 
   const unsyncedLocalRows = previousRows.filter((row) => (
     row?.synced !== true && !serverKeys.has(normalizedRowKey(table, row))
   ));
-  writeCache({ ...currentCache, [table]: dedupeRows(table, [...serverRows, ...unsyncedLocalRows]) });
+  writeCache({ ...currentCache, [table]: dedupeRows(table, [...serverRows, ...unsyncedLocalRows]) }, table);
   if (table === "import_batch_recycle_bin" && rows.length === 0) {
     // Legacy cleanup: older builds stored excel imports inside the local
     // recycle bin. Only drop those entries, never wipe locally-deleted
@@ -256,7 +266,7 @@ export function upsertLocalRows(table, rows) {
     if (!key) continue;
     byKey.set(key, { ...(byKey.get(key) || {}), ...prepared });
   }
-  writeCache({ ...currentCache, [table]: Array.from(byKey.values()) });
+  writeCache({ ...currentCache, [table]: Array.from(byKey.values()) }, table);
 }
 
 export function deleteLocalRows(table, predicate, { markUnsynced = false } = {}) {
@@ -273,13 +283,13 @@ export function deleteLocalRows(table, predicate, { markUnsynced = false } = {})
         }
       : row
   ));
-  writeCache(cache);
+  writeCache(cache, table);
 }
 
 export function removeLocalRows(table, predicate) {
   const cache = getCache();
   cache[table] = (cache[table] || []).filter((row) => !predicate(row));
-  writeCache(cache);
+  writeCache(cache, table);
 }
 
 export function readQueue() {
@@ -426,7 +436,7 @@ export function rewriteLocalId(table, localId, serverRecord) {
     filters: rewriteFilters(item.filters || [], item.table),
   }));
 
-  writeCache(nextCache);
+  writeCache(nextCache, OFFLINE_TABLES);
   writeQueue(rewrittenQueue);
 }
 

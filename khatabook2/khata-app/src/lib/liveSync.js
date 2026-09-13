@@ -380,12 +380,19 @@ export function useLiveTransactions() {
       if (document.visibilityState === "visible") catchUp();
     };
     document.addEventListener("visibilitychange", onVisibility);
+    const onCacheUpdated = async (event) => {
+      if (!event?.detail?.tables?.includes(TABLE)) return;
+      const cachedRows = await getAll(TABLE);
+      if (active) setTransactions(cachedRows);
+    };
+    window.addEventListener("offline-cache-updated", onCacheUpdated);
 
     return () => {
       active = false;
       if (channel) supabase.removeChannel(channel);
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("offline-cache-updated", onCacheUpdated);
     };
   }, []);
 

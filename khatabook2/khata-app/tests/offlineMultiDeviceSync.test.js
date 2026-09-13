@@ -243,6 +243,14 @@ async function waitFor(predicate, timeout = 6000, interval = 25) {
 
 function installFakeWindow() {
   const handlerMap = {};
+  if (typeof globalThis.CustomEvent === "undefined") {
+    globalThis.CustomEvent = class CustomEvent extends Event {
+      constructor(type, init = {}) {
+        super(type, init);
+        this.detail = init.detail;
+      }
+    };
+  }
   const fakeWindow = {
     addEventListener: (type, fn) => {
       (handlerMap[type] || (handlerMap[type] = [])).push(fn);
@@ -548,4 +556,47 @@ test("D: realtime INSERT/UPDATE/DELETE changes reach Device B view and cache", a
   const cacheRow = (await db.getAll("transactions")).find((r) => String(r.id) === String(pending.id));
   assert.equal(cacheRow.amount, pending.amount, "cache write keeps an unsynced local edit");
   assert.equal(cacheRow.synced, false, "cache write keeps the pending flag");
+});
+
+test("E1: offline cache writes publish changed table events", async () => {
+  setup();
+  installFakeWindow();
+  const events = [];
+  window.addEventListener("offline-cache-updated", (event) => {
+    events.push(event.detail?.tables || []);
+  });
+
+  await db.saveFetchedData("transactions", [serverTxn(7001, 1, atMin(T0, 30))], { protectUnsynced: true });
+
+  assert.deepEqual(events.at(-1), ["transactions"], "transaction cache writes notify mounted views");
+});
+
+test("E2: Device B cached select repaints from background refresh without another reload", async () => {
+  setup();
+  installFakeWindow();
+  const cachedRow = serverTxn(77, 0, atMin(T0, -10));
+  const incomingRows = [1, 2, 3, 4, 5].map((i) => serverTxn(8000 + i, i, atMin(T0, i)));
+  serverData.transactions = [cachedRow, ...incomingRows];
+  await seedDeviceB([cachedRow]);
+
+  let mountedView = await db.getAll("transactions");
+  window.addEventListener("offline-cache-updated", async (event) => {
+    if (event.detail?.tables?.includes("transactions")) {
+      mountedView = await db.getAll("transactions");
+    }
+  });
+
+  const firstRead = await offlineSupabase.from("transactions").select("*").eq("customer_id", 7);
+  assert.deepEqual(
+    (firstRead.data || []).map((row) => row.id),
+    [77],
+    "first paint stays fast from cache while server refresh is in flight",
+  );
+
+  await waitFor(() => mountedView.length === 6);
+  assert.deepEqual(
+    mountedView.map((row) => row.id).sort((a, b) => a - b),
+    [77, 8001, 8002, 8003, 8004, 8005],
+    "mounted Device B view sees refreshed cache without a second reload",
+  );
 });

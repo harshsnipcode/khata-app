@@ -212,8 +212,15 @@ function AdminHome() {
       .on("postgres_changes", { event: "*", schema: "public", table: "employees" }, () => loadEmployees())
       .subscribe();
 
+    const onCacheUpdated = async (event) => {
+      const tables = event?.detail?.tables || [];
+      if (tables.includes("customers")) setCustomers(await getAll("customers"));
+    };
+    window.addEventListener("offline-cache-updated", onCacheUpdated);
+
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener("offline-cache-updated", onCacheUpdated);
     };
   }, [loadCustomers, loadEmployees]);
 

@@ -19,6 +19,38 @@ function getHomePath() {
   return "/";
 }
 
+async function hydrateTransactionsFromCache(customerId) {
+  const [cachedTransactions, cachedItems, cachedProducts] = await Promise.all([
+    getAll("transactions"),
+    getAll("transaction_items"),
+    getAll("products"),
+  ]);
+  const productById = new Map((cachedProducts || []).map((product) => [String(product?.id), product]));
+  const itemsByTransaction = {};
+  for (const item of cachedItems || []) {
+    const key = String(item?.transaction_id);
+    if (!key || key === "undefined") continue;
+    const product = productById.get(String(item?.product_id));
+    const hydratedItem = {
+      ...item,
+      products: product ? { name: product.name, unit: product.unit, ...product } : item.products || null,
+    };
+    if (!itemsByTransaction[key]) itemsByTransaction[key] = [];
+    itemsByTransaction[key].push(hydratedItem);
+  }
+  return (cachedTransactions || [])
+    .filter((txn) => (
+      String(txn?.customer_id) === String(customerId) &&
+      !txn?.deleted_locally &&
+      !txn?.deleted_at &&
+      !txn?.is_deleted
+    ))
+    .map((txn) => ({
+      ...txn,
+      items: itemsByTransaction[String(txn?.id)] || [],
+    }));
+}
+
 function DateSeparator({ dateStr }) {
   const date = new Date(dateStr + "T00:00:00");
   const formatted = date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
@@ -49,34 +81,8 @@ function CustomerDetails() {
     const hydrateNavigationSnapshot = async () => {
       if (!useNavigationSnapshot) return false;
 
-      const cachedItems = await getAll("transaction_items");
-      const cachedProducts = await getAll("products");
-      const itemsByTransaction = {};
-      for (const item of cachedItems || []) {
-        const key = String(item?.transaction_id);
-        if (!key || key === "undefined") continue;
-        const product = (cachedProducts || []).find((row) => String(row?.id) === String(item?.product_id));
-        const hydratedItem = {
-          ...item,
-          products: product ? { name: product.name, unit: product.unit, ...product } : item.products || null,
-        };
-        if (!itemsByTransaction[key]) itemsByTransaction[key] = [];
-        itemsByTransaction[key].push(hydratedItem);
-      }
-
-      const hydratedTransactions = (navState.transactions || []).map((txn) => ({
-        ...txn,
-        items: (itemsByTransaction[String(txn?.id)] || []).map((item) => ({
-          ...item,
-          products: item.products || ((cachedProducts || []).find((row) => String(row?.id) === String(item?.product_id)) ? {
-            name: (cachedProducts || []).find((row) => String(row?.id) === String(item?.product_id))?.name,
-            unit: (cachedProducts || []).find((row) => String(row?.id) === String(item?.product_id))?.unit,
-          } : null),
-        })),
-      }));
-
       setCustomer(navState.customer || null);
-      setTransactions(hydratedTransactions);
+      setTransactions(await hydrateTransactionsFromCache(id));
       setLoading(false);
       setLoadError("");
       return true;
@@ -172,8 +178,20 @@ function CustomerDetails() {
       .on("postgres_changes", { event: "*", schema: "public", table: "transaction_items" }, () => load())
       .subscribe();
 
+    const onCacheUpdated = async (event) => {
+      const tables = event?.detail?.tables || [];
+      if (!tables.some((table) => ["customers", "transactions", "transaction_items", "products"].includes(table))) return;
+      const cachedCustomers = await getAll("customers");
+      const cachedCustomer = cachedCustomers.find((row) => String(row?.id) === String(id));
+      if (cachedCustomer) setCustomer(cachedCustomer);
+      setTransactions(await hydrateTransactionsFromCache(id));
+      setLoading(false);
+    };
+    window.addEventListener("offline-cache-updated", onCacheUpdated);
+
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener("offline-cache-updated", onCacheUpdated);
     };
   }, [id, location.state]);
 
