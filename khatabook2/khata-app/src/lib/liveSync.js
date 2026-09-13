@@ -91,13 +91,13 @@ function cacheDigest(rows) {
   return { cacheMax, cacheCount: seenIds.size };
 }
 
-// The cache is server-current when it accounts for at least as many real
-// server ids as the server has AND holds its newest row. A surplus happens
-// naturally when unsynced local rows exist; only a deficit (or a newer server
-// max) means reconciliation must download more.
+// The cache is server-current only when its confirmed real server-id count
+// matches the server and it holds the newest row. A surplus with no pending
+// local writes means a remote DELETE was missed, so Home must reconcile and
+// prune the stale cached row instead of blessing the extra row as current.
 export function isCacheCurrent(cache, server) {
   if (server.serverCount === 0) return cache.cacheCount === 0;
-  if (cache.cacheCount < server.serverCount) return false;
+  if (cache.cacheCount !== server.serverCount) return false;
   return !!cache.cacheMax && new Date(cache.cacheMax).getTime() >= new Date(server.serverMax).getTime();
 }
 

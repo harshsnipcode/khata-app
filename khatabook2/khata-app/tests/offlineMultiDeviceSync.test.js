@@ -478,6 +478,32 @@ test("C3: rows at or below the watermark are excluded (strict > boundary clamp)"
   );
 });
 
+test("C4: remote delete leaves a cache surplus that must force full reconcile when no local ops are pending", async () => {
+  setup();
+  const kept = serverTxn(10318, 1, atMin(T0, 1));
+  const deleted = serverTxn(10319, 2, atMin(T0, 2));
+
+  serverData.transactions = [kept];
+  await seedDeviceB([kept, deleted]);
+
+  const cached = await db.getAll("transactions");
+  const cacheDigest = {
+    cacheCount: cached.length,
+    cacheMax: liveSync.maxTimestamp(cached),
+  };
+  const serverDigest = {
+    serverCount: serverData.transactions.length,
+    serverMax: liveSync.maxTimestamp(serverData.transactions),
+  };
+
+  assert.equal(db.readQueue().some((op) => op.table === "transactions"), false, "Device B has no pending local transaction writes");
+  assert.equal(
+    liveSync.isCacheCurrent(cacheDigest, serverDigest),
+    false,
+    "a synced cache surplus means a remote delete was missed and must trigger full reconcile",
+  );
+});
+
 test("D: realtime INSERT/UPDATE/DELETE changes reach Device B view and cache", async () => {
   setup();
   const oldRow = serverTxn(77, 0, atMin(T0, -10));
