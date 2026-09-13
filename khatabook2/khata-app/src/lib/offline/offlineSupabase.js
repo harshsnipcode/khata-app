@@ -322,6 +322,26 @@ async function refreshCacheAfterOnlineResult(ops, data) {
     // This is a server READ refreshing the cache, not a confirmed write, so it
     // must never overwrite a local edit that is still pending in the queue.
     const rows = Array.isArray(data) ? data : (data ? [data] : []);
+    const keepIds = new Set(rows.map((row) => String(row?.id)).filter((id) => id && id !== "undefined" && id !== "null"));
+
+    // Filtered route reads can legitimately be smaller than the global cache.
+    // When a row has already been cached locally and the server read for that
+    // same filter no longer returns it, this is a remote delete that must be
+    // removed from the shared cache even though the query is not a full table
+    // snapshot. We only prune rows whose id matches the same filters; unrelated
+    // cached rows are left alone.
+    if (ops.table && ops.filters?.length) {
+      const matchingFilters = (row) => ops.filters.every((filter) => matchesFilter(row, filter));
+      const staleMatches = (await getAll(ops.table)).filter((row) => {
+        if (!row || row.deleted_locally || row.synced === false) return false;
+        if (!matchingFilters(row)) return false;
+        return !keepIds.has(String(row.id));
+      });
+      if (staleMatches.length > 0) {
+        deleteLocalRows(ops.table, (row) => staleMatches.some((stale) => String(stale.id) === String(row.id)));
+      }
+    }
+
     // Ordinary route reads are not authoritative global snapshots. They may be
     // filtered, capped by PostgREST defaults, served from a stale cache, or be
     // one page of a larger dataset, so they must only repair/extend the shared

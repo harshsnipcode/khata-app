@@ -3,6 +3,8 @@ export function filterCustomerTransactionsForLedger(customerId, transactions = [
   return (transactions || []).filter((txn) => {
     if (String(txn?.customer_id) !== id) return false;
     if (txn?.deleted_locally) return false;
+    if (txn?.deleted_at) return false;
+    if (txn?.is_deleted) return false;
     return true;
   });
 }

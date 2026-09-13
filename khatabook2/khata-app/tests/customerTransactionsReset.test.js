@@ -44,6 +44,20 @@ test("customer ledger snapshot drops rows already marked deleted locally", () =>
   assert.equal(ledgerTransactions.length, 1);
 });
 
+test("customer ledger snapshot drops transactions soft-deleted on the server", () => {
+  const transactions = [
+    { id: 20, customer_id: 84, type: "gave", amount: 100, deleted_at: "2026-09-13T08:00:00Z" },
+    { id: 21, customer_id: 84, type: "got", amount: 50 },
+    { id: 22, customer_id: 84, type: "gave", amount: 75, is_deleted: true },
+    { id: 23, customer_id: 85, type: "gave", amount: 200 },
+  ];
+
+  const ledgerTransactions = filterCustomerTransactionsForLedger(84, transactions);
+
+  assert.deepEqual(ledgerTransactions.map((txn) => txn.id), [21]);
+  assert.equal(ledgerTransactions.length, 1);
+});
+
 test("online transaction refresh should not block on pending queue entries", () => {
   assert.equal(shouldSkipSnapshotRefresh(1), false);
   assert.equal(shouldSkipSnapshotRefresh(10), false);

@@ -82,6 +82,29 @@ function CustomerDetails() {
       return true;
     };
 
+    const updateTransactionListFromPayload = (payload) => {
+      const row = payload?.new ?? payload?.old; 
+      if (!row || String(row.customer_id) !== String(id)) return;
+
+      setTransactions((prev) => {
+        const nextRow = { ...(prev.find((txn) => String(txn.id) === String(row.id)) || {}), ...row };
+        const hasDeletedState = row.deleted_locally || row.deleted_at || row.is_deleted;
+
+        if (hasDeletedState || payload?.event === "DELETE") {
+          return prev.filter((txn) => String(txn.id) !== String(row.id));
+        }
+
+        const index = prev.findIndex((txn) => String(txn.id) === String(row.id));
+        if (index >= 0) {
+          const updated = [...prev];
+          updated[index] = nextRow;
+          return updated;
+        }
+
+        return [...prev, nextRow];
+      });
+    };
+
     const load = async (silent = false) => {
       if (!silent) setLoading(true);
       setLoadError("");
@@ -134,8 +157,8 @@ function CustomerDetails() {
       // The home screen already owns the customer transactions in memory. When a
       // snapshot is present we intentionally skip the initial refetch so the
       // ledger renders immediately from that cached data instead of waiting on a
-      // second network call. Realtime subscriptions below will still refresh the
-      // route if the customer data changes after the first paint.
+      // second network call. Realtime subscriptions below continue patching this
+      // snapshot when a row is inserted, updated, or deleted remotely.
     } else {
       load();
     }
@@ -143,7 +166,9 @@ function CustomerDetails() {
     const channel = supabase
       .channel(`customer-details-${id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "customers", filter: `id=eq.${id}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `customer_id=eq.${id}` }, () => load())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "transactions", filter: `customer_id=eq.${id}` }, (payload) => updateTransactionListFromPayload({ ...payload, event: "INSERT" }))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "transactions", filter: `customer_id=eq.${id}` }, (payload) => updateTransactionListFromPayload({ ...payload, event: "UPDATE" }))
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "transactions", filter: `customer_id=eq.${id}` }, (payload) => updateTransactionListFromPayload({ ...payload, event: "DELETE" }))
       .on("postgres_changes", { event: "*", schema: "public", table: "transaction_items" }, () => load())
       .subscribe();
 

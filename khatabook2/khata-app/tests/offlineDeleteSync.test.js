@@ -265,6 +265,30 @@ test("HYPOTHESIS: online-first SELECT resurrects a pending offline delete when l
   assert.deepEqual(returnedIds, [], "the pending offline delete must NOT be returned by an online-first read");
 });
 
+test("server customer-select refresh prunes a deleted cached transaction", async () => {
+  installLocalStorageMock();
+  serverData.transactions = [];
+  serverData.recycle_bin = [];
+  serverData.transaction_items = [];
+
+  await db.replaceFetchedData("transactions", [{
+    id: 123,
+    customer_id: 7,
+    type: "gave",
+    amount: 500,
+    created_at: "2026-08-01T00:00:00Z",
+    description: "existing txn",
+  }]);
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+
+  const cached = await offlineSupabase.from("transactions").select("*").eq("customer_id", 7);
+  assert.deepEqual((cached.data || []).map((row) => row.id), [123], "the cached ledger row remains visible while the app is online");
+
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  assert.deepEqual((await db.getAll("transactions")).map((row) => row.id), [], "background server refresh removes the deleted row from the shared cache");
+});
+
 test("ordinary limited transaction reads never replace the global transaction cache", async () => {
   installLocalStorageMock();
   serverData.transactions = [
