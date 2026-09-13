@@ -265,30 +265,6 @@ test("HYPOTHESIS: online-first SELECT resurrects a pending offline delete when l
   assert.deepEqual(returnedIds, [], "the pending offline delete must NOT be returned by an online-first read");
 });
 
-test("server customer-select refresh prunes a deleted cached transaction", async () => {
-  installLocalStorageMock();
-  serverData.transactions = [];
-  serverData.recycle_bin = [];
-  serverData.transaction_items = [];
-
-  await db.replaceFetchedData("transactions", [{
-    id: 123,
-    customer_id: 7,
-    type: "gave",
-    amount: 500,
-    created_at: "2026-08-01T00:00:00Z",
-    description: "existing txn",
-  }]);
-  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
-
-  const cached = await offlineSupabase.from("transactions").select("*").eq("customer_id", 7);
-  assert.deepEqual((cached.data || []).map((row) => row.id), [123], "the cached ledger row remains visible while the app is online");
-
-  await new Promise((resolve) => setTimeout(resolve, 25));
-
-  assert.deepEqual((await db.getAll("transactions")).map((row) => row.id), [], "background server refresh removes the deleted row from the shared cache");
-});
-
 test("ordinary limited transaction reads never replace the global transaction cache", async () => {
   installLocalStorageMock();
   serverData.transactions = [
@@ -341,4 +317,69 @@ test("customer ledger transaction reads merge without deleting unrelated cached 
     [1, 2, 3],
     "a customer-specific ledger read must not become a global snapshot",
   );
+});
+
+test("remote delete of cached transaction must be pruned after empty customer-select refresh", async () => {
+  installLocalStorageMock();
+  serverData.transactions = [];
+  serverData.recycle_bin = [];
+  serverData.transaction_items = [];
+  serverData.customers = [{ id: 7, name: "Customer 7" }];
+
+  const deletedTxn = {
+    id: 123,
+    customer_id: 7,
+    type: "gave",
+    amount: 500,
+    created_at: "2026-08-01T00:00:00Z",
+    description: "stale cached txn",
+  };
+
+  await db.replaceFetchedData("transactions", [deletedTxn]);
+  await db.replaceFetchedData("customers", serverData.customers);
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+
+  // Simulate the real failing path: Device B already has T in the normal
+  // transaction cache. The server no longer returns any rows for this customer
+  // after a remote delete. The app should prune the stale cached row instead of
+  // keeping it alive for the customer ledger.
+  const { data } = await offlineSupabase.from("transactions").select("*").eq("customer_id", 7);
+  assert.deepEqual((data || []).map((row) => row.id), [123], "cached row is still returned while the refresh is in flight");
+
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  assert.deepEqual(
+    (await db.getAll("transactions")).map((row) => row.id),
+    [],
+    "the remote delete must prune the stale cached transaction from the shared normal cache after the empty customer refresh",
+  );
+});
+
+test("reload after remote delete must not restore a stale cached customer transaction", async () => {
+  installLocalStorageMock();
+  serverData.transactions = [];
+  serverData.recycle_bin = [];
+  serverData.transaction_items = [];
+  serverData.customers = [{ id: 7, name: "Customer 7" }];
+
+  const deletedTxn = {
+    id: 456,
+    customer_id: 7,
+    type: "got",
+    amount: 250,
+    created_at: "2026-08-02T00:00:00Z",
+    description: "reload stale txn",
+  };
+
+  await db.replaceFetchedData("transactions", [deletedTxn]);
+  await db.replaceFetchedData("customers", serverData.customers);
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+
+  const firstRead = await offlineSupabase.from("transactions").select("*").eq("customer_id", 7);
+  assert.deepEqual((firstRead.data || []).map((row) => row.id), [456], "Device B still serves the cached transaction before refresh completes");
+
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  const reloadedCache = await db.getAll("transactions");
+  assert.deepEqual(reloadedCache.map((row) => row.id), [], "after the empty refresh, the stale row must still be pruned from the persisted normal cache");
 });

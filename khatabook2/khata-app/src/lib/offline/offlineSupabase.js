@@ -9,6 +9,7 @@ import {
   generateUUID,
   getAll,
   isOnline,
+  removeLocalRows,
   rewriteForeignKeys,
   saveFetchedData,
   upsertLocalRows,
@@ -117,6 +118,38 @@ function hasUsableCachedResult(result) {
   if (!result || result.error) return false;
   if (Array.isArray(result.data)) return result.data.length > 0;
   return result.data !== null && result.data !== undefined;
+}
+
+function getCustomerScopeFilterValue(ops) {
+  if (ops.table !== "transactions") return null;
+  if (ops.limit !== null || ops.range !== null) return null;
+  const customerFilter = ops.filters.find((filter) => filter.column === "customer_id");
+  if (!customerFilter) return null;
+  if (customerFilter.operator === "eq") return customerFilter.value;
+  if (customerFilter.operator === "in" && Array.isArray(customerFilter.value) && customerFilter.value.length === 1) {
+    return customerFilter.value[0];
+  }
+  return null;
+}
+
+function pruneStaleCustomerScopeRows(ops, rows) {
+  const customerId = getCustomerScopeFilterValue(ops);
+  if (customerId === null || customerId === undefined) return;
+
+  const serverIds = new Set(
+    rows
+      .filter((row) => row && typeof row === "object" && row.id !== undefined && row.id !== null)
+      .map((row) => String(row.id)),
+  );
+
+  removeLocalRows("transactions", (row) => {
+    if (!row || typeof row !== "object") return false;
+    if (row.deleted_locally) return false;
+    if (row.synced === false) return false;
+    if (String(row.customer_id) !== String(customerId)) return false;
+    if (serverIds.has(String(row.id))) return false;
+    return true;
+  });
 }
 
 // While a table has unsynced pending mutations (e.g. an offline delete that has
@@ -319,35 +352,16 @@ async function executeOnline(ops) {
 
 async function refreshCacheAfterOnlineResult(ops, data) {
   if (ops.method === "select") {
+    const rows = Array.isArray(data) ? data : (data ? [data] : []);
     // This is a server READ refreshing the cache, not a confirmed write, so it
     // must never overwrite a local edit that is still pending in the queue.
-    const rows = Array.isArray(data) ? data : (data ? [data] : []);
-    const keepIds = new Set(rows.map((row) => String(row?.id)).filter((id) => id && id !== "undefined" && id !== "null"));
-
-    // Filtered route reads can legitimately be smaller than the global cache.
-    // When a row has already been cached locally and the server read for that
-    // same filter no longer returns it, this is a remote delete that must be
-    // removed from the shared cache even though the query is not a full table
-    // snapshot. We only prune rows whose id matches the same filters; unrelated
-    // cached rows are left alone.
-    if (ops.table && ops.filters?.length) {
-      const matchingFilters = (row) => ops.filters.every((filter) => matchesFilter(row, filter));
-      const staleMatches = (await getAll(ops.table)).filter((row) => {
-        if (!row || row.deleted_locally || row.synced === false) return false;
-        if (!matchingFilters(row)) return false;
-        return !keepIds.has(String(row.id));
-      });
-      if (staleMatches.length > 0) {
-        deleteLocalRows(ops.table, (row) => staleMatches.some((stale) => String(stale.id) === String(row.id)));
-      }
-    }
-
-    // Ordinary route reads are not authoritative global snapshots. They may be
-    // filtered, capped by PostgREST defaults, served from a stale cache, or be
-    // one page of a larger dataset, so they must only repair/extend the shared
-    // cache. Authoritative replacement is reserved for the dedicated snapshot
-    // sync paths that paginate and prove completeness before deleting rows.
     await saveFetchedData(ops.table, rows, { protectUnsynced: true });
+
+    // A customer-scoped refresh can be authoritative for that exact query scope.
+    // If the server says this customer no longer has a row that we still have in
+    // the shared transactions cache, prune only that stale row while preserving
+    // pending unsynced edits and unrelated customers' data.
+    pruneStaleCustomerScopeRows(ops, rows);
     return;
   }
 
