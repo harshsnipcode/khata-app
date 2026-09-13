@@ -1,10 +1,19 @@
 import { useEffect, useState } from "react";
 import heroLogo from "../assets/hero.png";
 import { getLogoUrl } from "../lib/businessSettings";
+import { syncStatusLabel } from "../lib/syncStatusLabel";
+import { readQueue } from "../lib/offline/db";
 
 function Header({ businessName = "Shiv Shankar Dairy" }) {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [syncStatus, setSyncStatus] = useState('synced');
+  const [syncStatus, setSyncStatus] = useState(() => {
+    if (typeof window === 'undefined') return 'synced';
+    try {
+      return readQueue().length > 0 ? 'pending' : 'synced';
+    } catch {
+      return 'synced';
+    }
+  });
   const [logo, setLogo] = useState(null);
 
   useEffect(() => {
@@ -15,8 +24,9 @@ function Header({ businessName = "Shiv Shankar Dairy" }) {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     const handleSync = (e) => {
-      if (e.detail?.status === 'synced') {
-        setSyncStatus('synced');
+      const status = e.detail?.status;
+      if (status === 'pending' || status === 'synced') {
+        setSyncStatus(status);
       }
     };
     const handleLogoUpdate = () => {
@@ -58,13 +68,11 @@ function Header({ businessName = "Shiv Shankar Dairy" }) {
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <div className="flex items-center gap-1.5 text-[10px] font-semibold text-white whitespace-nowrap">
-          <span className="flex items-center gap-1">
-            <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-[#52b788]' : 'bg-[#e76f51]'}`} />
-            {isOnline ? 'Online' : 'Offline'}
-          </span>
-          {isOnline && syncStatus === 'synced' && <span className="text-white/60">· ✓ Synced</span>}
-          {syncStatus === 'pending' && <span className="text-white/80">· ⟳ Syncing...</span>}
-        </div>
+        <span className="flex items-center gap-1">
+          <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-[#52b788]' : 'bg-[#e76f51]'}`} />
+          {syncStatusLabel({ online: isOnline, status: syncStatus })}
+        </span>
+      </div>
       </div>
     </div>
   );

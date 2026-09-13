@@ -21,6 +21,36 @@ import { sanitizeTablePayload } from "./tableSchemas";
 let syncing = false;
 let refreshingSnapshot = false;
 
+// Self-healing retry for the offline queue. A sync pass that finishes with
+// operations still queued while online (transient Supabase failure, dropped
+// connection) schedules exactly ONE follow-up pass after a modest delay, so the
+// queue drains without needing a reload, a manual trigger, or a tight loop.
+// Single-flight is guaranteed by the `syncing` guard in syncPendingData() and
+// the `retryTimer !== null` guard here. navigator.onLine gates rescheduling, so
+// a genuine disconnect stops the loop and the window "online" event resumes it.
+const RETRY_BASE_DELAY_MS = 800;
+const RETRY_MAX_DELAY_MS = 10_000;
+let retryTimer = null;
+let retryBackoff = RETRY_BASE_DELAY_MS;
+
+function scheduleRetryWithBackoff() {
+  if (retryTimer !== null) return;
+  const delay = retryBackoff;
+  retryBackoff = Math.min(retryBackoff * 2, RETRY_MAX_DELAY_MS);
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    syncPendingData();
+  }, delay);
+}
+
+function resetRetryBackoff() {
+  retryBackoff = RETRY_BASE_DELAY_MS;
+  if (retryTimer !== null) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+}
+
 // Per-table timestamp watermark used by the incremental snapshot. A snapshot
 // pulled for a warm cache requests only rows newer than the last confirmed
 // checkpoint instead of re-downloading the whole table, so a drained sync queue
@@ -350,6 +380,18 @@ export async function syncPendingData() {
   // `syncing` guard, and guarantees it never races the queue upload.
   if (queueDrained && isOnline()) {
     await refreshOfflineSnapshot();
+  }
+
+  // If the pass still has queued operations while online, schedule a follow-up
+  // pass so the remaining ops are retried automatically (no reload required). A
+  // genuine disconnect (isOnline() false) stops the loop; the window "online"
+  // event resumes it via startAutoSync(). A fully drained queue resets the
+  // backoff so a healthy device never polls.
+  const lingering = await getPendingQueue();
+  if (lingering.length > 0 && isOnline()) {
+    scheduleRetryWithBackoff();
+  } else {
+    resetRetryBackoff();
   }
 }
 

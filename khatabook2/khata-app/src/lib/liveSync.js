@@ -56,7 +56,7 @@ function rowTimestamp(row) {
   return row?.activity_at || row?.created_at || null;
 }
 
-function maxTimestamp(rows) {
+export function maxTimestamp(rows) {
   let max = null;
   for (const row of rows || []) {
     const ts = rowTimestamp(row);
@@ -95,7 +95,7 @@ function cacheDigest(rows) {
 // server ids as the server has AND holds its newest row. A surplus happens
 // naturally when unsynced local rows exist; only a deficit (or a newer server
 // max) means reconciliation must download more.
-function isCacheCurrent(cache, server) {
+export function isCacheCurrent(cache, server) {
   if (server.serverCount === 0) return cache.cacheCount === 0;
   if (cache.cacheCount < server.serverCount) return false;
   return !!cache.cacheMax && new Date(cache.cacheMax).getTime() >= new Date(server.serverMax).getTime();
@@ -114,7 +114,7 @@ function resolvedIdKey(row) {
 // snapshot's newest row timestamp must equal the live server max. Any
 // divergence in either direction (empty, partial, stale, or silently altered
 // payloads) fails the proof and forbids deletion.
-function snapshotIsComplete(full, server) {
+export function snapshotIsComplete(full, server) {
   if (!server) return false;
   const fullIds = new Set();
   for (const row of full || []) {
@@ -127,7 +127,7 @@ function snapshotIsComplete(full, server) {
   return new Date(fullMax).getTime() === new Date(server.serverMax).getTime();
 }
 
-function mergeRows(existing, incoming) {
+export function mergeRows(existing, incoming) {
   const indexed = new Map();
   const extras = [];
   for (const row of existing || []) {
@@ -189,7 +189,7 @@ async function fetchCompleteTransactionsSnapshot() {
   return { full, server };
 }
 
-async function fetchTransactionsSince(since) {
+export async function fetchTransactionsSince(since) {
   const rows = [];
   for (let page = 0; page < MAX_DELTA_PAGES; page += 1) {
     const from = page * DELTA_PAGE_SIZE;
