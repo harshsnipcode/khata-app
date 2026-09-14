@@ -5,7 +5,7 @@ import {
   OFFLINE_TABLES,
   createTempId,
   deleteLocalRows,
-  enqueueOperation,
+  deleteLocalRowsAndEnqueueOperation,
   generateUUID,
   getAll,
   isOnline,
@@ -13,6 +13,7 @@ import {
   rewriteForeignKeys,
   saveFetchedData,
   upsertLocalRows,
+  upsertLocalRowsAndEnqueueOperation,
   getCache,
   readQueue,
 } from "./db";
@@ -445,8 +446,7 @@ async function executeOffline(ops) {
       }
     }
     const rows = buildMutationRows(ops.table, ops.payload).map(rewriteForeignKeys);
-    upsertLocalRows(ops.table, rows);
-    enqueueOperation({
+    upsertLocalRowsAndEnqueueOperation(ops.table, rows, {
       table: ops.table,
       method: ops.method,
       payload: Array.isArray(ops.payload) ? rows : rows[0],
@@ -469,8 +469,7 @@ async function executeOffline(ops) {
       synced: false,
       __local_updated_at: new Date().toISOString(),
     }));
-    upsertLocalRows(ops.table, rows);
-    enqueueOperation({
+    upsertLocalRowsAndEnqueueOperation(ops.table, rows, {
       table: ops.table,
       method: "update",
       payload: ops.payload,
@@ -486,15 +485,14 @@ async function executeOffline(ops) {
 
   if (ops.method === "delete") {
     const targets = applyFilters(await getAll(ops.table), ops.filters);
-    deleteLocalRows(ops.table, (row) => ops.filters.every((filter) => matchesFilter(row, filter)), { markUnsynced: true });
-    enqueueOperation({
+    deleteLocalRowsAndEnqueueOperation(ops.table, (row) => ops.filters.every((filter) => matchesFilter(row, filter)), {
       table: ops.table,
       method: "delete",
       payload: ops.payload,
       options: ops.options,
       filters: ops.filters,
       selectColumns: ops.selectColumns,
-    });
+    }, { markUnsynced: true });
     scheduleSyncIfOnline();
     emitOfflineSaved(ops.table);
     return { data: targets, error: null };

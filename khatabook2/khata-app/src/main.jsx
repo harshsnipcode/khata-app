@@ -6,27 +6,31 @@ import App from './App.jsx'
 import { initDB } from './lib/offline/db';
 import { startAutoSync } from './lib/offline/sync';
 
-initDB();
-startAutoSync();
+async function bootstrap() {
+  await initDB();
+  startAutoSync();
 
-if (typeof window !== 'undefined') {
-  // Manual service worker registration (only in production, not dev)
-  const isDev = import.meta.env.MODE === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (!isDev && 'serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
-        .then(registration => {
-          console.log('SW registered:', registration.scope);
-        })
-        .catch(error => {
-          console.error('SW registration failed:', error);
-        });
-    });
+  if (typeof window !== 'undefined') {
+    // Manual service worker registration (only in production, not dev)
+    const isDev = import.meta.env.MODE === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isDev && 'serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(registration => {
+            console.log('SW registered:', registration.scope);
+          })
+          .catch(error => {
+            console.error('SW registration failed:', error);
+          });
+      });
+    }
   }
+
+  createRoot(document.getElementById('root')).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
 }
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+bootstrap();

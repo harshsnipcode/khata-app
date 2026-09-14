@@ -4,6 +4,14 @@ const QUEUE_KEY = `${STORAGE_PREFIX}:queue`;
 const META_KEY = `${STORAGE_PREFIX}:meta`;
 const RECYCLE_KEY = `${STORAGE_PREFIX}:recycle_bin`;
 const RECYCLE_INDEX_KEY = `${RECYCLE_KEY}:index`;
+const LEGACY_CLEANED_KEY = `${STORAGE_PREFIX}:legacy_cleaned`;
+const IDB_NAME = STORAGE_PREFIX;
+const IDB_VERSION = 1;
+const ROW_STORE = "rows";
+const QUEUE_STORE = "queue";
+const META_STORE = "meta";
+const RECYCLE_STORE = "recycle_bin";
+const MIGRATION_META_KEY = "localStorageMigrationV1";
 
 export const OFFLINE_TABLES = [
   "customers",
@@ -39,6 +47,39 @@ export const SERVER_SNAPSHOT_REPLACE_TABLES = new Set([
 ]);
 
 const FOREIGN_KEYS = ["customer_id", "transaction_id", "product_id", "employee_id", "group_id"];
+const INDEXED_ROW_COLUMNS = [
+  "id",
+  "customer_id",
+  "transaction_id",
+  "product_id",
+  "employee_id",
+  "group_id",
+  "date",
+  "created_at",
+  "activity_at",
+  "uploaded_at",
+  "deleted_at",
+  "deleted_locally",
+];
+
+let memoryCache = null;
+let memoryQueue = null;
+let memoryMeta = null;
+let memoryRecycleBin = null;
+let idbPromise = null;
+let idbReady = false;
+let persistChain = Promise.resolve();
+let localStorageRef = null;
+
+function clone(value) {
+  if (value === undefined) return undefined;
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
+function emptyCache() {
+  return Object.fromEntries(OFFLINE_TABLES.map((table) => [table, []]));
+}
 
 function readJson(key, fallback) {
   if (typeof localStorage === "undefined") return fallback;
@@ -53,6 +94,321 @@ function readJson(key, fallback) {
 function writeJson(key, value) {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function removeLegacyKey(key) {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.removeItem(key);
+  } catch {
+    // Best effort cleanup; IndexedDB already has the migrated data.
+  }
+}
+
+function hasIndexedDB() {
+  return typeof indexedDB !== "undefined";
+}
+
+function requestToPromise(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function transactionDone(transaction) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(transaction.error || new Error("IndexedDB transaction aborted"));
+    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB transaction failed"));
+  });
+}
+
+function createIndex(store, name, keyPath, options) {
+  if (!store.indexNames.contains(name)) store.createIndex(name, keyPath, options);
+}
+
+function openIndexedDB() {
+  if (!hasIndexedDB()) return Promise.resolve(null);
+  if (idbPromise) return idbPromise;
+  idbPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(IDB_NAME, IDB_VERSION);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      let rowStore;
+      if (!database.objectStoreNames.contains(ROW_STORE)) {
+        rowStore = database.createObjectStore(ROW_STORE, { keyPath: ["table", "key"] });
+      } else {
+        rowStore = request.transaction.objectStore(ROW_STORE);
+      }
+      createIndex(rowStore, "table", "table", { unique: false });
+      for (const column of INDEXED_ROW_COLUMNS) {
+        createIndex(rowStore, column, ["table", column], { unique: false });
+      }
+
+      if (!database.objectStoreNames.contains(QUEUE_STORE)) {
+        const queueStore = database.createObjectStore(QUEUE_STORE, { keyPath: "id" });
+        createIndex(queueStore, "created_at", "created_at", { unique: false });
+      }
+      if (!database.objectStoreNames.contains(META_STORE)) {
+        database.createObjectStore(META_STORE, { keyPath: "key" });
+      }
+      if (!database.objectStoreNames.contains(RECYCLE_STORE)) {
+        const recycleStore = database.createObjectStore(RECYCLE_STORE, { keyPath: "local_uuid" });
+        createIndex(recycleStore, "deleted_at", "deleted_at", { unique: false });
+        createIndex(recycleStore, "entity_type", "entity_type", { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  }).catch((error) => {
+    console.warn("[OfflineDB] IndexedDB unavailable; using localStorage fallback", error?.message || error);
+    return null;
+  });
+  return idbPromise;
+}
+
+function rowRecord(table, row) {
+  const key = normalizedRowKey(table, row);
+  if (!key) return null;
+  const record = { table, key, row: clone(row) };
+  for (const column of INDEXED_ROW_COLUMNS) {
+    if (row?.[column] !== undefined) record[column] = row[column];
+  }
+  return record;
+}
+
+async function readIndexedDBSnapshot(database) {
+  const cache = emptyCache();
+  const tx = database.transaction([ROW_STORE, QUEUE_STORE, META_STORE, RECYCLE_STORE], "readonly");
+  const [rowRecords, queueRecords, metaRecords, recycleRecords] = await Promise.all([
+    requestToPromise(tx.objectStore(ROW_STORE).getAll()),
+    requestToPromise(tx.objectStore(QUEUE_STORE).getAll()),
+    requestToPromise(tx.objectStore(META_STORE).getAll()),
+    requestToPromise(tx.objectStore(RECYCLE_STORE).getAll()),
+  ]);
+  await transactionDone(tx);
+
+  for (const record of rowRecords || []) {
+    if (OFFLINE_TABLES.includes(record.table) && record.table !== "recycle_bin") {
+      cache[record.table].push(record.row);
+    }
+  }
+  const meta = Object.fromEntries((metaRecords || []).map((record) => [record.key, record.value]));
+  return {
+    cache,
+    queue: (queueRecords || []).sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || ""))),
+    meta: meta[META_KEY] || { nextTempId: -1, idMap: {} },
+    recycleBin: recycleRecords || [],
+    migrated: meta[MIGRATION_META_KEY] === true,
+  };
+}
+
+async function persistTableToIndexedDB(table, rows) {
+  const database = await openIndexedDB();
+  if (!database) return;
+  const tx = database.transaction(ROW_STORE, "readwrite");
+  const store = tx.objectStore(ROW_STORE);
+  const index = store.index("table");
+  const range = IDBKeyRange.only(table);
+  index.openCursor(range).onsuccess = (event) => {
+    const cursor = event.target.result;
+    if (cursor) {
+      cursor.delete();
+      cursor.continue();
+      return;
+    }
+    for (const row of dedupeRows(table, rows)) {
+      const record = rowRecord(table, row);
+      if (record) store.put(record);
+    }
+  };
+  await transactionDone(tx);
+}
+
+async function persistQueueToIndexedDB(queue) {
+  const database = await openIndexedDB();
+  if (!database) return;
+  const tx = database.transaction(QUEUE_STORE, "readwrite");
+  const store = tx.objectStore(QUEUE_STORE);
+  store.clear();
+  for (const item of queue || []) store.put(clone(item));
+  await transactionDone(tx);
+}
+
+async function persistTablesAndQueueToIndexedDB(tables, queue) {
+  const database = await openIndexedDB();
+  if (!database) return;
+  const tx = database.transaction([ROW_STORE, QUEUE_STORE], "readwrite");
+  const rowStore = tx.objectStore(ROW_STORE);
+  const queueStore = tx.objectStore(QUEUE_STORE);
+
+  queueStore.clear();
+  for (const item of queue || []) queueStore.put(clone(item));
+
+  for (const table of tables.filter((item) => item && item !== "recycle_bin")) {
+    const index = rowStore.index("table");
+    const range = IDBKeyRange.only(table);
+    index.openCursor(range).onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+        return;
+      }
+      for (const row of dedupeRows(table, memoryCache?.[table] || [])) {
+        const record = rowRecord(table, row);
+        if (record) rowStore.put(record);
+      }
+    };
+  }
+  await transactionDone(tx);
+}
+
+async function persistMetaToIndexedDB(meta) {
+  const database = await openIndexedDB();
+  if (!database) return;
+  const tx = database.transaction(META_STORE, "readwrite");
+  tx.objectStore(META_STORE).put({ key: META_KEY, value: clone(meta) });
+  await transactionDone(tx);
+}
+
+async function persistRecycleBinToIndexedDB(items) {
+  const database = await openIndexedDB();
+  if (!database) return;
+  const tx = database.transaction(RECYCLE_STORE, "readwrite");
+  const store = tx.objectStore(RECYCLE_STORE);
+  store.clear();
+  for (const item of items || []) {
+    if (item?.local_uuid) store.put(clone(item));
+  }
+  await transactionDone(tx);
+}
+
+function queuePersistence(task) {
+  if (!idbReady || !hasIndexedDB()) return;
+  persistChain = persistChain.then(task, task).catch((error) => {
+    console.warn("[OfflineDB] IndexedDB persistence failed", error?.message || error);
+  });
+}
+
+export function flushOfflinePersistence() {
+  return persistChain;
+}
+
+function hydrateMemoryFromLegacyStorage() {
+  localStorageRef = typeof localStorage === "undefined" ? null : localStorage;
+  memoryCache = readJson(CACHE_KEY, {});
+  for (const table of OFFLINE_TABLES) {
+    if (!Array.isArray(memoryCache[table])) memoryCache[table] = [];
+  }
+  memoryQueue = readJson(QUEUE_KEY, []);
+  memoryMeta = readJson(META_KEY, { nextTempId: -1, idMap: {} });
+  memoryRecycleBin = readRecycleBinLegacy();
+}
+
+function ensureMemoryHydrated() {
+  const currentStorage = typeof localStorage === "undefined" ? null : localStorage;
+  if (!memoryCache || !memoryQueue || !memoryMeta || !memoryRecycleBin) {
+    hydrateMemoryFromLegacyStorage();
+    return;
+  }
+  if (!idbReady && currentStorage !== localStorageRef) {
+    hydrateMemoryFromLegacyStorage();
+  }
+}
+
+function readRecycleBinLegacy() {
+  const index = readJson(RECYCLE_INDEX_KEY, null);
+  if (Array.isArray(index)) {
+    const items = index
+      .map((id) => readJson(`${RECYCLE_KEY}:item:${id}`, null))
+      .filter(Boolean);
+    const legacy = readJson(RECYCLE_KEY, []);
+    if (legacy.length) {
+      const seen = new Set(items.map((entry) => String(entry.local_uuid)));
+      for (const entry of legacy) {
+        if (entry && !seen.has(String(entry.local_uuid))) items.push(entry);
+      }
+    }
+    return items;
+  }
+  return readJson(RECYCLE_KEY, []);
+}
+
+async function migrateLegacyLocalStorage(database) {
+  const legacyCache = readJson(CACHE_KEY, null);
+  const legacyQueue = readJson(QUEUE_KEY, null);
+  const legacyMeta = readJson(META_KEY, null);
+  const legacyRecycle = readRecycleBinLegacy();
+  const hasLegacyData = !!legacyCache || !!legacyQueue || !!legacyMeta || legacyRecycle.length > 0;
+  if (!database || !hasLegacyData) return false;
+
+  const cache = legacyCache && typeof legacyCache === "object" ? legacyCache : emptyCache();
+  for (const table of OFFLINE_TABLES) {
+    if (!Array.isArray(cache[table])) cache[table] = [];
+  }
+  const queue = Array.isArray(legacyQueue) ? legacyQueue : [];
+  const meta = legacyMeta && typeof legacyMeta === "object" ? legacyMeta : { nextTempId: -1, idMap: {} };
+  const tx = database.transaction([ROW_STORE, QUEUE_STORE, META_STORE, RECYCLE_STORE], "readwrite");
+  const rowStore = tx.objectStore(ROW_STORE);
+  const queueStore = tx.objectStore(QUEUE_STORE);
+  const metaStore = tx.objectStore(META_STORE);
+  const recycleStore = tx.objectStore(RECYCLE_STORE);
+
+  rowStore.clear();
+  queueStore.clear();
+  recycleStore.clear();
+  for (const table of OFFLINE_TABLES) {
+    if (table === "recycle_bin") continue;
+    for (const row of dedupeRows(table, cache[table] || [])) {
+      const record = rowRecord(table, row);
+      if (record) rowStore.put(record);
+    }
+  }
+  for (const item of queue) queueStore.put(clone(item));
+  metaStore.put({ key: META_KEY, value: clone(meta) });
+  for (const item of legacyRecycle) {
+    if (item?.local_uuid) recycleStore.put(clone(item));
+  }
+  metaStore.put({ key: MIGRATION_META_KEY, value: true });
+  await transactionDone(tx);
+
+  removeLegacyKey(CACHE_KEY);
+  removeLegacyKey(QUEUE_KEY);
+  removeLegacyKey(META_KEY);
+  removeLegacyKey(RECYCLE_INDEX_KEY);
+  removeLegacyKey(RECYCLE_KEY);
+  for (const item of legacyRecycle) removeLegacyKey(`${RECYCLE_KEY}:item:${item?.local_uuid}`);
+  try {
+    localStorage.setItem(LEGACY_CLEANED_KEY, "true");
+  } catch {
+    // The old giant cache may have filled localStorage; cleanup above is enough.
+  }
+  return true;
+}
+
+async function requestPersistentStorage() {
+  if (typeof navigator === "undefined" || !navigator.storage) return;
+  try {
+    const estimate = typeof navigator.storage.estimate === "function"
+      ? await navigator.storage.estimate()
+      : null;
+    const persisted = typeof navigator.storage.persisted === "function"
+      ? await navigator.storage.persisted()
+      : false;
+    const granted = persisted || (
+      typeof navigator.storage.persist === "function"
+        ? await navigator.storage.persist()
+        : false
+    );
+    console.info("[OfflineDB] Storage", {
+      persisted: granted,
+      usage: estimate?.usage ?? null,
+      quota: estimate?.quota ?? null,
+    });
+  } catch (error) {
+    console.warn("[OfflineDB] Persistent storage request skipped", error?.message || error);
+  }
 }
 
 export function isOnline() {
@@ -71,11 +427,17 @@ export function generateUUID() {
 }
 
 function readMeta() {
-  return readJson(META_KEY, { nextTempId: -1, idMap: {} });
+  ensureMemoryHydrated();
+  return clone(memoryMeta || { nextTempId: -1, idMap: {} });
 }
 
 function writeMeta(meta) {
-  writeJson(META_KEY, meta);
+  memoryMeta = clone(meta || { nextTempId: -1, idMap: {} });
+  if (idbReady) {
+    queuePersistence(() => persistMetaToIndexedDB(memoryMeta));
+  } else {
+    writeJson(META_KEY, memoryMeta);
+  }
 }
 
 export function getSyncWatermark(table) {
@@ -119,7 +481,8 @@ export function resolveServerId(table, id) {
 }
 
 export function getCache() {
-  const cache = readJson(CACHE_KEY, {});
+  ensureMemoryHydrated();
+  const cache = clone(memoryCache || emptyCache());
   for (const table of OFFLINE_TABLES) {
     if (!Array.isArray(cache[table])) cache[table] = [];
   }
@@ -160,14 +523,39 @@ function dispatchCacheUpdated(tables) {
 }
 
 function writeCache(cache, tables) {
-  writeJson(CACHE_KEY, cache);
+  memoryCache = clone({ ...emptyCache(), ...(cache || {}) });
+  if (idbReady) {
+    const changedTables = Array.isArray(tables) ? tables : [tables];
+    queuePersistence(async () => {
+      for (const table of changedTables.filter(Boolean)) {
+        if (table !== "recycle_bin") await persistTableToIndexedDB(table, memoryCache[table] || []);
+      }
+    });
+  } else {
+    writeJson(CACHE_KEY, memoryCache);
+  }
   dispatchCacheUpdated(tables);
 }
 
 export async function initDB() {
-  if (typeof indexedDB !== "undefined" && !localStorage.getItem(`${STORAGE_PREFIX}:legacy_cleaned`)) {
-    indexedDB.deleteDatabase("myBusinessOfflineDB");
-    localStorage.setItem(`${STORAGE_PREFIX}:legacy_cleaned`, "true");
+  hydrateMemoryFromLegacyStorage();
+  const database = await openIndexedDB();
+  if (database) {
+    await migrateLegacyLocalStorage(database);
+    const snapshot = await readIndexedDBSnapshot(database);
+    memoryCache = snapshot.cache;
+    memoryQueue = snapshot.queue;
+    memoryMeta = snapshot.meta;
+    memoryRecycleBin = snapshot.recycleBin;
+    idbReady = true;
+
+    if (typeof indexedDB !== "undefined" && typeof localStorage !== "undefined" && !localStorage.getItem(LEGACY_CLEANED_KEY)) {
+      indexedDB.deleteDatabase("myBusinessOfflineDB");
+      try {
+        localStorage.setItem(LEGACY_CLEANED_KEY, "true");
+      } catch {}
+    }
+    requestPersistentStorage();
   }
   getCache();
   readQueue();
@@ -251,8 +639,13 @@ export async function getAll(table) {
 
 export function upsertLocalRows(table, rows) {
   const currentCache = getCache();
+  currentCache[table] = mergeLocalRows(table, currentCache[table] || [], rows);
+  writeCache({ ...currentCache }, table);
+}
+
+function mergeLocalRows(table, existingRows, rows) {
   const byKey = new Map(
-    dedupeRows(table, currentCache[table] || []).map((row) => [normalizedRowKey(table, row), { ...row }]),
+    dedupeRows(table, existingRows || []).map((row) => [normalizedRowKey(table, row), { ...row }]),
   );
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
@@ -266,7 +659,7 @@ export function upsertLocalRows(table, rows) {
     if (!key) continue;
     byKey.set(key, { ...(byKey.get(key) || {}), ...prepared });
   }
-  writeCache({ ...currentCache, [table]: Array.from(byKey.values()) }, table);
+  return Array.from(byKey.values());
 }
 
 export function deleteLocalRows(table, predicate, { markUnsynced = false } = {}) {
@@ -293,11 +686,17 @@ export function removeLocalRows(table, predicate) {
 }
 
 export function readQueue() {
-  return readJson(QUEUE_KEY, []);
+  ensureMemoryHydrated();
+  return clone(memoryQueue || []);
 }
 
 function writeQueue(queue) {
-  writeJson(QUEUE_KEY, queue);
+  memoryQueue = clone(queue || []);
+  if (idbReady) {
+    queuePersistence(() => persistQueueToIndexedDB(memoryQueue));
+  } else {
+    writeJson(QUEUE_KEY, memoryQueue);
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("sync-status", {
       detail: { status: queue.length > 0 ? "pending" : "synced" },
@@ -305,8 +704,7 @@ function writeQueue(queue) {
   }
 }
 
-export function enqueueOperation(operation) {
-  const queue = readQueue();
+function appendOperationToQueue(queue, operation) {
   const payloadRow = Array.isArray(operation.payload) ? operation.payload[0] : operation.payload;
   const temporaryId = typeof payloadRow?.id === "number" && payloadRow.id < 0;
 
@@ -326,8 +724,7 @@ export function enqueueOperation(operation) {
         payload: Array.isArray(pendingInsert.payload) ? [mergedRow] : mergedRow,
         updated_at: new Date().toISOString(),
       };
-      writeQueue(queue);
-      return queue[pendingInsertIndex];
+      return { queue, entry: queue[pendingInsertIndex] };
     }
   }
 
@@ -338,7 +735,63 @@ export function enqueueOperation(operation) {
     updated_at: now,
     ...operation,
   };
-  writeQueue([...queue, entry]);
+  return { queue: [...queue, entry], entry };
+}
+
+export function enqueueOperation(operation) {
+  const { queue, entry } = appendOperationToQueue(readQueue(), operation);
+  writeQueue(queue);
+  return entry;
+}
+
+export function upsertLocalRowsAndEnqueueOperation(table, rows, operation) {
+  const cache = getCache();
+  const { queue, entry } = appendOperationToQueue(readQueue(), operation);
+  cache[table] = mergeLocalRows(table, cache[table] || [], rows);
+  memoryCache = clone({ ...emptyCache(), ...cache });
+  memoryQueue = clone(queue);
+  if (idbReady) {
+    queuePersistence(() => persistTablesAndQueueToIndexedDB([table], memoryQueue));
+  } else {
+    writeJson(CACHE_KEY, memoryCache);
+    writeJson(QUEUE_KEY, memoryQueue);
+  }
+  dispatchCacheUpdated(table);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("sync-status", {
+      detail: { status: memoryQueue.length > 0 ? "pending" : "synced" },
+    }));
+  }
+  return entry;
+}
+
+export function deleteLocalRowsAndEnqueueOperation(table, predicate, operation, { markUnsynced = false } = {}) {
+  const cache = getCache();
+  const { queue, entry } = appendOperationToQueue(readQueue(), operation);
+  cache[table] = (cache[table] || []).map((row) => (
+    predicate(row)
+      ? {
+          ...row,
+          deleted_locally: true,
+          ...(markUnsynced ? { synced: false } : {}),
+          __local_updated_at: new Date().toISOString(),
+        }
+      : row
+  ));
+  memoryCache = clone({ ...emptyCache(), ...cache });
+  memoryQueue = clone(queue);
+  if (idbReady) {
+    queuePersistence(() => persistTablesAndQueueToIndexedDB([table], memoryQueue));
+  } else {
+    writeJson(CACHE_KEY, memoryCache);
+    writeJson(QUEUE_KEY, memoryQueue);
+  }
+  dispatchCacheUpdated(table);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("sync-status", {
+      detail: { status: memoryQueue.length > 0 ? "pending" : "synced" },
+    }));
+  }
   return entry;
 }
 
@@ -468,33 +921,18 @@ export function rewriteFilters(filters = [], ownTable = null) {
 }
 
 function readRecycleBinRaw() {
-  // New per-item storage: a cheap index of local_uuids plus one key per entry,
-  // so appending/deleting a single recycle-bin entry does not re-serialize the
-  // whole history (which embeds large original_data blobs) on every delete.
-  const index = readJson(RECYCLE_INDEX_KEY, null);
-  if (Array.isArray(index)) {
-    const items = index
-      .map((id) => readJson(`${RECYCLE_KEY}:item:${id}`, null))
-      .filter(Boolean);
-    // Migrate any leftover entries that were written by older builds under the
-    // single-array key until the next full rewrite clears them.
-    const legacy = readJson(RECYCLE_KEY, []);
-    if (legacy.length) {
-      const seen = new Set(items.map((entry) => String(entry.local_uuid)));
-      for (const entry of legacy) {
-        if (entry && !seen.has(String(entry.local_uuid))) items.push(entry);
-      }
-    }
-    return items;
-  }
-  return readJson(RECYCLE_KEY, []);
+  ensureMemoryHydrated();
+  return clone(memoryRecycleBin || []);
 }
 
 function writeRecycleBinRaw(items) {
-  // Full rewrite: used only by reconcile/cleanup-style operations that process
-  // the entire set in the background, not by the per-delete hot path.
+  memoryRecycleBin = (items || []).filter((item) => item?.local_uuid).map(clone);
+  if (idbReady) {
+    queuePersistence(() => persistRecycleBinToIndexedDB(memoryRecycleBin));
+    return;
+  }
   const index = [];
-  for (const item of items) {
+  for (const item of memoryRecycleBin) {
     const id = String(item?.local_uuid);
     if (!id || id === "undefined" || id === "null") continue;
     index.push(id);
@@ -507,55 +945,22 @@ function writeRecycleBinRaw(items) {
 function appendRecycleBinItem(item) {
   const id = String(item?.local_uuid);
   if (!id || id === "undefined" || id === "null") return;
-  writeJson(`${RECYCLE_KEY}:item:${id}`, item);
-  const index = readJson(RECYCLE_INDEX_KEY, []);
-  if (!Array.isArray(index)) {
-    // Migrate the legacy single-array entries into the new per-item shape.
-    const legacy = readJson(RECYCLE_KEY, []);
-    const migrated = legacy
-      .filter((entry) => entry && String(entry.local_uuid) !== id)
-      .map((entry) => {
-        writeJson(`${RECYCLE_KEY}:item:${String(entry.local_uuid)}`, entry);
-        return String(entry.local_uuid);
-      });
-    writeJson(RECYCLE_KEY, []);
-    writeJson(RECYCLE_INDEX_KEY, [id, ...migrated]);
-    return;
-  }
-  if (!index.includes(id)) {
-    writeJson(RECYCLE_INDEX_KEY, [id, ...index]);
-  }
+  const current = readRecycleBinRaw().filter((entry) => String(entry.local_uuid) !== id);
+  writeRecycleBinRaw([item, ...current]);
 }
 
 function putRecycleBinItem(item) {
   const id = String(item?.local_uuid);
   if (!id || id === "undefined" || id === "null") return;
-  writeJson(`${RECYCLE_KEY}:item:${id}`, item);
-  const index = readJson(RECYCLE_INDEX_KEY, null);
-  if (Array.isArray(index)) {
-    if (!index.includes(id)) writeJson(RECYCLE_INDEX_KEY, [id, ...index]);
-    return;
-  }
-  const legacy = readJson(RECYCLE_KEY, []);
-  writeJson(RECYCLE_INDEX_KEY, [id, ...legacy.filter((entry) => entry && String(entry.local_uuid) !== id).map((entry) => String(entry.local_uuid))]);
-  writeJson(RECYCLE_KEY, []);
+  const current = readRecycleBinRaw().filter((entry) => String(entry.local_uuid) !== id);
+  writeRecycleBinRaw([item, ...current]);
 }
 
 function removeRecycleBinItem(id) {
   const key = String(id);
   if (key === "undefined" || key === "null") return;
-  const index = readJson(RECYCLE_INDEX_KEY, null);
-  if (Array.isArray(index)) {
-    writeJson(RECYCLE_INDEX_KEY, index.filter((entry) => entry !== key));
-  }
-  if (typeof localStorage !== "undefined") {
-    localStorage.removeItem(`${RECYCLE_KEY}:item:${key}`);
-  }
-  // Keep the legacy array in sync for older readers/tests that still read it.
-  const legacy = readJson(RECYCLE_KEY, []);
-  if (legacy.length) {
-    writeJson(RECYCLE_KEY, legacy.filter((entry) => entry && String(entry.local_uuid) !== key));
-  }
+  writeRecycleBinRaw(readRecycleBinRaw().filter((entry) => String(entry.local_uuid) !== key));
+  removeLegacyKey(`${RECYCLE_KEY}:item:${key}`);
 }
 
 // Reconciles the local recycle-bin mirror with the authoritative server rows.
@@ -626,16 +1031,11 @@ function scheduleSyncIfOnline() {
 }
 
 export function clearRecycleBinCache() {
-  if (typeof localStorage !== "undefined") {
-    const index = readJson(RECYCLE_INDEX_KEY, []);
-    for (const id of Array.isArray(index) ? index : []) {
-      localStorage.removeItem(`${RECYCLE_KEY}:item:${id}`);
-    }
-    localStorage.removeItem(RECYCLE_INDEX_KEY);
-    localStorage.removeItem(RECYCLE_KEY);
-  } else {
-    writeRecycleBinRaw([]);
-  }
+  const ids = readRecycleBinRaw().map((entry) => entry?.local_uuid).filter(Boolean);
+  writeRecycleBinRaw([]);
+  removeLegacyKey(RECYCLE_INDEX_KEY);
+  removeLegacyKey(RECYCLE_KEY);
+  for (const id of ids) removeLegacyKey(`${RECYCLE_KEY}:item:${id}`);
 }
 
 export async function moveToRecycleBin(entityType, entityId, entityName, originalData, deletedBy) {

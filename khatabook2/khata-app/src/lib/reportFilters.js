@@ -9,8 +9,8 @@ function createDefaultCustomerTransactionsFilters(today = new Date()) {
   const date = getLocalDateKey(today);
   return {
     searchTerm: "",
-    startDate: "",
-    endDate: "",
+    startDate: date,
+    endDate: date,
     durationFilter: "single_day",
     singleDay: date,
     paymentFilter: null,
