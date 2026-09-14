@@ -225,6 +225,30 @@ async function persistTableToIndexedDB(table, rows) {
   await transactionDone(tx);
 }
 
+async function persistRowsToIndexedDB(table, rows) {
+  const database = await openIndexedDB();
+  if (!database) return;
+  const tx = database.transaction(ROW_STORE, "readwrite");
+  const store = tx.objectStore(ROW_STORE);
+  for (const row of dedupeRows(table, rows)) {
+    const record = rowRecord(table, row);
+    if (record) store.put(record);
+  }
+  await transactionDone(tx);
+}
+
+async function deleteRowsFromIndexedDB(table, rows) {
+  const database = await openIndexedDB();
+  if (!database) return;
+  const tx = database.transaction(ROW_STORE, "readwrite");
+  const store = tx.objectStore(ROW_STORE);
+  for (const row of rows || []) {
+    const key = normalizedRowKey(table, row);
+    if (key) store.delete([table, key]);
+  }
+  await transactionDone(tx);
+}
+
 async function persistQueueToIndexedDB(queue) {
   const database = await openIndexedDB();
   if (!database) return;
@@ -235,7 +259,7 @@ async function persistQueueToIndexedDB(queue) {
   await transactionDone(tx);
 }
 
-async function persistTablesAndQueueToIndexedDB(tables, queue) {
+async function persistRowsAndQueueToIndexedDB(table, rows, queue) {
   const database = await openIndexedDB();
   if (!database) return;
   const tx = database.transaction([ROW_STORE, QUEUE_STORE], "readwrite");
@@ -244,22 +268,9 @@ async function persistTablesAndQueueToIndexedDB(tables, queue) {
 
   queueStore.clear();
   for (const item of queue || []) queueStore.put(clone(item));
-
-  for (const table of tables.filter((item) => item && item !== "recycle_bin")) {
-    const index = rowStore.index("table");
-    const range = IDBKeyRange.only(table);
-    index.openCursor(range).onsuccess = (event) => {
-      const cursor = event.target.result;
-      if (cursor) {
-        cursor.delete();
-        cursor.continue();
-        return;
-      }
-      for (const row of dedupeRows(table, memoryCache?.[table] || [])) {
-        const record = rowRecord(table, row);
-        if (record) rowStore.put(record);
-      }
-    };
+  for (const row of dedupeRows(table, rows)) {
+    const record = rowRecord(table, row);
+    if (record) rowStore.put(record);
   }
   await transactionDone(tx);
 }
@@ -285,10 +296,11 @@ async function persistRecycleBinToIndexedDB(items) {
 }
 
 function queuePersistence(task) {
-  if (!idbReady || !hasIndexedDB()) return;
+  if (!idbReady || !hasIndexedDB()) return Promise.resolve();
   persistChain = persistChain.then(task, task).catch((error) => {
     console.warn("[OfflineDB] IndexedDB persistence failed", error?.message || error);
   });
+  return persistChain;
 }
 
 export function flushOfflinePersistence() {
@@ -572,6 +584,7 @@ export async function saveFetchedData(table, rows, { protectUnsynced = false } =
   const byKey = new Map(
     dedupeRows(table, currentCache[table] || []).map((row) => [normalizedRowKey(table, row), { ...row }]),
   );
+  const changedRows = [];
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const key = normalizedRowKey(table, row);
@@ -581,15 +594,23 @@ export async function saveFetchedData(table, rows, { protectUnsynced = false } =
     // been confirmed as persisted to the server yet. The pending queue
     // operation is the source of truth until it succeeds.
     if (protectUnsynced && previous.synced === false) continue;
-    byKey.set(key, {
+    const nextRow = {
       ...previous,
       ...row,
       local_uuid: previous.local_uuid || row.local_uuid || generateUUID(),
       synced: true,
       deleted_locally: false,
-    });
+    };
+    byKey.set(key, nextRow);
+    changedRows.push(nextRow);
   }
-  writeCache({ ...currentCache, [table]: Array.from(byKey.values()) }, table);
+  memoryCache = clone({ ...emptyCache(), ...currentCache, [table]: Array.from(byKey.values()) });
+  if (idbReady) {
+    await queuePersistence(() => persistRowsToIndexedDB(table, changedRows));
+  } else {
+    writeJson(CACHE_KEY, memoryCache);
+  }
+  dispatchCacheUpdated(table);
 }
 
 export async function replaceFetchedData(table, rows, { protectUnsynced = false } = {}) {
@@ -623,7 +644,17 @@ export async function replaceFetchedData(table, rows, { protectUnsynced = false 
   const unsyncedLocalRows = previousRows.filter((row) => (
     row?.synced !== true && !serverKeys.has(normalizedRowKey(table, row))
   ));
-  writeCache({ ...currentCache, [table]: dedupeRows(table, [...serverRows, ...unsyncedLocalRows]) }, table);
+  memoryCache = clone({
+    ...emptyCache(),
+    ...currentCache,
+    [table]: dedupeRows(table, [...serverRows, ...unsyncedLocalRows]),
+  });
+  if (idbReady) {
+    await queuePersistence(() => persistTableToIndexedDB(table, memoryCache[table] || []));
+  } else {
+    writeJson(CACHE_KEY, memoryCache);
+  }
+  dispatchCacheUpdated(table);
   if (table === "import_batch_recycle_bin" && rows.length === 0) {
     // Legacy cleanup: older builds stored excel imports inside the local
     // recycle bin. Only drop those entries, never wipe locally-deleted
@@ -664,25 +695,48 @@ function mergeLocalRows(table, existingRows, rows) {
 
 export function deleteLocalRows(table, predicate, { markUnsynced = false } = {}) {
   const cache = getCache();
-  cache[table] = (cache[table] || []).map((row) => (
-    predicate(row)
-      ? {
-          ...row,
-          deleted_locally: true,
-          // An offline delete is a pending mutation: flag it so background
-          // server fetches cannot resurrect the row before the delete syncs.
-          ...(markUnsynced ? { synced: false } : {}),
-          __local_updated_at: new Date().toISOString(),
-        }
-      : row
-  ));
-  writeCache(cache, table);
+  const changedRows = [];
+  cache[table] = (cache[table] || []).map((row) => {
+    if (!predicate(row)) return row;
+    const nextRow = {
+      ...row,
+      deleted_locally: true,
+      // An offline delete is a pending mutation: flag it so background
+      // server fetches cannot resurrect the row before the delete syncs.
+      ...(markUnsynced ? { synced: false } : {}),
+      __local_updated_at: new Date().toISOString(),
+    };
+    changedRows.push(nextRow);
+    return nextRow;
+  });
+  memoryCache = clone({ ...emptyCache(), ...cache });
+  if (idbReady) {
+    const persistence = queuePersistence(() => persistRowsToIndexedDB(table, changedRows));
+    dispatchCacheUpdated(table);
+    return persistence;
+  }
+  writeJson(CACHE_KEY, memoryCache);
+  dispatchCacheUpdated(table);
+  return Promise.resolve();
 }
 
 export function removeLocalRows(table, predicate) {
   const cache = getCache();
-  cache[table] = (cache[table] || []).filter((row) => !predicate(row));
-  writeCache(cache, table);
+  const removedRows = [];
+  cache[table] = (cache[table] || []).filter((row) => {
+    if (!predicate(row)) return true;
+    removedRows.push(row);
+    return false;
+  });
+  memoryCache = clone({ ...emptyCache(), ...cache });
+  if (idbReady) {
+    const persistence = queuePersistence(() => deleteRowsFromIndexedDB(table, removedRows));
+    dispatchCacheUpdated(table);
+    return persistence;
+  }
+  writeJson(CACHE_KEY, memoryCache);
+  dispatchCacheUpdated(table);
+  return Promise.resolve();
 }
 
 export function readQueue() {
@@ -747,11 +801,14 @@ export function enqueueOperation(operation) {
 export function upsertLocalRowsAndEnqueueOperation(table, rows, operation) {
   const cache = getCache();
   const { queue, entry } = appendOperationToQueue(readQueue(), operation);
-  cache[table] = mergeLocalRows(table, cache[table] || [], rows);
+  const beforeRows = cache[table] || [];
+  cache[table] = mergeLocalRows(table, beforeRows, rows);
+  const rowKeys = new Set((rows || []).map((row) => normalizedRowKey(table, row)).filter(Boolean));
+  const changedRows = cache[table].filter((row) => rowKeys.has(normalizedRowKey(table, row)));
   memoryCache = clone({ ...emptyCache(), ...cache });
   memoryQueue = clone(queue);
   if (idbReady) {
-    queuePersistence(() => persistTablesAndQueueToIndexedDB([table], memoryQueue));
+    queuePersistence(() => persistRowsAndQueueToIndexedDB(table, changedRows, memoryQueue));
   } else {
     writeJson(CACHE_KEY, memoryCache);
     writeJson(QUEUE_KEY, memoryQueue);
@@ -768,20 +825,22 @@ export function upsertLocalRowsAndEnqueueOperation(table, rows, operation) {
 export function deleteLocalRowsAndEnqueueOperation(table, predicate, operation, { markUnsynced = false } = {}) {
   const cache = getCache();
   const { queue, entry } = appendOperationToQueue(readQueue(), operation);
-  cache[table] = (cache[table] || []).map((row) => (
-    predicate(row)
-      ? {
-          ...row,
-          deleted_locally: true,
-          ...(markUnsynced ? { synced: false } : {}),
-          __local_updated_at: new Date().toISOString(),
-        }
-      : row
-  ));
+  const changedRows = [];
+  cache[table] = (cache[table] || []).map((row) => {
+    if (!predicate(row)) return row;
+    const nextRow = {
+      ...row,
+      deleted_locally: true,
+      ...(markUnsynced ? { synced: false } : {}),
+      __local_updated_at: new Date().toISOString(),
+    };
+    changedRows.push(nextRow);
+    return nextRow;
+  });
   memoryCache = clone({ ...emptyCache(), ...cache });
   memoryQueue = clone(queue);
   if (idbReady) {
-    queuePersistence(() => persistTablesAndQueueToIndexedDB([table], memoryQueue));
+    queuePersistence(() => persistRowsAndQueueToIndexedDB(table, changedRows, memoryQueue));
   } else {
     writeJson(CACHE_KEY, memoryCache);
     writeJson(QUEUE_KEY, memoryQueue);
@@ -1039,6 +1098,11 @@ export function clearRecycleBinCache() {
 }
 
 export async function moveToRecycleBin(entityType, entityId, entityName, originalData, deletedBy) {
+  const existing = readRecycleBinRaw().find((entry) => (
+    entry?.entity_type === entityType && String(entry?.entity_id) === String(entityId)
+  ));
+  if (existing) return existing;
+
   const now = new Date();
   const item = {
     local_uuid: generateUUID(),

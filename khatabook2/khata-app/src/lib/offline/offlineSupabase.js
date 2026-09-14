@@ -133,7 +133,7 @@ function getCustomerScopeFilterValue(ops) {
   return null;
 }
 
-function pruneStaleCustomerScopeRows(ops, rows) {
+async function pruneStaleCustomerScopeRows(ops, rows) {
   const customerId = getCustomerScopeFilterValue(ops);
   if (customerId === null || customerId === undefined) return;
 
@@ -143,7 +143,7 @@ function pruneStaleCustomerScopeRows(ops, rows) {
       .map((row) => String(row.id)),
   );
 
-  removeLocalRows("transactions", (row) => {
+  await removeLocalRows("transactions", (row) => {
     if (!row || typeof row !== "object") return false;
     if (row.deleted_locally) return false;
     if (row.synced === false) return false;
@@ -362,12 +362,12 @@ async function refreshCacheAfterOnlineResult(ops, data) {
     // If the server says this customer no longer has a row that we still have in
     // the shared transactions cache, prune only that stale row while preserving
     // pending unsynced edits and unrelated customers' data.
-    pruneStaleCustomerScopeRows(ops, rows);
+    await pruneStaleCustomerScopeRows(ops, rows);
     return;
   }
 
   if (ops.method === "delete") {
-    deleteLocalRows(ops.table, (row) => ops.filters.every((filter) => matchesFilter(row, filter)));
+    await deleteLocalRows(ops.table, (row) => ops.filters.every((filter) => matchesFilter(row, filter)));
     return;
   }
 
