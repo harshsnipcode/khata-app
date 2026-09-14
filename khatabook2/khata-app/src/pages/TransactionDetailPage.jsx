@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { moveToRecycleBin } from "../lib/offline/db";
 import { requirePermission, can } from "../lib/permissions";
@@ -26,6 +26,7 @@ function getHomePath() {
 function TransactionDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [transaction, setTransaction] = useState(null);
   const [customer, setCustomer] = useState(null);
@@ -62,6 +63,19 @@ function TransactionDetailPage() {
     const load = async () => {
       setLoading(true);
       setError("");
+
+      // CustomerDetails already has this exact row, its items, and customer
+      // in memory. Hydrate the detail view synchronously so navigation does
+      // not wait for a second read of data we already rendered.
+      const snapshot = location.state;
+      if (snapshot?.transaction && String(snapshot.transaction.id) === String(id)) {
+        setTransaction(snapshot.transaction);
+        setCustomer(snapshot.customer || null);
+        setItems(snapshot.items || snapshot.transaction.items || []);
+        if (snapshot.runningBalance !== undefined) setRunningBalance(snapshot.runningBalance);
+        setLoading(false);
+        return;
+      }
 
       const { data: txn, error: txnErr } = await supabase
         .from("transactions")
@@ -114,7 +128,7 @@ function TransactionDetailPage() {
     };
 
     load();
-  }, [id]);
+  }, [id, location.state]);
 
   const handleDelete = async () => {
     if (!requirePermission("delete_transaction")) return;
@@ -127,6 +141,7 @@ function TransactionDetailPage() {
       const { fullTransaction, transactionToStore } = await loadTransactionRecyclePayload({
         transactionId: id,
         currentTransaction: transaction,
+        currentItems: items,
         client: supabase,
       });
       console.log("[RecycleBin] Full transaction being stored:", transactionToStore);

@@ -3,8 +3,21 @@ import { offlineSupabase } from "./offline/offlineSupabase";
 export async function loadTransactionRecyclePayload({
   transactionId,
   currentTransaction,
+  currentItems,
   client = offlineSupabase,
 } = {}) {
+  if (currentTransaction && Array.isArray(currentItems)) {
+    return {
+      fullTransaction: currentTransaction,
+      transactionItems: currentItems,
+      transactionToStore: {
+        transaction: currentTransaction,
+        transaction_items: currentItems,
+      },
+      error: null,
+    };
+  }
+
   const [transactionResult, itemsResult] = await Promise.all([
     client
       .from("transactions")
@@ -28,4 +41,3 @@ export async function loadTransactionRecyclePayload({
     error: transactionResult.error || itemsResult.error || null,
   };
 }
-

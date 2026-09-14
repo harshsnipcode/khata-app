@@ -419,7 +419,14 @@ function CustomerDetails() {
                     <Fragment key={txn.id}>
                       {showSeparator && <DateSeparator dateStr={currentDate} />}
                       <div
-                        onClick={() => navigate(`/transaction/${txn.id}`)}
+                        onClick={() => navigate(`/transaction/${txn.id}`, {
+                          state: {
+                            transaction: txn,
+                            customer,
+                            items: txn.items || [],
+                            runningBalance: txn.balance,
+                          },
+                        })}
                         className="px-3 py-2.5 hover:bg-[var(--surface)] transition-colors cursor-pointer border-b border-[var(--border)] last:border-b-0"
                       >
                       <div className="grid grid-cols-[1fr_60px_60px_70px] gap-2 items-start">
