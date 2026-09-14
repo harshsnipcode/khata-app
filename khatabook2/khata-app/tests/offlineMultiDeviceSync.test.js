@@ -12,7 +12,7 @@ const serverData = {
 
 let nextId = 1000;
 
-const hooks = { failureBudget: 0, onWriteAfter: null };
+const hooks = { failureBudget: 0, onWriteAfter: null, requestLog: [] };
 
 function comparable(value) {
   const parsed = Date.parse(value);
@@ -108,6 +108,7 @@ function builderSpec(table, method, payload, options) {
     execute: async () => {
       const tableRows = serverData[ops.table] || (serverData[ops.table] = []);
       const isWrite = ops.method === "insert" || ops.method === "upsert" || ops.method === "update" || ops.method === "delete";
+      hooks.requestLog.push({ table: ops.table, method: ops.method });
       if (isWrite && hooks.failureBudget > 0) {
         hooks.failureBudget -= 1;
         return { data: null, error: { message: "simulated network failure", code: "E-SIM" } };
@@ -227,6 +228,7 @@ function setup() {
   nextId = 1000;
   hooks.failureBudget = 0;
   hooks.onWriteAfter = null;
+  hooks.requestLog = [];
   installLocalStorageMock();
 }
 
@@ -318,6 +320,22 @@ test("A: clean offline-create flush reaches the server", async () => {
   assert.equal(local.length, 5, "local cache keeps the rows");
   assert.ok(local.every((row) => row.synced === true), "all rows confirmed synced");
   assert.ok(local.every((row) => typeof row.id === "number" && row.id > 0), "temp ids rewritten to server ids");
+});
+
+test("A2: a batch performs one snapshot refresh after its writes", async () => {
+  setup();
+  setOnline(false);
+  for (let i = 1; i <= 5; i += 1) await deviceACreateOffline(offlineTxn(i, atMin(T0, i)));
+
+  hooks.requestLog = [];
+  setOnline(true);
+  await sync.syncPendingData();
+
+  const writes = hooks.requestLog.filter((request) => request.method === "insert" || request.method === "upsert");
+  const reads = hooks.requestLog.filter((request) => request.method === "select");
+  assert.equal(writes.length, 5, "each queued transaction is written once");
+  assert.equal(reads.length, 13, "the drained batch performs one 13-table snapshot refresh");
+  assert.equal(hooks.requestLog.length, 18, "snapshot reads do not multiply with queue length");
 });
 
 test("B1: mid-flush disconnect stops safely; reconnect auto-resumes the queue", async () => {

@@ -333,9 +333,6 @@ export async function syncPendingData() {
         await executeOperation(operation);
         // Remove from the queue ONLY after Supabase confirmed the write.
         await removeQueueItem(operation.id);
-        if (isOnline()) {
-          await refreshOfflineSnapshot({ allowWhileSyncing: true });
-        }
         succeeded += 1;
         console.info("[OfflineSync] Operation succeeded", {
           queueId: operation.id,
