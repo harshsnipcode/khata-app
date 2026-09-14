@@ -4,6 +4,7 @@ import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/off
 import { moveToRecycleBin } from "../lib/offline/db";
 import { requirePermission, can } from "../lib/permissions";
 import { loadCreatorLookup, resolveCreatorName } from "../lib/creatorName";
+import { loadTransactionRecyclePayload } from "../lib/transactionDeleteRecycle";
 
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-IN", {
@@ -121,23 +122,14 @@ function TransactionDetailPage() {
     try {
       const deletedBy = localStorage.getItem("khata_user") || "unknown";
 
-      // Fetch COMPLETE transaction record before deletion
-      const { data: fullTransaction } = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("id", id)
-        .single();
-      const { data: transactionItems } = await supabase
-        .from("transaction_items")
-        .select("*")
-        .eq("transaction_id", id);
-      const transactionToStore = {
-        transaction: fullTransaction || transaction,
-        transaction_items: transactionItems || [],
-      };
+      const { fullTransaction, transactionToStore } = await loadTransactionRecyclePayload({
+        transactionId: id,
+        currentTransaction: transaction,
+        client: supabase,
+      });
       console.log("[RecycleBin] Full transaction being stored:", transactionToStore);
 
-      const entityName = `Transaction #${id} - ${customer?.name || "Unknown"} (₹${Math.round((fullTransaction || transaction).amount)})`;
+      const entityName = `Transaction #${id} - ${customer?.name || "Unknown"} (₹${Math.round(fullTransaction.amount)})`;
 
       await moveToRecycleBin("transactions", String(id), entityName, transactionToStore, deletedBy);
 

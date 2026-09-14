@@ -179,7 +179,7 @@ async function executeOperation(operation) {
     // Supabase confirmed the delete. Remove the local rows so the tombstone does
     // not linger (or resurrect via an insert-confirm snapshot) and so the next
     // snapshot can garbage-collect them.
-    removeLocalRows(operation.table, (row) => filters.every((filter) => filterMatches(row, filter)));
+    await removeLocalRows(operation.table, (row) => filters.every((filter) => filterMatches(row, filter)));
   }
 }
 

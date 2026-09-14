@@ -2,10 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { offlineSupabase, offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { requirePermission } from "../lib/permissions";
-import { loadSavedTemplate, fillTemplate } from "../lib/reminderTemplate";
 import { createGaveTransaction, updateGaveTransaction } from "../lib/transactionService";
-import { moveCustomerToCollectionQueueEnd } from "../lib/collectionQueue";
-import { getLedgerLink } from "../lib/appUrl";
+import { runPostTransactionSaveTasks } from "../lib/transactionPostSave";
 
 function getLocalDateInputValue(date = new Date()) {
   const year = date.getFullYear();
@@ -235,54 +233,9 @@ function TransactionEntry() {
       }
 
       if (!isEditing) {
-        const { data: collectionSettings } = await offlineSupabase
-          .from("business_settings")
-          .select("settings")
-          .limit(1)
-          .maybeSingle();
-        if (collectionSettings?.settings?.collection_mode_enabled) {
-          moveCustomerToCollectionQueueEnd(id);
-        }
-
-        await offlineSupabase.from("customers").update({ updated_at: new Date().toISOString() }).eq("id", id);
-
-        // Auto SMS if enabled (only for new transactions)
-        if (customer?.auto_sms_enabled && customer?.phone) {
-          try {
-            const { data: allTxns } = await offlineSupabase
-              .from("transactions")
-              .select("type, amount")
-              .eq("customer_id", id);
-            let gave = 0, got = 0;
-            (allTxns || []).forEach((t) => {
-              if (t.type === "gave") gave += Number(t.amount);
-              else got += Number(t.amount);
-            });
-            const balance = gave - got;
-            const balanceLabel = balance >= 0 ? "You Will Get" : "You Will Give";
-
-      const template = await loadSavedTemplate();
-      const text = fillTemplate(template, {
-        customerName: customer.name,
-        balance: Math.abs(balance),
-        balanceType: balanceLabel,
-        ledgerLink: getLedgerLink(id),
-        businessName: localStorage.getItem("khata_business_name") || "Shiv Shankar Dairy",
-      });
-            const phone = customer.phone.replace(/[^0-9]/g, "");
-            if (phone) {
-              const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-              const url = isIOS
-                ? `sms:${phone}&body=${encodeURIComponent(text)}`
-                : `sms:${phone}?body=${encodeURIComponent(text)}`;
-              const smsWindow = window.open(url, "_blank", "noopener,noreferrer");
-              if (!smsWindow) window.location.href = url;
-            }
-          } catch {
-            setMessage("Transaction saved. SMS could not be sent.");
-          }
-        }
-
+        void runPostTransactionSaveTasks({ customerId: id, customer }).catch((err) => {
+          console.warn("Post-save transaction tasks failed:", err.message || err);
+        });
         navigate(`/customer/${id}/transaction/success`, {
           replace: true,
           state: {
