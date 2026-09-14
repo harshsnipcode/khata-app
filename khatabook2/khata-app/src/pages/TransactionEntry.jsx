@@ -224,6 +224,7 @@ function TransactionEntry() {
           createdBy: created_by,
           createdAt,
           description,
+          preferLocalFirst: true,
           items: Object.values(selectedProducts).map((item) => ({
             product: item.product,
             quantity: item.quantity,

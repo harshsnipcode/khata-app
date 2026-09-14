@@ -76,32 +76,34 @@ function TransactionDetailPage() {
       }
       setTransaction(txn);
 
-      const { data: cust } = await supabase
-        .from("customers")
-        .select("id, name, phone")
-        .eq("id", txn.customer_id)
-        .single();
+      // These reads are independent once the transaction is known. Running
+      // them together removes the serial network/cache waterfall on detail
+      // navigation while preserving the same rendered data.
+      const [{ data: cust }, { data: txItems }, { data: allTxns }] = await Promise.all([
+        supabase
+          .from("customers")
+          .select("id, name, phone")
+          .eq("id", txn.customer_id)
+          .single(),
+        supabase
+          .from("transaction_items")
+          .select("id, transaction_id, product_id, quantity, price, products(name, unit)")
+          .eq("transaction_id", id),
+        supabase
+          .from("transactions")
+          .select("id, type, amount, created_at")
+          .eq("customer_id", txn.customer_id)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true }),
+      ]);
       setCustomer(cust);
-
-      const { data: txItems } = await supabase
-        .from("transaction_items")
-        .select("id, transaction_id, product_id, quantity, price, products(name, unit)")
-        .eq("transaction_id", id);
       setItems(txItems || []);
-
-      // Calculate running balance at this transaction's point in time
-      const { data: allTxns } = await supabase
-        .from("transactions")
-        .select("id, type, amount, created_at")
-        .eq("customer_id", txn.customer_id)
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true });
 
       if (allTxns) {
         let bal = 0;
         for (const t of allTxns) {
           bal += t.type === "got" ? -Number(t.amount) : Number(t.amount);
-          if (t.id === Number(id)) {
+          if (String(t.id) === String(id)) {
             setRunningBalance(bal);
             break;
           }

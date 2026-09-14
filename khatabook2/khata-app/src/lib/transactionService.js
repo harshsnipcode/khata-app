@@ -14,6 +14,7 @@ export async function createGaveTransaction({
   createdAt,
   importHistoryId,
   description,
+  preferLocalFirst = false,
 }) {
   const normalizedItems = (items || []).map((item) => ({
     product: item.product,
@@ -33,7 +34,7 @@ export async function createGaveTransaction({
   // exact same tables and payload shape while reducing a transaction from
   // several network round trips to one. Older databases safely use the legacy
   // path below until the migration has been applied.
-  if (typeof navigator !== "undefined" && navigator.onLine) {
+  if (typeof navigator !== "undefined" && navigator.onLine && !preferLocalFirst) {
     const rpcPayload = {
       p_customer_id: Number(customerId),
       p_items: normalizedItems.map((item) => ({
@@ -94,7 +95,7 @@ export async function createGaveTransaction({
       const newStock = Number(item.product.stock_quantity) - item.quantity;
       const { error: stockError } = await offlineSupabase
         .from("products")
-        .update({ stock_quantity: newStock })
+        .update({ stock_quantity: newStock }, { localFirst: true })
         .eq("id", item.product.id);
       if (stockError) throw stockError;
 
@@ -148,9 +149,9 @@ export async function updateGaveTransaction({
       .single();
     if (fetchErr) throw fetchErr;
     const newStock = Number(prod.stock_quantity) + delta;
-    const { error: stockErr } = await offlineSupabase
-      .from("products")
-      .update({ stock_quantity: newStock })
+      const { error: stockErr } = await offlineSupabase
+        .from("products")
+        .update({ stock_quantity: newStock }, { localFirst: true })
       .eq("id", productId);
     if (stockErr) throw stockErr;
   }

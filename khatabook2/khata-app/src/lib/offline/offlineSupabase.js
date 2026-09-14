@@ -18,6 +18,11 @@ import {
   readQueue,
 } from "./db";
 
+// Transaction mutations are rendered from the local cache immediately. The
+// existing queue/sync path remains responsible for server confirmation and
+// retries, including when connectivity changes during a write.
+const LOCAL_FIRST_MUTATION_TABLES = new Set(["transactions", "transaction_items"]);
+
 function normalizeComparable(value) {
   if (value === undefined || value === null) return value;
   return String(value);
@@ -288,7 +293,12 @@ function createQueryBuilder(table, method, payload, options = {}) {
         if (!isOnline()) return onlineOnlyError(table);
         return executeOnline(ops);
       }
-      const isMutation = ops.method !== "select" && ops.method !== "delete";
+      const isMutation = ops.method !== "select";
+      if (isOnline() && isMutation && (
+        LOCAL_FIRST_MUTATION_TABLES.has(ops.table) || ops.options?.localFirst === true
+      )) {
+        return executeOffline(ops);
+      }
       if (isOnline() && isMutation && payloadHasTemporaryId(ops.payload)) {
         return executeOffline(ops);
       }
