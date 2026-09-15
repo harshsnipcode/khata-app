@@ -146,19 +146,34 @@ function EmployeeHome() {
 
   /* ── data loading ── */
   const load = useCallback(async () => {
-    setLoading(true);
+    const [cachedCustomers, cachedTransactions] = await Promise.all([
+      getAll("customers"),
+      getAll("transactions"),
+    ]);
+    const hasCachedData = cachedCustomers.length > 0 || cachedTransactions.length > 0;
+    setCustomers(cachedCustomers);
+    setTransactions(cachedTransactions);
+    setLoading(!hasCachedData);
+
+    // The cache paints first. These online reads reconcile in the background
+    // and never delay the employee's first usable ledger view.
     const [custRes, txnData] = await Promise.all([
       fetchAllCustomersSnapshot().catch(() => null),
-      fetchAllTransactions(),
+      fetchAllTransactions().catch(() => null),
     ]);
-    if (!custRes) {
-      setCustomers(await getAll("customers"));
-    } else {
+    if (custRes) {
       await replaceFetchedData("customers", custRes, { protectUnsynced: true });
-      setCustomers(await getAll("customers"));
     }
-    setTransactions(txnData || []);
+    setCustomers(await getAll("customers"));
+    setTransactions(txnData || await getAll("transactions"));
     setLoading(false);
+  }, []);
+
+  const refreshTransactions = useCallback(async () => {
+    const cached = await getAll("transactions");
+    setTransactions(cached);
+    const refreshed = await fetchAllTransactions().catch(() => null);
+    if (refreshed) setTransactions(refreshed);
   }, []);
 
   useEffect(() => {
@@ -180,7 +195,9 @@ function EmployeeHome() {
         removeLocalRows("customers", (row) => String(row.id) === String(deletedId));
         setCustomers((prev) => prev.filter((customer) => String(customer.id) !== String(deletedId)));
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => {
+        void refreshTransactions();
+      })
       .subscribe();
 
     const onCacheUpdated = async (event) => {
@@ -194,7 +211,7 @@ function EmployeeHome() {
       supabase.removeChannel(channel);
       window.removeEventListener("offline-cache-updated", onCacheUpdated);
     };
-  }, [load]);
+  }, [load, refreshTransactions]);
 
   useEffect(() => {
     supabase
