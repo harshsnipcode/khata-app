@@ -9,7 +9,7 @@ const MAX_FULL_RECONCILE_ATTEMPTS = 3;
 const CATCH_UP_MIN_GAP_MS = 15_000;
 
 // Column projection for delta queries. The offline cache keeps its full rows
-// (ledger/report pages depend on them); this list is ONLY what /admin/home's
+// (ledger/report pages depend on them); this list is ONLY what the home
 // derived views need and is used strictly for live fetch queries.
 const DELTA_COLUMNS = [
   "id",
@@ -353,7 +353,7 @@ export function useLiveTransactions() {
     }
 
     channel = supabase
-      .channel("admin-home-transactions-live")
+      .channel("transactions-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: TABLE }, (payload) => {
         if (payload?.new?.id !== undefined && payload?.new?.id !== null) commit([payload.new]);
       })

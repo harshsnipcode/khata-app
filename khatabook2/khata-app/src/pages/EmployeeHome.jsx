@@ -14,7 +14,8 @@ import { can } from "../lib/permissions";
 import { applyCollectionQueue, getCollectionQueue, resetCollectionQueue } from "../lib/collectionQueue";
 import { getAll, isOnline, removeLocalRows, replaceFetchedData } from "../lib/offline/db";
 import { splitByTodayActivity } from "../lib/transactionOrder";
-import { buildBalanceMap, fetchAllTransactions } from "../lib/customerBalance";
+import { buildBalanceMap } from "../lib/customerBalance";
+import { useLiveTransactions } from "../lib/liveSync";
 import { createCustomerLedgerNavigationState, filterCustomerTransactionsForLedger } from "../lib/customerLedgerNavigation";
 import ActivityDivider from "../components/ActivityDivider";
 
@@ -97,8 +98,9 @@ function EmployeeHome() {
   const [activeTab, setActiveTab]       = useState(location.state?.activeTab || "customers");
 
   const [customers,    setCustomers]    = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [loading,      setLoading]      = useState(true);
+  const { transactions, initialLoading: transactionsLoading } = useLiveTransactions();
+  const [baseLoading,  setBaseLoading]  = useState(true);
+  const loading = baseLoading || transactionsLoading;
 
   const employeeLevel = Number(localStorage.getItem("khata_permission_level")) || 1;
 
@@ -146,34 +148,19 @@ function EmployeeHome() {
 
   /* ── data loading ── */
   const load = useCallback(async () => {
-    const [cachedCustomers, cachedTransactions] = await Promise.all([
-      getAll("customers"),
-      getAll("transactions"),
-    ]);
-    const hasCachedData = cachedCustomers.length > 0 || cachedTransactions.length > 0;
+    const cachedCustomers = await getAll("customers");
+    const hasCachedData = cachedCustomers.length > 0;
     setCustomers(cachedCustomers);
-    setTransactions(cachedTransactions);
-    setLoading(!hasCachedData);
+    setBaseLoading(!hasCachedData);
 
-    // The cache paints first. These online reads reconcile in the background
-    // and never delay the employee's first usable ledger view.
-    const [custRes, txnData] = await Promise.all([
-      fetchAllCustomersSnapshot().catch(() => null),
-      fetchAllTransactions().catch(() => null),
-    ]);
+    // The cache paints first. Customer reconciliation runs independently from
+    // the shared live transaction stream and never reloads transactions.
+    const custRes = await fetchAllCustomersSnapshot().catch(() => null);
     if (custRes) {
       await replaceFetchedData("customers", custRes, { protectUnsynced: true });
     }
     setCustomers(await getAll("customers"));
-    setTransactions(txnData || await getAll("transactions"));
-    setLoading(false);
-  }, []);
-
-  const refreshTransactions = useCallback(async () => {
-    const cached = await getAll("transactions");
-    setTransactions(cached);
-    const refreshed = await fetchAllTransactions().catch(() => null);
-    if (refreshed) setTransactions(refreshed);
+    setBaseLoading(false);
   }, []);
 
   useEffect(() => {
@@ -195,15 +182,11 @@ function EmployeeHome() {
         removeLocalRows("customers", (row) => String(row.id) === String(deletedId));
         setCustomers((prev) => prev.filter((customer) => String(customer.id) !== String(deletedId)));
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => {
-        void refreshTransactions();
-      })
       .subscribe();
 
     const onCacheUpdated = async (event) => {
       const tables = event?.detail?.tables || [];
       if (tables.includes("customers")) setCustomers(await getAll("customers"));
-      if (tables.includes("transactions")) setTransactions(await getAll("transactions"));
     };
     window.addEventListener("offline-cache-updated", onCacheUpdated);
 
@@ -211,7 +194,7 @@ function EmployeeHome() {
       supabase.removeChannel(channel);
       window.removeEventListener("offline-cache-updated", onCacheUpdated);
     };
-  }, [load, refreshTransactions]);
+  }, [load]);
 
   useEffect(() => {
     supabase
