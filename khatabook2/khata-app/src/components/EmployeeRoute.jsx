@@ -5,10 +5,12 @@ import { offlineSupabase } from "../lib/offline/offlineSupabase";
 
 function EmployeeRoute({ children }) {
   const navigate = useNavigate();
-  const [authorized, setAuthorized] = useState(false);
+  // The login state is already persisted locally. Use it for the first paint
+  // just like AdminRoute; session and permission checks refresh in background.
+  const [authorized] = useState(() => localStorage.getItem("khata_role") === "employee");
 
   useEffect(() => {
-    const check = async () => {
+    const refreshAuth = async () => {
       const role = localStorage.getItem("khata_role");
 
       if (role !== "employee") {
@@ -20,10 +22,7 @@ function EmployeeRoute({ children }) {
         return;
       }
 
-      if (!navigator.onLine) {
-        setAuthorized(true);
-        return;
-      }
+      if (!navigator.onLine) return;
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -50,10 +49,10 @@ function EmployeeRoute({ children }) {
           }
         }
       } catch {}
-
-      setAuthorized(true);
     };
-    check();
+
+    // Never hold the route's first render on either network request.
+    void refreshAuth();
   }, [navigate]);
 
   if (!authorized) return null;
