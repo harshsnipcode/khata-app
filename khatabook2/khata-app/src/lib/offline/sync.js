@@ -183,6 +183,85 @@ async function executeOperation(operation) {
   }
 }
 
+// Offline transaction entry currently produces many queue records, but the
+// records are independent once the temporary transaction ids have been
+// resolved. Send all records for one table in one PostgREST request. This is
+// especially important on mobile networks where request latency dominates the
+// actual insert time.
+async function executeInsertBatch(operations) {
+  if (!operations.length) return;
+  const table = operations[0].table;
+  const originalRows = operations.flatMap((operation) => (
+    Array.isArray(operation.payload) ? operation.payload : [operation.payload]
+  ));
+  const payload = preparePayload(table, originalRows);
+  const conflictColumn = getInsertConflictColumn(table, payload);
+  const query = conflictColumn
+    ? supabase.from(table).upsert(payload, { onConflict: conflictColumn }).select(operations[0].selectColumns || "*")
+    : supabase.from(table).insert(payload).select(operations[0].selectColumns || "*");
+  const { data, error } = await query;
+  if (error) throw error;
+  const serverRows = Array.isArray(data) ? data : (data ? [data] : []);
+  serverRows.forEach((serverRow, index) => {
+    const localId = getOriginalRowForServerRow(originalRows, serverRow, index)?.id;
+    rewriteLocalId(table, localId, serverRow);
+  });
+  await saveFetchedData(table, serverRows);
+}
+
+function isFastTransactionOperation(operation) {
+  if (operation.method === "insert") {
+    return operation.table === "transactions" || operation.table === "transaction_items";
+  }
+  return operation.table === "products"
+    && operation.method === "update"
+    && operation.filters?.length === 1
+    && operation.filters[0].column === "id"
+    && operation.filters[0].operator === "eq"
+    && operation.payload
+    && Object.prototype.hasOwnProperty.call(operation.payload, "stock_quantity");
+}
+
+async function executeFastTransactionQueue(queue) {
+  // Keep the small-queue path unchanged. Apart from avoiding batching work for
+  // one or two entries, this preserves the normal per-operation retry semantics
+  // for intermittent connections. Larger offline backlogs get the latency win.
+  if (queue.length < 10 || !queue.every(isFastTransactionOperation)) return false;
+
+  const transactionOps = queue.filter((operation) => operation.table === "transactions");
+  const itemOps = queue.filter((operation) => operation.table === "transaction_items");
+
+  // Parent rows must be acknowledged first so rewriteLocalId() can replace
+  // temporary transaction ids in the item payloads before their batch runs.
+  if (transactionOps.length) await executeInsertBatch(transactionOps);
+  for (const operation of transactionOps) await removeQueueItem(operation.id);
+
+  if (itemOps.length) await executeInsertBatch(itemOps);
+  for (const operation of itemOps) await removeQueueItem(operation.id);
+
+  // Several offline entries for the same product contain absolute stock
+  // values. Only the newest value needs to reach the server. Different
+  // products can be updated concurrently because they do not share a row.
+  const productGroups = new Map();
+  for (const operation of queue.filter((item) => item.table === "products")) {
+    const filter = operation.filters[0];
+    const key = String(filter.value);
+    const group = productGroups.get(key) || [];
+    group.push(operation);
+    productGroups.set(key, group);
+  }
+  const latestProductOps = Array.from(productGroups.values()).map((group) => group[group.length - 1]);
+  const concurrency = 8;
+  for (let index = 0; index < latestProductOps.length; index += concurrency) {
+    const batch = latestProductOps.slice(index, index + concurrency);
+    await Promise.all(batch.map((operation) => executeOperation(operation)));
+  }
+  for (const group of productGroups.values()) {
+    for (const operation of group) await removeQueueItem(operation.id);
+  }
+  return true;
+}
+
 function maxTimestampInRow(row, columns) {
   let max = null;
   for (const column of columns) {
@@ -320,39 +399,49 @@ export async function syncPendingData() {
     }
     await ensureQueueInsertIdempotencyKeys();
 
-    const queue = await getPendingQueue();
+    let queue = await getPendingQueue();
     const startCount = queue.length;
     let succeeded = 0;
     let failed = 0;
     let firstError = null;
     console.info("[OfflineSync] Sync started; queued operations:", startCount);
 
-    for (const operation of queue) {
-      if (!isOnline()) break;
-      try {
-        await executeOperation(operation);
-        // Remove from the queue ONLY after Supabase confirmed the write.
-        await removeQueueItem(operation.id);
-        succeeded += 1;
-        console.info("[OfflineSync] Operation succeeded", {
-          queueId: operation.id,
-          table: operation.table,
-          method: operation.method,
-        });
-      } catch (error) {
-        failed += 1;
-        firstError = firstError || error;
-        // A single failed operation must NOT block the rest of the queue.
-        // The failed item stays queued and is retried on the next sync.
-        console.error("[OfflineSync] Operation failed; retained in queue", {
-          queueId: operation.id,
-          table: operation.table,
-          method: operation.method,
-          message: error.message || String(error),
-          code: error.code,
-          details: error.details,
-        });
+    try {
+      if (await executeFastTransactionQueue(queue)) {
+        succeeded = startCount;
+        console.info("[OfflineSync] Fast transaction batch completed", { operations: startCount });
       }
+    } catch (error) {
+      // Keep every unconfirmed operation in the queue. The normal per-operation
+      // path below will retry it and preserve the existing recovery behaviour.
+      queue = await getPendingQueue();
+      firstError = null;
+      console.warn("[OfflineSync] Fast transaction batch failed; falling back to individual operations", error);
+    }
+
+    if (succeeded === 0 && startCount > 0 && !firstError) {
+      // No fast-path work was applicable; use the existing ordered processor.
+      for (const operation of queue) {
+        if (!isOnline()) break;
+        try {
+          await executeOperation(operation);
+          await removeQueueItem(operation.id);
+          succeeded += 1;
+        } catch (error) {
+          failed += 1;
+          firstError = firstError || error;
+          console.error("[OfflineSync] Operation failed; retained in queue", {
+            queueId: operation.id,
+            table: operation.table,
+            method: operation.method,
+            message: error.message || String(error),
+            code: error.code,
+            details: error.details,
+          });
+        }
+      }
+    } else if (firstError) {
+      failed = startCount - succeeded;
     }
 
     const remaining = await getPendingQueue();
