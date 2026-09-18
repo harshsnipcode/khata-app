@@ -16,6 +16,12 @@ function goHomeAndMarkReset(navigate, route) {
   navigate(route);
 }
 
+function getHomeRoute() {
+  return localStorage.getItem("khata_role") === "employee"
+    ? "/employee/home"
+    : "/admin/home";
+}
+
 function formatINR(n) {
   return new Intl.NumberFormat("en-IN").format(Math.round(n));
 }
@@ -277,7 +283,7 @@ function CustomerTransactionsReport() {
       <div className="max-w-4xl mx-auto p-6 space-y-5 animate-fade-in">
         {/* Back */}
         <button
-          onClick={() => goHomeAndMarkReset(navigate, "/admin/home")}
+          onClick={() => goHomeAndMarkReset(navigate, getHomeRoute())}
           className="flex items-center gap-2 text-[var(--text-secondary)] text-sm font-semibold hover:text-[var(--text-primary)] transition cursor-pointer outline-none"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
