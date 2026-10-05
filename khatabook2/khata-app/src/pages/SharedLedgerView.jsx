@@ -184,8 +184,6 @@ function SharedLedgerView() {
               {transactionRows.map((txn) => {
                 const itemCount = txn.items?.length || 0;
                 const isGot = txn.type === "got";
-                const balanceIsPositive = txn.balance > 0;
-                const balanceIsNegative = txn.balance < 0;
                 return (
                   <div key={txn.id} className="card rounded-2xl p-4 hover:card-hover transition-all duration-200">
                     <div className="grid grid-cols-[1fr_76px_88px] gap-3 items-center">
@@ -218,13 +216,7 @@ function SharedLedgerView() {
                         </span>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className={`inline-block font-black text-sm ${
-                          balanceIsPositive
-                            ? "text-[var(--danger)]"
-                            : balanceIsNegative
-                            ? "text-[var(--success)]"
-                            : "text-[var(--text-secondary)]"
-                        }`}>
+                        <span className="inline-block font-black text-sm text-[var(--text-secondary)]">
                           {txn.balance > 0 ? "+" : txn.balance < 0 ? "-" : ""}₹{new Intl.NumberFormat("en-IN").format(Math.abs(txn.balance))}
                         </span>
                       </div>
