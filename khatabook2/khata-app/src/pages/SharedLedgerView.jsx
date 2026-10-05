@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { offlineSupabase as supabase } from "../lib/offline/offlineSupabase";
 import { getLogoUrl } from "../lib/businessSettings";
-import { groupLedgerByBusinessDate } from "../lib/transactionOrder";
+import { addRunningBalanceFromOldestDisplayed, groupLedgerByBusinessDate } from "../lib/transactionOrder";
 import heroLogo from "../assets/hero.png";
 
 function SharedLedgerView() {
@@ -73,16 +73,7 @@ function SharedLedgerView() {
   const balanceAmount = Math.abs(balance);
 
   const transactionRows = useMemo(() => {
-    const businessOrdered = [...transactions].sort(
-      (a, b) => new Date(a.created_at) - new Date(b.created_at)
-    );
-    let runningBalance = 0;
-    const rows = businessOrdered.map((txn) => {
-      runningBalance += txn.type === "got" ? -Number(txn.amount) : Number(txn.amount);
-      return { ...txn, balance: runningBalance };
-    });
-
-    return groupLedgerByBusinessDate(rows);
+    return addRunningBalanceFromOldestDisplayed(groupLedgerByBusinessDate(transactions));
   }, [transactions]);
 
   if (loading) {
@@ -185,12 +176,19 @@ function SharedLedgerView() {
             </div>
           ) : (
             <div className="space-y-2.5">
+              <div className="grid grid-cols-[1fr_76px_88px] gap-3 px-4 text-[9px] font-black uppercase tracking-wider text-[var(--text-muted)]">
+                <span>Entry</span>
+                <span className="text-right">Amount</span>
+                <span className="text-right">Balance</span>
+              </div>
               {transactionRows.map((txn) => {
                 const itemCount = txn.items?.length || 0;
                 const isGot = txn.type === "got";
+                const balanceIsPositive = txn.balance > 0;
+                const balanceIsNegative = txn.balance < 0;
                 return (
                   <div key={txn.id} className="card rounded-2xl p-4 hover:card-hover transition-all duration-200">
-                    <div className="flex items-center justify-between">
+                    <div className="grid grid-cols-[1fr_76px_88px] gap-3 items-center">
                       <div className="flex-1 min-w-0">
                         <p className="text-[var(--text-secondary)] text-[10px] font-black uppercase tracking-wider">
                           {new Date(txn.created_at).toLocaleDateString("en-IN", {
@@ -217,6 +215,17 @@ function SharedLedgerView() {
                       <div className="text-right shrink-0 ml-4">
                         <span className={`inline-block font-black text-sm ${isGot ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
                           {isGot ? "+" : "-"}₹{new Intl.NumberFormat("en-IN").format(txn.amount)}
+                        </span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className={`inline-block font-black text-sm ${
+                          balanceIsPositive
+                            ? "text-[var(--danger)]"
+                            : balanceIsNegative
+                            ? "text-[var(--success)]"
+                            : "text-[var(--text-secondary)]"
+                        }`}>
+                          {txn.balance > 0 ? "+" : txn.balance < 0 ? "-" : ""}₹{new Intl.NumberFormat("en-IN").format(Math.abs(txn.balance))}
                         </span>
                       </div>
                     </div>
