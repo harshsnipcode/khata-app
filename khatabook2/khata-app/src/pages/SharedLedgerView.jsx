@@ -216,8 +216,8 @@ function SharedLedgerView() {
                         </span>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className="inline-block font-black text-sm text-[var(--text-secondary)]">
-                          {txn.balance > 0 ? "+" : txn.balance < 0 ? "-" : ""}₹{new Intl.NumberFormat("en-IN").format(Math.abs(txn.balance))}
+                        <span className="inline-block font-black text-xs text-[var(--text-secondary)]">
+                          {txn.balance > 0 ? "bal " : txn.balance < 0 ? "adv " : ""}₹{new Intl.NumberFormat("en-IN").format(Math.abs(txn.balance))}
                         </span>
                       </div>
                     </div>
